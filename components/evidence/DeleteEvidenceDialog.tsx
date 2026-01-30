@@ -15,7 +15,7 @@ import {
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import { deleteEvidence } from '@/app/actions/evidence';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { Evidence, RequirementStatus } from '@/lib/prisma-types';
 
 type EvidenceWithRelations = Evidence & {
   requirementStatuses: RequirementStatus[];

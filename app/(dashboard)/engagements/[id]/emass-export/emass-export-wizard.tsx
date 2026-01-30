@@ -183,7 +183,7 @@ export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
           <AlertTitle>Required Fields Missing</AlertTitle>
           <AlertDescription>
             <ul className="list-disc list-inside mt-2">
-              {data.validation.errors.map((error, i) => (
+              {data.validation.errors.map((error: string, i: number) => (
                 <li key={i}>{error}</li>
               ))}
             </ul>
@@ -197,7 +197,7 @@ export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
           <AlertTitle className="text-yellow-800 dark:text-yellow-200">Warnings</AlertTitle>
           <AlertDescription className="text-yellow-700 dark:text-yellow-300">
             <ul className="list-disc list-inside mt-2">
-              {data.validation.warnings.map((warning, i) => (
+              {data.validation.warnings.map((warning: string, i: number) => (
                 <li key={i}>{warning}</li>
               ))}
             </ul>

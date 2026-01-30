@@ -42,8 +42,8 @@ export function POAMList({ poams, atoPackageId }: POAMListProps) {
       if (a.status !== 'OVERDUE' && b.status === 'OVERDUE') return 1;
 
       // Then by risk level (Critical > High > Moderate > Low)
-      const riskOrder = { CRITICAL: 0, HIGH: 1, MODERATE: 2, LOW: 3 };
-      const riskDiff = riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
+      const riskOrder: Record<string, number> = { CRITICAL: 0, HIGH: 1, MODERATE: 2, LOW: 3 };
+      const riskDiff = (riskOrder[a.riskLevel] ?? 4) - (riskOrder[b.riskLevel] ?? 4);
       if (riskDiff !== 0) return riskDiff;
 
       // Then by deadline (earliest first)
@@ -119,7 +119,7 @@ function POAMCard({ poam, atoPackageId }: POAMCardProps) {
           </span>
           {poam.requirements.length > 0 ? (
             <div className="flex flex-wrap gap-2">
-              {poam.requirements.map((req, idx) => (
+              {poam.requirements.map((req: any, idx: number) => (
                 <span key={req.id}>
                   <Link
                     href={`/cmmc/ato-packages/${atoPackageId}/requirements/${req.requirement.id}`}
@@ -152,7 +152,7 @@ function POAMCard({ poam, atoPackageId }: POAMCardProps) {
             </div>
             <Progress value={completionPercentage} />
             <p className="text-xs text-muted-foreground">
-              {poam.milestones.filter((m) => m.completed).length} of{' '}
+              {poam.milestones.filter((m: any) => m.completed).length} of{' '}
               {poam.milestones.length} milestones completed
             </p>
           </div>

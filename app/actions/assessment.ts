@@ -2,43 +2,51 @@
 
 import { requireAuth } from '@/lib/auth'
 import { upsertFinding, getFindings, getFinding, enqueueSync, logAudit } from '@/lib/db'
-import { v4 as uuidv4 } from 'crypto'
+import crypto from 'crypto'
 
 interface SaveFindingInput {
   engagementId: string
-  controlId: string
+  controlId?: string
+  requirementId?: string
   objectiveId?: string
-  determination: string | null
-  assessmentMethods: string[]
-  findingText: string | null
-  objectiveEvidence: string | null
-  deficiency: string | null
-  recommendation: string | null
-  riskLevel: string | null
+  determination: string | null | undefined
+  assessmentMethods?: string[]
+  findingText?: string | null
+  objectiveEvidence?: string | null
+  deficiency?: string | null
+  recommendation?: string | null
+  riskLevel?: string | null
+  // Additional fields from component
+  methodInterview?: boolean
+  methodExamine?: boolean
+  methodTest?: boolean
+  finding?: string
 }
 
-export async function saveAssessmentFinding(input: SaveFindingInput): Promise<{ success: boolean; error?: string }> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function saveAssessmentFinding(input: SaveFindingInput): Promise<{ success: boolean; error?: string; data?: any }> {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
 
-    const existingFinding = getFinding(input.engagementId, input.controlId, session.c3paoUser.id)
+    const controlId = input.controlId || input.requirementId || ''
+    const existingFinding = getFinding(input.engagementId, controlId, session.c3paoUser.id)
     const id = existingFinding?.id || crypto.randomUUID()
     const version = (existingFinding?.version || 0) + 1
 
     upsertFinding({
       id,
       engagement_id: input.engagementId,
-      control_id: input.controlId,
+      control_id: controlId,
       objective_id: input.objectiveId || null,
       assessor_id: session.c3paoUser.id,
-      determination: input.determination,
+      determination: input.determination ?? null,
       assessment_methods: JSON.stringify(input.assessmentMethods),
-      finding_text: input.findingText,
-      objective_evidence: input.objectiveEvidence,
-      deficiency: input.deficiency,
-      recommendation: input.recommendation,
-      risk_level: input.riskLevel,
+      finding_text: input.findingText ?? null,
+      objective_evidence: input.objectiveEvidence ?? null,
+      deficiency: input.deficiency ?? null,
+      recommendation: input.recommendation ?? null,
+      risk_level: input.riskLevel ?? null,
       version,
     })
 
@@ -50,7 +58,7 @@ export async function saveAssessmentFinding(input: SaveFindingInput): Promise<{ 
       action: existingFinding ? 'update' : 'create',
       payload: JSON.stringify({
         id,
-        controlId: input.controlId,
+        controlId,
         objectiveId: input.objectiveId,
         determination: input.determination,
         assessmentMethods: input.assessmentMethods,

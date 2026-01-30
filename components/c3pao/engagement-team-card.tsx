@@ -42,6 +42,8 @@ import {
 // Prisma types replaced - data comes from SaaS API as JSON
 import { formatDistanceToNow } from 'date-fns'
 
+type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER' | string
+
 interface TeamMember {
   id: string
   engagementId: string

@@ -24,6 +24,7 @@ import {
   getAvailableAssessors,
 } from '@/app/actions/c3pao-team-assignment'
 // Prisma types replaced - data comes from SaaS API as JSON
+type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER' | string
 
 interface Assessor {
   id: string

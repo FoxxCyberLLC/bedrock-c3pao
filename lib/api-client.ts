@@ -5,8 +5,10 @@
  * Handles authentication, retry logic, and error mapping.
  */
 
-const SAAS_API_URL = () => process.env.SAAS_API_URL || 'http://localhost:3001/api/v1/instance'
-const INSTANCE_API_KEY = () => process.env.INSTANCE_API_KEY || ''
+import { getMeta } from './db'
+
+const SAAS_API_URL = () => getMeta('saas_url') || process.env.SAAS_API_URL || 'http://localhost:3001/api/v1/instance'
+const INSTANCE_API_KEY = () => getMeta('instance_api_key') || process.env.INSTANCE_API_KEY || ''
 
 export class ApiError extends Error {
   constructor(
@@ -171,6 +173,22 @@ export interface EngagementDetail {
   proposalScope: string | null
   lastMessageAt: string | null
   // Nested data
+  atoPackage: {
+    id: string
+    name: string
+    organization: { id: string; name: string } | null
+    requirementStatuses?: unknown[]
+    objectiveStatuses?: unknown[]
+    evidence?: unknown[]
+    poams?: unknown[]
+    ssp?: { id: string; version: string; status: string } | null
+    externalServiceProviders?: { id: string; providerName: string }[]
+  } | null
+  leadAssessor?: { id: string; name: string; email: string; isLeadAssessor: boolean } | null
+  teamAssignments?: unknown[]
+  findings?: unknown[]
+  report?: unknown
+  activities?: unknown[]
   controls?: ControlForAssessment[]
   team?: TeamMember[]
 }

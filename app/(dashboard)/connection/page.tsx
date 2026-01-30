@@ -14,12 +14,17 @@ import {
   Zap,
   Globe,
   Key,
+  Save,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
-import { getConnectionStatus, testConnection, triggerManualSync } from '@/app/actions/connection'
+import { getConnectionStatus, testConnection, triggerManualSync, saveConnectionConfig } from '@/app/actions/connection'
 
 interface ConnectionData {
   saasUrl: string
@@ -38,7 +43,11 @@ export default function ConnectionPage() {
   const [loading, setLoading] = useState(true)
   const [testing, setTesting] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [testResult, setTestResult] = useState<{ connected: boolean; latencyMs?: number } | null>(null)
+  const [saasUrl, setSaasUrl] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [showApiKey, setShowApiKey] = useState(false)
 
   useEffect(() => {
     loadStatus()
@@ -50,6 +59,9 @@ export default function ConnectionPage() {
       const result = await getConnectionStatus()
       if (result.success && result.data) {
         setData(result.data as ConnectionData)
+        if (result.data.saasUrl) {
+          setSaasUrl(result.data.saasUrl as string)
+        }
       }
     } catch (error) {
       console.error('Error loading connection status:', error)
@@ -96,6 +108,30 @@ export default function ConnectionPage() {
       toast.error('Sync failed')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  async function handleSaveConfig() {
+    setSaving(true)
+    try {
+      const formData = new FormData()
+      if (saasUrl.trim()) formData.append('saasUrl', saasUrl.trim())
+      if (apiKey.trim()) formData.append('apiKey', apiKey.trim())
+
+      const result = await saveConnectionConfig(formData)
+      if (result.success) {
+        toast.success('Connection configuration saved')
+        setApiKey('')
+        setShowApiKey(false)
+        loadStatus()
+      } else {
+        toast.error(result.error || 'Failed to save configuration')
+      }
+    } catch (error) {
+      console.error('Save config error:', error)
+      toast.error('Failed to save configuration')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -302,45 +338,91 @@ export default function ConnectionPage() {
         </Card>
       </div>
 
-      {/* Connection Details */}
+      {/* Connection Configuration */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Connection Details</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe className="h-5 w-5" />
+            Connection Configuration
+          </CardTitle>
           <CardDescription>
-            Configuration for the SaaS platform connection. These values are set in the instance environment.
+            Configure your SaaS platform connection. Get these values from the Instances tab on your C3PAO profile page.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
-              <div className="p-4 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-2 mb-1">
-                  <Globe className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">SaaS URL</span>
-                </div>
-                <code className="text-sm text-muted-foreground">{data?.saasUrl || 'Not configured'}</code>
+              <div className="space-y-2">
+                <Label htmlFor="saasUrl">SaaS Platform URL</Label>
+                <Input
+                  id="saasUrl"
+                  value={saasUrl}
+                  onChange={(e) => setSaasUrl(e.target.value)}
+                  placeholder="https://cmmc.foxxcyber.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  The URL of your Bedrock CMMC SaaS platform
+                </p>
               </div>
-              <div className="p-4 rounded-lg bg-muted/50">
-                <div className="flex items-center gap-2 mb-1">
-                  <Key className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">API Key</span>
+              <div className="space-y-2">
+                <Label htmlFor="apiKey">Instance API Key</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="apiKey"
+                      type={showApiKey ? 'text' : 'password'}
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder={data?.apiKeyConfigured ? `${data.apiKeyPrefix}••••••••` : 'bri_...'}
+                      className="font-mono text-xs pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-full px-3"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
                 {data?.apiKeyConfigured ? (
-                  <code className="text-sm text-muted-foreground">{data.apiKeyPrefix}{'••••••••••••'}</code>
+                  <p className="text-xs text-muted-foreground">
+                    Key configured ({data.apiKeyPrefix}...). Enter a new key to replace it.
+                  </p>
                 ) : (
-                  <span className="text-sm text-red-500">Not configured</span>
+                  <p className="text-xs text-muted-foreground">
+                    Paste the API key generated from the SaaS platform
+                  </p>
                 )}
               </div>
             </div>
 
-            {!data?.apiKeyConfigured && (
-              <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20">
-                <p className="text-sm text-red-700 dark:text-red-400">
-                  <strong>API key not configured.</strong> Set the <code className="bg-red-500/10 px-1 py-0.5 rounded">INSTANCE_API_KEY</code> environment variable
-                  with the key generated from your C3PAO organization&apos;s profile page on the SaaS platform.
-                </p>
+            <div className="flex items-center justify-between pt-2">
+              <div>
+                {!data?.apiKeyConfigured && !apiKey && (
+                  <p className="text-sm text-yellow-600">
+                    Configure your API key to connect to the SaaS platform.
+                  </p>
+                )}
               </div>
-            )}
+              <Button
+                onClick={handleSaveConfig}
+                disabled={saving || (!saasUrl.trim() && !apiKey.trim())}
+              >
+                {saving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Save Configuration
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

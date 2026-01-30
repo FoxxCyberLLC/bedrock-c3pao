@@ -1,9 +1,41 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
-import { apiClient } from '@/lib/api-client'
-import { db } from '@/lib/db'
+import { sendHeartbeat } from '@/lib/api-client'
+import { getMeta, setMeta } from '@/lib/db'
 import { getSyncStatus, getPendingCount, getLastSyncTime, runSyncCycle } from '@/lib/sync-engine'
+
+/**
+ * Save connection configuration (SaaS URL and API key) to the local database.
+ */
+export async function saveConnectionConfig(formData: FormData) {
+  const session = await requireAuth()
+  if (!session) {
+    return { success: false, error: 'Unauthorized' }
+  }
+
+  try {
+    const saasUrl = formData.get('saasUrl') as string
+    const apiKey = formData.get('apiKey') as string
+
+    if (saasUrl) {
+      // Normalize: strip trailing slash
+      const normalized = saasUrl.replace(/\/+$/, '')
+      setMeta('saas_url', normalized)
+    }
+
+    if (apiKey) {
+      setMeta('instance_api_key', apiKey)
+      // Store prefix for display (first 12 chars)
+      setMeta('instance_api_key_prefix', apiKey.substring(0, 12))
+    }
+
+    return { success: true }
+  } catch (error) {
+    console.error('Error saving connection config:', error)
+    return { success: false, error: 'Failed to save configuration' }
+  }
+}
 
 /**
  * Get the current connection status to the SaaS platform.
@@ -15,17 +47,20 @@ export async function getConnectionStatus() {
   }
 
   try {
-    const saasUrl = process.env.SAAS_API_URL || 'Not configured'
-    const apiKeyConfigured = !!process.env.INSTANCE_API_KEY
-    const apiKeyPrefix = process.env.INSTANCE_API_KEY?.substring(0, 12) || ''
+    // Read from DB first, fall back to env vars
+    const saasUrl = getMeta('saas_url') || process.env.SAAS_API_URL || ''
+    const storedApiKey = getMeta('instance_api_key')
+    const envApiKey = process.env.INSTANCE_API_KEY
+    const apiKeyConfigured = !!(storedApiKey || envApiKey)
+    const apiKeyPrefix = getMeta('instance_api_key_prefix') || envApiKey?.substring(0, 12) || ''
 
     // Get sync info from local DB
     const syncStatus = getSyncStatus()
     const pendingCount = getPendingCount()
     const lastSyncTime = getLastSyncTime()
-    const lastHeartbeat = db.getMeta('last_heartbeat')
-    const lastHeartbeatStatus = db.getMeta('last_heartbeat_status')
-    const instanceName = db.getMeta('instance_name')
+    const lastHeartbeat = getMeta('last_heartbeat')
+    const lastHeartbeatStatus = getMeta('last_heartbeat_status')
+    const instanceName = getMeta('instance_name')
 
     return {
       success: true,
@@ -58,16 +93,18 @@ export async function testConnection() {
 
   try {
     const start = Date.now()
-    const result = await apiClient.sendHeartbeat()
+    const result = await sendHeartbeat()
     const latencyMs = Date.now() - start
 
     // Store heartbeat result
-    db.setMeta('last_heartbeat', new Date().toISOString())
-    db.setMeta('last_heartbeat_status', 'connected')
+    setMeta('last_heartbeat', new Date().toISOString())
+    setMeta('last_heartbeat_status', 'connected')
 
     // Store instance info if returned
-    if (result?.instanceId) {
-      db.setMeta('instance_id', result.instanceId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const heartbeatResult = result as any
+    if (heartbeatResult?.instanceId) {
+      setMeta('instance_id', heartbeatResult.instanceId)
     }
 
     return {
@@ -79,8 +116,8 @@ export async function testConnection() {
       },
     }
   } catch (error) {
-    db.setMeta('last_heartbeat', new Date().toISOString())
-    db.setMeta('last_heartbeat_status', 'disconnected')
+    setMeta('last_heartbeat', new Date().toISOString())
+    setMeta('last_heartbeat_status', 'disconnected')
 
     console.error('Connection test failed:', error)
     return {
@@ -105,7 +142,7 @@ export async function triggerManualSync() {
 
   try {
     await runSyncCycle(session.saasToken)
-    db.setMeta('last_manual_sync', new Date().toISOString())
+    setMeta('last_manual_sync', new Date().toISOString())
 
     return {
       success: true,

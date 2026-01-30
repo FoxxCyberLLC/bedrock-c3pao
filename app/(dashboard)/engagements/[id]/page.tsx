@@ -23,7 +23,7 @@ export default async function EngagementDetailPage({
 
   // For pre-access engagements (introduction phase), show limited view
   if (result.accessLevel === 'NONE') {
-    return <LimitedEngagementDetail engagement={result.data} user={session.c3paoUser} />
+    return <LimitedEngagementDetail engagement={result.data as any} user={session.c3paoUser} />
   }
 
   // For read-only and assess access, show full engagement detail

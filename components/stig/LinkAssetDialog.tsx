@@ -18,7 +18,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { linkSTIGTargetToAsset } from '@/app/actions/stig';
 import type { STIGTargetWithStats } from '@/lib/stig/types';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { Asset } from '@/lib/prisma-types';
 
 interface LinkAssetDialogProps {
   target: STIGTargetWithStats;

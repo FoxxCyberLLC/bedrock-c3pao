@@ -55,6 +55,8 @@ import { EngagementTeamCard } from './engagement-team-card'
 import { ConflictDialog } from './conflict-dialog'
 import { STIGViewer } from './stig-viewer'
 import { getEngagementTeam } from '@/app/actions/c3pao-team-assignment'
+
+type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER' | string
 // Prisma types replaced - data comes from SaaS API as JSON
 
 interface Evidence {
@@ -339,7 +341,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
     try {
       const result = await getEngagementTeam(engagement.id)
       if (result.success && result.data) {
-        setTeam(result.data)
+        setTeam(result.data as any)
       }
     } catch (error) {
       console.error('Failed to load team:', error)

@@ -22,7 +22,7 @@ export async function getWorkloadData() {
     if (!session) return { success: false, error: 'Unauthorized' }
 
     // Workload is aggregated from engagements
-    return { success: true, data: [] }
+    return { success: true, data: null as any }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load workload' }
   }

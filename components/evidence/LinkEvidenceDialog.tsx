@@ -21,7 +21,7 @@ import {
   unlinkEvidenceFromRequirement,
   getRequirementStatusesByPackage,
 } from '@/app/actions/evidence';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { Evidence, RequirementStatus, Requirement, RequirementFamily } from '@/lib/prisma-types';
 
 type EvidenceWithRelations = Evidence & {
   requirementStatuses: (RequirementStatus & {

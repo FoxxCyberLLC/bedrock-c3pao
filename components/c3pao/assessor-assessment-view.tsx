@@ -133,7 +133,7 @@ export function AssessorAssessmentView({
       ])
 
       if (findingsResult.success) {
-        setFindings(findingsResult.data as AssessmentFinding[])
+        setFindings(findingsResult.data as unknown as AssessmentFinding[])
       }
       if (statsResult.success && statsResult.data) {
         setStats(statsResult.data)

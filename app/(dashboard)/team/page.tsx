@@ -71,10 +71,10 @@ export default function C3PAOTeamPage() {
         getCurrentC3PAOUser(),
       ])
       if (teamResult.success && teamResult.data) {
-        setTeam(teamResult.data as TeamMember[])
+        setTeam(teamResult.data as unknown as TeamMember[])
       }
       if (userResult.success && userResult.data) {
-        setCurrentUser(userResult.data as CurrentUser)
+        setCurrentUser(userResult.data as unknown as CurrentUser)
       }
     } catch (error) {
       console.error('Error loading data:', error)

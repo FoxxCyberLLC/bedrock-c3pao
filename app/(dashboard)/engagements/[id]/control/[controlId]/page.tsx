@@ -23,10 +23,10 @@ export default async function ControlPage({
   return (
     <ControlDetailPage
       engagementId={id}
-      engagement={result.data.engagement}
-      control={result.data.control}
-      navigation={result.data.navigation}
-      user={session.c3paoUser}
+      engagement={result.data.engagement as any}
+      control={result.data.control as any}
+      navigation={result.data.navigation as any}
+      user={session.c3paoUser as any}
     />
   )
 }

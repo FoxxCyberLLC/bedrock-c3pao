@@ -62,7 +62,7 @@ export default function C3PAOEngagementsPage() {
     try {
       const result = await getC3PAOEngagements()
       if (result.success && result.data) {
-        setEngagements(result.data as Engagement[])
+        setEngagements(result.data as unknown as Engagement[])
       }
     } catch (error) {
       console.error('Error loading engagements:', error)

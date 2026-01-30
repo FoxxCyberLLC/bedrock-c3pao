@@ -32,7 +32,7 @@ import { toast } from 'sonner';
 import { getEvidenceDownloadUrl } from '@/app/actions/evidence';
 import { LinkEvidenceDialog } from './LinkEvidenceDialog';
 import { DeleteEvidenceDialog } from './DeleteEvidenceDialog';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { Evidence, RequirementStatus, Requirement, RequirementFamily } from '@/lib/prisma-types';
 
 type EvidenceWithRelations = Evidence & {
   requirementStatuses: (RequirementStatus & {
