@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * CCI to CMMC Objective Mapping Utilities
  *

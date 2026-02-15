@@ -131,7 +131,7 @@ export default async function DashboardPage() {
                   >
                     <div>
                       <p className="font-medium text-sm">{eng.packageName}</p>
-                      <p className="text-xs text-muted-foreground">{eng.customerName}</p>
+                      <p className="text-xs text-muted-foreground">{eng.organizationName || 'Customer'}</p>
                     </div>
                     <Badge variant="outline">{eng.status.replace(/_/g, ' ')}</Badge>
                   </Link>

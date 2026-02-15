@@ -1,7 +1,6 @@
 // POAM Business Rules and Validation Utilities
 // Based on CMMC POA&M requirements
 
-// Prisma types replaced - data comes from SaaS API as JSON;
 import { addDays, isPast, differenceInDays, startOfDay } from 'date-fns';
 import type {
   CreatePOAMInput,
@@ -9,6 +8,8 @@ import type {
   POAMValidationResult,
   POAMValidationError,
   POAMWithMilestones,
+  RiskLevel,
+  POAMStatus,
 } from '@/lib/types/poam';
 
 /**

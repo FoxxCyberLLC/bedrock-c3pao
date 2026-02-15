@@ -1,10 +1,23 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
-import { upsertFinding, getFindings, getFinding, enqueueSync, logAudit } from '@/lib/db'
-import crypto from 'crypto'
+import {
+  fetchFindings,
+  createFinding,
+  updateFinding,
+  createNote,
+  fetchNotes,
+  type FindingView,
+  type NoteView,
+} from '@/lib/api-client'
 
-interface SaveFindingInput {
+async function getToken(): Promise<string> {
+  const session = await requireAuth()
+  if (!session) throw new Error('Unauthorized')
+  return session.apiToken
+}
+
+export async function saveAssessmentFinding(input: {
   engagementId: string
   controlId?: string
   requirementId?: string
@@ -16,134 +29,76 @@ interface SaveFindingInput {
   deficiency?: string | null
   recommendation?: string | null
   riskLevel?: string | null
-  // Additional fields from component
+  findingId?: string
+  version?: number
+  // Additional fields from assessment components
   methodInterview?: boolean
   methodExamine?: boolean
   methodTest?: boolean
   finding?: string
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function saveAssessmentFinding(input: SaveFindingInput): Promise<{ success: boolean; error?: string; data?: any }> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+}): Promise<{ success: boolean; error?: string; data?: any }> {
   try {
-    const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' }
+    const token = await getToken()
+    const reqId = input.controlId || input.requirementId || ''
 
-    const controlId = input.controlId || input.requirementId || ''
-    const existingFinding = getFinding(input.engagementId, controlId, session.c3paoUser.id)
-    const id = existingFinding?.id || crypto.randomUUID()
-    const version = (existingFinding?.version || 0) + 1
+    let result
+    if (input.findingId && input.version) {
+      // Update existing finding
+      result = await updateFinding(input.engagementId, input.findingId, {
+        determination: input.determination || undefined,
+        findingDetails: input.findingText || input.finding || undefined,
+        riskLevel: input.riskLevel || undefined,
+        assessorNotes: input.objectiveEvidence || undefined,
+        version: input.version,
+      }, token)
+    } else {
+      // Create new finding
+      result = await createFinding(input.engagementId, {
+        requirementId: reqId,
+        determination: input.determination || 'NOT_ASSESSED',
+        findingDetails: input.findingText || input.finding || undefined,
+        riskLevel: input.riskLevel || undefined,
+        assessorNotes: input.objectiveEvidence || undefined,
+      }, token)
+    }
 
-    upsertFinding({
-      id,
-      engagement_id: input.engagementId,
-      control_id: controlId,
-      objective_id: input.objectiveId || null,
-      assessor_id: session.c3paoUser.id,
-      determination: input.determination ?? null,
-      assessment_methods: JSON.stringify(input.assessmentMethods),
-      finding_text: input.findingText ?? null,
-      objective_evidence: input.objectiveEvidence ?? null,
-      deficiency: input.deficiency ?? null,
-      recommendation: input.recommendation ?? null,
-      risk_level: input.riskLevel ?? null,
-      version,
-    })
-
-    // Queue for sync to SaaS
-    enqueueSync({
-      entity_type: 'finding',
-      entity_id: id,
-      engagement_id: input.engagementId,
-      action: existingFinding ? 'update' : 'create',
-      payload: JSON.stringify({
-        id,
-        controlId,
-        objectiveId: input.objectiveId,
-        determination: input.determination,
-        assessmentMethods: input.assessmentMethods,
-        findingText: input.findingText,
-        objectiveEvidence: input.objectiveEvidence,
-        deficiency: input.deficiency,
-        recommendation: input.recommendation,
-        riskLevel: input.riskLevel,
-        version,
-        engagementId: input.engagementId,
-      }),
-    })
-
-    logAudit({
-      assessor_id: session.c3paoUser.id,
-      assessor_email: session.c3paoUser.email,
-      action: existingFinding ? 'FINDING_UPDATED' : 'FINDING_CREATED',
-      resource: 'AssessmentFinding',
-      resource_id: id,
-      details: JSON.stringify({ controlId: input.controlId, determination: input.determination }),
-    })
-
-    return { success: true }
+    return { success: true, data: result }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to save finding' }
   }
 }
 
-export async function getAssessmentFindings(engagementId: string): Promise<{ success: boolean; data?: ReturnType<typeof getFindings>; error?: string }> {
+export async function getAssessmentFindings(engagementId: string): Promise<{ success: boolean; data?: FindingView[]; error?: string }> {
   try {
-    const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' }
-
-    const findings = getFindings(engagementId)
+    const token = await getToken()
+    const findings = await fetchFindings(engagementId, token)
     return { success: true, data: findings }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load findings' }
   }
 }
 
-// Assessor notes for a specific control
 export async function updateAssessorNotes(input: {
   engagementId: string
   requirementStatusId: string
   assessmentNotes: string
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' }
-
-    // Store notes as a finding with a special "notes" determination
-    const id = `notes:${input.requirementStatusId}:${session.c3paoUser.id}`
-
-    upsertFinding({
-      id,
-      engagement_id: input.engagementId,
-      control_id: input.requirementStatusId,
-      objective_id: null,
-      assessor_id: session.c3paoUser.id,
-      determination: 'ASSESSOR_NOTES',
-      assessment_methods: null,
-      finding_text: input.assessmentNotes,
-      objective_evidence: null,
-      deficiency: null,
-      recommendation: null,
-      risk_level: null,
-      version: 1,
-    })
-
-    enqueueSync({
-      entity_type: 'finding',
-      entity_id: id,
-      engagement_id: input.engagementId,
-      action: 'update',
-      payload: JSON.stringify({
-        id,
-        controlId: input.requirementStatusId,
-        type: 'assessor_notes',
-        assessmentNotes: input.assessmentNotes,
-        engagementId: input.engagementId,
-      }),
-    })
-
+    const token = await getToken()
+    await createNote(input.engagementId, input.assessmentNotes, token)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to save notes' }
+  }
+}
+
+export async function getAssessmentNotes(engagementId: string): Promise<{ success: boolean; data?: NoteView[]; error?: string }> {
+  try {
+    const token = await getToken()
+    const notes = await fetchNotes(engagementId, token)
+    return { success: true, data: notes }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to load notes' }
   }
 }

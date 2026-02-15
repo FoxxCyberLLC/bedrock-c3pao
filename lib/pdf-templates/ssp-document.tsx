@@ -11,7 +11,7 @@ import {
   View,
 } from '@react-pdf/renderer';
 import { styles, getStatusStyle } from './styles';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { SSP } from '@/lib/prisma-types';
 
 // Component props
 interface SSPDocumentProps {

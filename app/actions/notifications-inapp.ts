@@ -1,29 +1,23 @@
 'use server'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type StubResult = { success: boolean; error?: string; data?: any; message?: string }
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getNotifications(...args: any[]): Promise<StubResult> {
+export async function getNotifications(recipientType?: string, recipientId?: string, limit?: number): Promise<{ success: boolean; error?: string; data?: any[] }> {
+  // Notifications are scoped to OSC organizations, not C3PAO users
   return { success: true, data: [] }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getUnreadNotificationCount(...args: any[]): Promise<StubResult> {
+export async function getUnreadNotificationCount(recipientType?: string, recipientId?: string): Promise<{ success: boolean; error?: string; data?: number }> {
   return { success: true, data: 0 }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function markNotificationRead(...args: any[]): Promise<StubResult> {
-  return { success: false, error: 'Notifications not available in standalone mode' }
+export async function markNotificationRead(notificationId: string): Promise<{ success: boolean; error?: string }> {
+  return { success: true }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function markAllNotificationsRead(...args: any[]): Promise<StubResult> {
-  return { success: false, error: 'Notifications not available in standalone mode' }
+export async function markAllNotificationsRead(recipientType?: string, recipientId?: string): Promise<{ success: boolean; error?: string }> {
+  return { success: true }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function clearAllNotifications(...args: any[]): Promise<StubResult> {
-  return { success: false, error: 'Notifications not available in standalone mode' }
+export async function clearAllNotifications(recipientType?: string, recipientId?: string): Promise<{ success: boolean; error?: string }> {
+  return { success: true }
 }

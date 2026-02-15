@@ -34,7 +34,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { STIGRule, STIGFindingStatus, STIGSeverity } from '@/lib/prisma-types';
 
 interface STIGRulesTableProps {
   rules: (STIGRule & {

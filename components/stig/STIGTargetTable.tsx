@@ -41,7 +41,7 @@ import { DeleteSTIGTargetDialog } from './DeleteSTIGDialog';
 import { LinkAssetDialog } from './LinkAssetDialog';
 import { CreateAssetFromTargetDialog } from './CreateAssetFromTargetDialog';
 import type { STIGTargetWithStats } from '@/lib/stig/types';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { Asset } from '@/lib/prisma-types';
 
 interface STIGTargetTableProps {
   targets: STIGTargetWithStats[];

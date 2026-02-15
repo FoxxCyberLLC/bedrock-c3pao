@@ -1,18 +1,16 @@
 # =============================================================================
 # Bedrock C3PAO - Standalone Assessment Client
-# Multi-stage Docker build for production deployment
+# Connects to Bedrock CMMC API (Go backend) for all data
 # =============================================================================
 
 # Stage 1: Install dependencies
 FROM node:20-alpine AS deps
-RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # Stage 2: Build the application
 FROM node:20-alpine AS builder
-RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -27,27 +25,27 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Create non-root user and data directory for SQLite
+# Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs && \
-    mkdir -p /app/data && chown nextjs:nodejs /app/data
+    adduser --system --uid 1001 nextjs
 
 # Copy standalone build output
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy SQLite schema for initialization
-COPY --from=builder /app/db ./db
-
 USER nextjs
 
-EXPOSE 3000
+EXPOSE 3001
 
-ENV PORT=3000
+ENV PORT=3001
 ENV HOSTNAME="0.0.0.0"
 
-# SQLite database stored on persistent volume
-VOLUME ["/app/data"]
+# Required environment variables (set at runtime):
+# BEDROCK_API_URL — URL of the Bedrock CMMC API (e.g., http://api:8080)
+# AUTH_SECRET — Secret for encrypting session cookies
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
 
 CMD ["node", "server.js"]

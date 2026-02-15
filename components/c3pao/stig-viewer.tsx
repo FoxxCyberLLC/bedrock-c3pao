@@ -43,7 +43,7 @@ export function STIGViewer({ packageId, engagementId, assessmentModeActive = fal
           setStatistics(statsResult.data)
         }
         if (targetsResult.success && targetsResult.data) {
-          setTargets(targetsResult.data)
+          setTargets(targetsResult.data as any)
         }
       } catch (error) {
         console.error('Failed to load STIG data:', error)

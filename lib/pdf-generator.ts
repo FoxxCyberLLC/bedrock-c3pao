@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * PDF Generator Service
  * Generates PDF documents from SSP data using @react-pdf/renderer

@@ -2,8 +2,8 @@
  * Authentication System
  *
  * Local JWT session management for the standalone C3PAO client.
- * Assessor credentials are validated against the SaaS API on login.
- * Subsequent requests use a local JWT cookie for speed (no SaaS round-trip).
+ * Assessor credentials are validated against the Go API on login.
+ * Session stores the Go API JWT for subsequent API calls.
  */
 
 import { SignJWT, jwtVerify } from 'jose'
@@ -27,7 +27,7 @@ export type SessionC3PAOUser = {
 
 export type C3PAOSessionPayload = {
   c3paoUser: SessionC3PAOUser
-  saasToken: string
+  apiToken: string
   expires: string
 }
 
@@ -67,14 +67,14 @@ export async function getSession(): Promise<C3PAOSessionPayload | null> {
 }
 
 /**
- * Set session cookie after successful SaaS authentication
+ * Set session cookie after successful Go API authentication
  */
-export async function setSession(user: SessionC3PAOUser, saasToken: string): Promise<void> {
+export async function setSession(user: SessionC3PAOUser, apiToken: string): Promise<void> {
   const expires = new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000)
 
   const session = await encryptSession({
     c3paoUser: user,
-    saasToken,
+    apiToken,
     expires: expires.toISOString(),
   })
 
@@ -82,7 +82,7 @@ export async function setSession(user: SessionC3PAOUser, saasToken: string): Pro
   cookieStore.set(COOKIE_NAME, session, {
     expires,
     httpOnly: true,
-    secure: process.env.FORCE_HTTPS === 'true' || (process.env.NODE_ENV === 'production' && process.env.ALLOW_HTTP !== 'true'),
+    secure: true,
     sameSite: 'strict',
     path: '/',
   })
@@ -115,9 +115,9 @@ export async function requireAuth(): Promise<C3PAOSessionPayload | null> {
 }
 
 /**
- * Get the SaaS API token from the current session
+ * Get the Go API token from the current session
  */
-export async function getSaasToken(): Promise<string | null> {
+export async function getApiToken(): Promise<string | null> {
   const session = await getSession()
-  return session?.saasToken || null
+  return session?.apiToken || null
 }

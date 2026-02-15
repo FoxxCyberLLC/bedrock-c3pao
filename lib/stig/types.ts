@@ -1,12 +1,64 @@
-import type {
-  STIGImport,
-  STIGTarget,
-  STIGChecklist,
-  STIGRule,
-  STIGFindingStatus,
-  STIGSeverity,
-  AssetType,
-} from '@prisma/client';
+// Standalone replacements for Prisma STIG types
+
+// ============================================
+// BASE TYPES (replacing @prisma/client)
+// ============================================
+
+export type AssetType = 'HARDWARE' | 'SOFTWARE' | 'NETWORK' | 'OTHER' | string;
+
+export interface STIGImport {
+  id: string;
+  fileName: string;
+  importedAt: Date | string;
+  importedById?: string;
+  packageId?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+export interface STIGTarget {
+  id: string;
+  hostname: string;
+  fqdn?: string | null;
+  ipAddress?: string | null;
+  mac?: string | null;
+  assetType?: string;
+  role?: string;
+  technologyArea?: string;
+  importId: string;
+  packageId?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+export interface STIGChecklist {
+  id: string;
+  stigId: string;
+  displayName: string;
+  version?: string;
+  releaseInfo?: string;
+  targetId: string;
+  importId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+export interface STIGRule {
+  id: string;
+  ruleId: string;
+  ruleTitle: string;
+  title: string;
+  description: string;
+  severity: string;
+  status: string;
+  groupId: string;
+  checklistId?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+export type STIGFindingStatus = 'OPEN' | 'NOT_A_FINDING' | 'NOT_APPLICABLE' | 'NOT_REVIEWED' | string;
+export type STIGSeverity = 'CAT_I' | 'CAT_II' | 'CAT_III' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
 
 // ============================================
 // EXTENDED TYPES WITH RELATIONS
@@ -98,13 +150,3 @@ export interface STIGImportResult {
   rulesImported: number;
   targetHostname: string;
 }
-
-// Re-export Prisma types for convenience
-export type {
-  STIGImport,
-  STIGTarget,
-  STIGChecklist,
-  STIGRule,
-  STIGFindingStatus,
-  STIGSeverity,
-};

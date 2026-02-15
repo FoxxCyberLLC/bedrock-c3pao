@@ -24,7 +24,7 @@ import { STIGChecklistCard } from './STIGChecklistCard';
 import { STIGRulesTable } from './STIGRulesTable';
 import { getSTIGRules, getSTIGRulesByTarget } from '@/app/actions/stig';
 import type { STIGTargetWithStats, STIGChecklistWithCounts } from '@/lib/stig/types';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { STIGRule } from '@/lib/prisma-types';
 
 interface STIGTargetDetailsProps {
   target: STIGTargetWithStats;

@@ -1,8 +1,7 @@
 'use server'
 
-import { requireAuth } from '@/lib/auth'
-import { getSyncStatus, getPendingCount, getLastSyncTime, runSyncCycle } from '@/lib/sync-engine'
-import { clearCacheForEngagement } from '@/lib/db'
+// Sync is no longer needed — the C3PAO client talks directly to the Go API.
+// These stubs exist for backward compatibility with any UI components that reference them.
 
 export async function getSyncInfo(): Promise<{
   status: string
@@ -10,32 +9,16 @@ export async function getSyncInfo(): Promise<{
   lastSyncAt: string | null
 }> {
   return {
-    status: getSyncStatus(),
-    pendingCount: getPendingCount(),
-    lastSyncAt: getLastSyncTime(),
+    status: 'idle',
+    pendingCount: 0,
+    lastSyncAt: null,
   }
 }
 
 export async function triggerSync(): Promise<{ success: boolean; error?: string }> {
-  try {
-    const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' }
-
-    await runSyncCycle(session.saasToken)
-    return { success: true }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Sync failed' }
-  }
+  return { success: true }
 }
 
-export async function refreshEngagementCache(engagementId: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' }
-
-    clearCacheForEngagement(engagementId)
-    return { success: true }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to refresh cache' }
-  }
+export async function refreshEngagementCache(): Promise<{ success: boolean; error?: string }> {
+  return { success: true }
 }

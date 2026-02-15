@@ -1,54 +1,51 @@
 // POAM Types and Enums
 // Based on CMMC POA&M requirements
 
-// Prisma types replaced - data comes from SaaS API as JSON;
-
-// Re-export Prisma enums
-export { POAMType, RiskLevel, POAMStatus } from '@prisma/client';
+// Standalone replacements for Prisma enums
+export type POAMType = 'ASSESSMENT' | 'OPERATIONAL';
+export type RiskLevel = 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
+export type POAMStatus = 'OPEN' | 'IN_PROGRESS' | 'CLOSED' | 'OVERDUE';
 
 // Full POAM with all relations
-export type POAMWithRelations = Prisma.POAMGetPayload<{
-  include: {
-    requirement: {
-      include: {
-        family: true;
-      };
-    };
-    requirements: {
-      include: {
-        requirement: {
-          include: {
-            family: true;
-          };
-        };
-      };
-    };
-    atoPackage: true;
-    milestones: true;
-  };
-}>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type POAMWithRelations = any;
 
 // POAM with just milestones
-export type POAMWithMilestones = Prisma.POAMGetPayload<{
-  include: {
-    milestones: true;
-  };
-}>;
+export interface POAMWithMilestones {
+  id: string;
+  weakness?: string;
+  riskLevel: string;
+  status: string;
+  remediationPlan?: string;
+  scheduledCompletionDate?: Date | string | null;
+  milestones: POAMMilestone[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
 
 // Milestone type
-export type POAMMilestone = Prisma.POAMMilestoneGetPayload<Record<string, never>>;
+export interface POAMMilestone {
+  id: string;
+  poamId: string;
+  description: string;
+  dueDate: Date | string;
+  completed: boolean;
+  completedDate?: Date | string | null;
+  sortOrder?: number;
+  [key: string]: unknown;
+}
 
 // Form input types
 export interface CreatePOAMInput {
   type: 'ASSESSMENT' | 'OPERATIONAL';
-  requirementIds: string[];  // Changed from requirementId to support multiple
+  requirementIds: string[];
   atoPackageId: string;
   title: string;
   description: string;
   riskLevel: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
   remediationPlan: string;
   scheduledCompletionDate: Date;
-  createdBy?: string;  // Made optional for compatibility
+  createdBy?: string;
 }
 
 export interface UpdatePOAMInput {

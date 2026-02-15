@@ -31,8 +31,7 @@ export default function C3PAOLoginForm() {
         return
       }
 
-      router.push('/')
-      router.refresh()
+      window.location.href = '/'
     } catch {
       setError('An error occurred. Please try again.')
       setIsLoading(false)

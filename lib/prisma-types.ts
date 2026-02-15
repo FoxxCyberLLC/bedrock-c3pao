@@ -37,7 +37,8 @@ export interface Requirement {
   description: string | null
   familyId: string
   family?: RequirementFamily
-  [key: string]: unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
 }
 
 export interface RequirementStatus {
@@ -54,26 +55,40 @@ export type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER'
 
 export interface Asset {
   id: string
-  assetName: string
+  name: string
+  assetName?: string
   assetType: string
   assetCategory?: string
+  hostname?: string | null
+  ipAddress?: string | null
   description?: string | null
-  [key: string]: unknown
+  stigTargetId?: string | null
+  stigTarget?: unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
 }
 
 export interface STIGRule {
   id: string
   ruleId: string
+  ruleTitle: string
   title: string
   description: string
   severity: string
   status: string
+  groupId: string
+  groupTitle?: string
+  fixText?: string | null
+  checkContent?: string | null
+  comments?: string | null
+  finding?: string | null
   checklistId?: string
-  [key: string]: unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
 }
 
-export type STIGFindingStatus = 'OPEN' | 'NOT_A_FINDING' | 'NOT_APPLICABLE' | 'NOT_REVIEWED'
-export type STIGSeverity = 'CAT_I' | 'CAT_II' | 'CAT_III'
+export type STIGFindingStatus = 'OPEN' | 'NOT_A_FINDING' | 'NOT_APPLICABLE' | 'NOT_REVIEWED' | string
+export type STIGSeverity = 'CAT_I' | 'CAT_II' | 'CAT_III' | 'HIGH' | 'MEDIUM' | 'LOW' | string
 export type RiskLevel = 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW'
 export type POAMStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED' | 'CLOSED' | 'OVERDUE'
 
@@ -81,7 +96,8 @@ export interface SSP {
   id: string
   version: string
   status: string
-  [key: string]: unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
 }
 
 export interface POAMWithMilestones {
@@ -90,7 +106,8 @@ export interface POAMWithMilestones {
   riskLevel: string
   status: string
   milestones: unknown[]
-  [key: string]: unknown
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
 }
 
 // Stub for Prisma namespace used in some type utilities

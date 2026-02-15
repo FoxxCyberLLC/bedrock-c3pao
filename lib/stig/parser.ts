@@ -1,5 +1,5 @@
 import { z } from 'zod';
-// Prisma types replaced - data comes from SaaS API as JSON;
+import { STIGFindingStatus, STIGSeverity } from '@/lib/prisma-types';
 
 // ============================================
 // CKLB FILE ZOD SCHEMAS

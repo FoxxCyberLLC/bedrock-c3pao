@@ -25,7 +25,7 @@ export default async function STIGsPage({
     redirect('/engagements')
   }
 
-  const stigs = stigsResult.data || []
+  const stigs: { id: string; benchmarkTitle: string; targetName: string; targetId: string }[] = (stigsResult.data || []) as { id: string; benchmarkTitle: string; targetName: string; targetId: string }[]
 
   return (
     <div className="space-y-6">

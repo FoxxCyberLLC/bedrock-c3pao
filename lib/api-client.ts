@@ -1,364 +1,669 @@
 /**
- * SaaS API Client
+ * Go API Client
  *
- * Typed fetch wrapper for communicating with the Bedrock CMMC SaaS platform.
- * Handles authentication, retry logic, and error mapping.
+ * Typed fetch wrapper for communicating with the Bedrock CMMC API (Go backend).
+ * All data flows through the Go API — no direct database access.
  */
 
-import { getMeta } from './db'
-
-const SAAS_API_URL = () => getMeta('saas_url') || process.env.SAAS_API_URL || 'http://localhost:3001/api/v1/instance'
-const INSTANCE_API_KEY = () => getMeta('instance_api_key') || process.env.INSTANCE_API_KEY || ''
+const API_URL = process.env.BEDROCK_API_URL || 'http://localhost:8080'
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public body?: unknown
+    public code?: string
   ) {
     super(message)
     this.name = 'ApiError'
   }
 }
 
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
-  body?: unknown
-  assessorToken?: string
-  timeout?: number
-  retries?: number
+interface ApiEnvelope<T> {
+  data: T
+  error: { message: string; code: string } | null
 }
 
-async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, assessorToken, timeout = 30000, retries = 2 } = options
+interface RequestOptions {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+  body?: unknown
+  token?: string
+  timeout?: number
+}
+
+async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  const { method = 'GET', body, token, timeout = 30000 } = options
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'X-Instance-Key': INSTANCE_API_KEY(),
   }
 
-  if (assessorToken) {
-    headers['Authorization'] = `Bearer ${assessorToken}`
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
   }
 
-  const url = `${SAAS_API_URL()}${endpoint}`
+  const url = `${API_URL}${endpoint}`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
 
-  let lastError: Error | null = null
+  try {
+    const response = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+      cache: 'no-store',
+    })
 
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeout)
+    clearTimeout(timer)
 
-      const response = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-        signal: controller.signal,
-      })
+    const json = await response.json() as ApiEnvelope<T>
 
-      clearTimeout(timer)
-
-      if (response.status === 429) {
-        // Rate limited — wait and retry
-        const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10)
-        await sleep(retryAfter * 1000)
-        continue
-      }
-
-      if (!response.ok) {
-        const errorBody = await response.json().catch(() => null)
-        throw new ApiError(response.status, `API ${method} ${endpoint} failed: ${response.status}`, errorBody)
-      }
-
-      return await response.json() as T
-    } catch (error) {
-      lastError = error as Error
-
-      if (error instanceof ApiError) {
-        // Don't retry client errors (4xx) except 429
-        if (error.status >= 400 && error.status < 500) {
-          throw error
-        }
-      }
-
-      // Retry on network/server errors
-      if (attempt < retries) {
-        await sleep(Math.pow(2, attempt) * 1000)
-      }
+    if (!response.ok || json.error) {
+      throw new ApiError(
+        response.status,
+        json.error?.message || `API ${method} ${endpoint} failed: ${response.status}`,
+        json.error?.code
+      )
     }
+
+    return json.data
+  } catch (error) {
+    clearTimeout(timer)
+    if (error instanceof ApiError) throw error
+    throw new ApiError(0, error instanceof Error ? error.message : 'Network error')
   }
-
-  throw lastError || new Error(`API request failed after ${retries + 1} attempts`)
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 // ---- Authentication ----
 
-export interface AuthResponse {
+export interface LoginResponse {
   token: string
-  assessor: {
-    id: string
-    email: string
-    name: string
-    c3paoId: string
-    c3paoName: string
-    isLeadAssessor: boolean
-    status: string
-    phone?: string
-    jobTitle?: string
-    ccaNumber?: string
-    ccpNumber?: string
-  }
-  c3pao: {
-    id: string
-    name: string
-    status: string
-  }
-  expiresAt: string
+  userId: string
+  email: string
+  name: string
+  role: string
+  userType: string
+  orgId: string
+  orgName?: string
+  isLeadAssessor?: boolean
 }
 
-export async function authenticateAssessor(email: string, password: string): Promise<AuthResponse> {
-  return request<AuthResponse>('/authenticate', {
+export async function apiLogin(email: string, password: string): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>('/api/auth/login', {
     method: 'POST',
-    body: { email, password },
+    body: { email, password, userType: 'c3pao' },
   })
 }
 
-// ---- Engagements ----
-
-export interface EngagementSummary {
+export interface MeResponse {
   id: string
-  customerName: string
-  packageName: string
-  targetLevel: string
+  email: string
+  name: string
+  role: string
   status: string
-  accessLevel: string
-  requestedDate: string | null
-  scheduledStartDate: string | null
-  scheduledEndDate: string | null
-  lastActivityAt: string | null
+  userType: string
+  orgId: string
+  orgName?: string
+  isLeadAssessor?: boolean
 }
 
-export interface EngagementDetail {
+export async function apiMe(token: string): Promise<MeResponse> {
+  return apiRequest<MeResponse>('/api/auth/me', { token })
+}
+
+export async function apiRefreshToken(token: string): Promise<{ token: string }> {
+  return apiRequest<{ token: string }>('/api/auth/refresh', {
+    method: 'POST',
+    token,
+  })
+}
+
+// ---- C3PAO Assessments ----
+
+export interface EngagementSummary {
   id: string
   customerId: string
   atoPackageId: string
   c3paoId: string
   leadAssessorId: string | null
-  customerName: string
-  packageName: string
-  targetLevel: string
   status: string
   accessLevel: string
-  assessmentModeActive: boolean
-  assessmentScope: string | null
-  assessmentNotes: string | null
-  customerNotes: string | null
-  requestedDate: string | null
+  targetLevel: string
+  requestedDate: string
   acceptedDate: string | null
   scheduledStartDate: string | null
   scheduledEndDate: string | null
   actualStartDate: string | null
   actualCompletionDate: string | null
+  assessmentScope: string | null
+  assessmentNotes: string | null
   assessmentResult: string | null
-  findingsCount: number
-  poamRequired: boolean
-  quotedPrice: number | null
-  introductionMessage: string | null
-  proposalMessage: string | null
-  proposalScope: string | null
-  lastMessageAt: string | null
-  // Nested data
-  atoPackage: {
-    id: string
-    name: string
-    organization: { id: string; name: string } | null
-    requirementStatuses?: unknown[]
-    objectiveStatuses?: unknown[]
-    evidence?: unknown[]
-    poams?: unknown[]
-    ssp?: { id: string; version: string; status: string } | null
-    externalServiceProviders?: { id: string; providerName: string }[]
-  } | null
-  leadAssessor?: { id: string; name: string; email: string; isLeadAssessor: boolean } | null
-  teamAssignments?: unknown[]
-  findings?: unknown[]
-  report?: unknown
-  activities?: unknown[]
-  controls?: ControlForAssessment[]
-  team?: TeamMember[]
+  findingsCount: number | null
+  poamRequired: boolean | null
+  assessmentModeActive: boolean
+  createdAt: string
+  updatedAt: string
+  packageName: string
+  organizationName: string
+  leadAssessorName: string | null
 }
 
-export interface ControlForAssessment {
+export interface ControlView {
   id: string
-  controlIdentifier: string
+  requirementId: string
+  familyCode: string
+  familyName: string
+  title: string
+  basicRequirement: string
+  cmmcLevel: string
+  sortOrder: number
+  status: string | null
+  implementationNotes: string | null
+  implementationType: string | null
+  processOwner: string | null
+}
+
+export interface EvidenceView {
+  id: string
+  fileName: string
+  fileUrl: string | null
+  mimeType: string | null
+  fileSize: number | null
+  description: string | null
+  version: number
+  uploadedBy: string | null
+  uploadedAt: string
+  expirationDate: string | null
+}
+
+export interface SSPView {
+  id: string
+  atoPackageId: string
+  version: string
+  status: string
+  systemName: string | null
+  systemDescription: string | null
+  systemBoundary: string | null
+  systemEnvironment: string | null
+  systemArchitecture: string | null
+  controlStatements: string | null
+  securityPolicies: string | null
+  incidentResponse: string | null
+  contingencyPlan: string | null
+  generatedAt: string | null
+  lastModified: string
+  createdAt: string
+}
+
+export interface POAMView {
+  id: string
+  type: string
   title: string
   description: string
-  family: string
-  objectives?: ObjectiveForAssessment[]
-  existingFinding?: {
-    determination: string
-    assessorId: string
-    updatedAt: string
+  riskLevel: string
+  status: string
+  remediationPlan: string
+  scheduledCompletionDate: string
+  actualCompletionDate: string | null
+  deadline: string
+  daysToRemediate: number
+  createdAt: string
+  milestones: MilestoneView[]
+}
+
+export interface MilestoneView {
+  description: string
+  dueDate: string
+  completed: boolean
+  completedDate: string | null
+}
+
+export interface FindingView {
+  id: string
+  engagementId: string
+  requirementId: string
+  requirementCode: string
+  determination: string
+  findingDetails: string | null
+  riskLevel: string | null
+  assessorNotes: string | null
+  version: number
+  createdAt: string
+  updatedAt: string
+  assessorId: string
+  assessorName: string | null
+}
+
+export interface NoteView {
+  id: string
+  engagementId: string
+  content: string
+  authorId: string
+  authorName: string | null
+  createdAt: string
+}
+
+export interface ReportData {
+  engagement: EngagementSummary
+  totalControls: number
+  assessedControls: number
+  findings: FindingView[]
+  stats: {
+    met: number
+    notMet: number
+    notApplicable: number
+    notAssessed: number
   }
 }
 
-export interface ObjectiveForAssessment {
-  id: string
-  objectiveIdentifier: string
-  description: string
-  assessmentMethods: string[]
+export interface EMassExportData {
+  metadata: Record<string, unknown>
+  controls: Record<string, unknown>[]
+  findings: Record<string, unknown>[]
 }
 
-export interface TeamMember {
-  id: string
-  assessorId: string
-  assessorName: string
-  assessorEmail: string
-  role: string
-  isLeadAssessor: boolean
-  assignedControls?: string[]
+// ---- Fetch Functions ----
+
+export async function fetchAssessments(token: string): Promise<EngagementSummary[]> {
+  return apiRequest<EngagementSummary[]>('/api/c3pao/assessments', { token })
 }
 
-export interface EvidenceItem {
-  id: string
-  controlId: string
-  fileName: string
-  fileType: string
-  fileSize: number
-  description: string | null
-  uploadedAt: string
-  downloadUrl?: string
+export async function fetchControls(engagementId: string, token: string): Promise<ControlView[]> {
+  return apiRequest<ControlView[]>(`/api/c3pao/assessments/${engagementId}/controls`, { token })
 }
 
-export interface PoamItem {
-  id: string
-  controlId: string
-  weakness: string
-  milestones: string | null
-  scheduledCompletionDate: string | null
-  status: string
+export async function fetchEvidence(engagementId: string, token: string): Promise<EvidenceView[]> {
+  return apiRequest<EvidenceView[]>(`/api/c3pao/assessments/${engagementId}/evidence`, { token })
 }
 
-export interface StigItem {
-  id: string
-  targetId: string
-  targetName: string
-  benchmarkId: string
-  benchmarkTitle: string
-  data: string  // JSON
+export async function fetchSSP(engagementId: string, token: string): Promise<SSPView> {
+  return apiRequest<SSPView>(`/api/c3pao/assessments/${engagementId}/ssp`, { token })
 }
 
-export async function fetchEngagements(assessorToken: string): Promise<EngagementSummary[]> {
-  return request<EngagementSummary[]>('/engagements', { assessorToken })
+export async function fetchPOAMs(engagementId: string, token: string): Promise<POAMView[]> {
+  return apiRequest<POAMView[]>(`/api/c3pao/assessments/${engagementId}/poam`, { token })
 }
 
-export async function fetchEngagement(id: string, assessorToken: string): Promise<EngagementDetail> {
-  return request<EngagementDetail>(`/engagements/${id}`, { assessorToken })
+export async function fetchFindings(engagementId: string, token: string): Promise<FindingView[]> {
+  return apiRequest<FindingView[]>(`/api/c3pao/assessments/${engagementId}/findings`, { token })
 }
 
-export async function fetchControls(engagementId: string, assessorToken: string): Promise<ControlForAssessment[]> {
-  return request<ControlForAssessment[]>(`/engagements/${engagementId}/controls`, { assessorToken })
+export async function fetchNotes(engagementId: string, token: string): Promise<NoteView[]> {
+  return apiRequest<NoteView[]>(`/api/c3pao/assessments/${engagementId}/notes`, { token })
 }
 
-export async function fetchEvidence(engagementId: string, assessorToken: string): Promise<EvidenceItem[]> {
-  return request<EvidenceItem[]>(`/engagements/${engagementId}/evidence`, { assessorToken })
+export async function fetchReport(engagementId: string, token: string): Promise<ReportData> {
+  return apiRequest<ReportData>(`/api/c3pao/assessments/${engagementId}/report`, { token })
 }
 
-export async function fetchPoams(engagementId: string, assessorToken: string): Promise<PoamItem[]> {
-  return request<PoamItem[]>(`/engagements/${engagementId}/poams`, { assessorToken })
+export async function fetchEMassExport(engagementId: string, token: string): Promise<EMassExportData> {
+  return apiRequest<EMassExportData>(`/api/c3pao/assessments/${engagementId}/export/emass`, { token })
 }
 
-export async function fetchStigs(engagementId: string, assessorToken: string): Promise<StigItem[]> {
-  return request<StigItem[]>(`/engagements/${engagementId}/stigs`, { assessorToken })
+// ---- Write Functions ----
+
+export interface CreateFindingInput {
+  requirementId: string
+  determination: string
+  findingDetails?: string
+  riskLevel?: string
+  assessorNotes?: string
 }
 
-export async function fetchTeam(engagementId: string, assessorToken: string): Promise<TeamMember[]> {
-  return request<TeamMember[]>(`/engagements/${engagementId}/team`, { assessorToken })
+export async function createFinding(engagementId: string, input: CreateFindingInput, token: string): Promise<FindingView> {
+  return apiRequest<FindingView>(`/api/c3pao/assessments/${engagementId}/findings`, {
+    method: 'POST',
+    body: input,
+    token,
+  })
 }
 
-export async function fetchReferenceData(key: string, assessorToken: string): Promise<unknown> {
-  return request<unknown>(`/reference/${key}`, { assessorToken })
-}
-
-// ---- Push Endpoints ----
-
-export interface FindingPayload {
-  id: string
-  controlId: string
-  objectiveId?: string
-  determination: string | null
-  assessmentMethods: string[]
-  findingText: string | null
-  objectiveEvidence: string | null
-  deficiency: string | null
-  recommendation: string | null
-  riskLevel: string | null
+export interface UpdateFindingInput {
+  determination?: string
+  findingDetails?: string
+  riskLevel?: string
+  assessorNotes?: string
   version: number
 }
 
-export async function pushFindings(engagementId: string, findings: FindingPayload[], assessorToken: string): Promise<{ synced: number; conflicts: string[] }> {
-  return request<{ synced: number; conflicts: string[] }>(`/engagements/${engagementId}/findings/bulk`, {
-    method: 'POST',
-    body: { findings },
-    assessorToken,
+export async function updateFinding(engagementId: string, findingId: string, input: UpdateFindingInput, token: string): Promise<FindingView> {
+  return apiRequest<FindingView>(`/api/c3pao/assessments/${engagementId}/findings/${findingId}`, {
+    method: 'PUT',
+    body: input,
+    token,
   })
 }
 
-export async function pushFinding(engagementId: string, finding: FindingPayload, assessorToken: string): Promise<{ success: boolean; conflict?: boolean }> {
-  return request<{ success: boolean; conflict?: boolean }>(`/engagements/${engagementId}/findings`, {
+export async function createNote(engagementId: string, content: string, token: string): Promise<NoteView> {
+  return apiRequest<NoteView>(`/api/c3pao/assessments/${engagementId}/notes`, {
     method: 'POST',
-    body: finding,
-    assessorToken,
+    body: { content },
+    token,
   })
 }
 
-export async function pushReport(engagementId: string, report: { id: string; data: string; status: string }, assessorToken: string): Promise<{ success: boolean }> {
-  return request<{ success: boolean }>(`/engagements/${engagementId}/report`, {
-    method: 'POST',
-    body: report,
-    assessorToken,
+// ---- Engagement Detail & Status ----
+
+export async function fetchEngagementDetail(engagementId: string, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}`, { token })
+}
+
+export async function updateEngagementStatus(engagementId: string, body: { status: string; notes?: string }, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/status`, {
+    method: 'PATCH',
+    body,
+    token,
   })
 }
 
-export async function pushEngagementStatus(engagementId: string, status: string, assessorToken: string): Promise<{ success: boolean }> {
-  return request<{ success: boolean }>(`/engagements/${engagementId}/status`, {
+export async function toggleAssessmentMode(engagementId: string, active: boolean, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/assessment-mode`, {
     method: 'POST',
+    body: { active },
+    token,
+  })
+}
+
+// ---- Team Management ----
+
+export interface TeamMember {
+  id: string
+  engagementId: string
+  c3paoUserId: string
+  role: string
+  assignedAt: string
+  name: string
+  email: string
+  assessorType: string
+  domains: string[]
+}
+
+export async function fetchTeam(engagementId: string, token: string): Promise<TeamMember[]> {
+  return apiRequest<TeamMember[]>(`/api/c3pao/assessments/${engagementId}/team`, { token })
+}
+
+export async function fetchAvailableAssessors(engagementId: string, token: string): Promise<Record<string, unknown>[]> {
+  return apiRequest<Record<string, unknown>[]>(`/api/c3pao/assessments/${engagementId}/team/available`, { token })
+}
+
+export async function addTeamMember(engagementId: string, body: { userId: string; role: string }, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/team`, {
+    method: 'POST',
+    body,
+    token,
+  })
+}
+
+export async function updateTeamMemberRole(engagementId: string, assessorId: string, role: string, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/team/${assessorId}/role`, {
+    method: 'PATCH',
+    body: { role },
+    token,
+  })
+}
+
+export async function removeTeamMember(engagementId: string, assessorId: string, token: string): Promise<void> {
+  return apiRequest<void>(`/api/c3pao/assessments/${engagementId}/team/${assessorId}`, {
+    method: 'DELETE',
+    token,
+  })
+}
+
+// ---- Domain Assignment ----
+
+export interface DomainAssignment {
+  id: string
+  engagementAssessorId: string
+  familyCode: string
+  familyId: string
+  assignedAt: string
+  assessorName: string
+}
+
+export async function fetchDomains(engagementId: string, token: string): Promise<DomainAssignment[]> {
+  return apiRequest<DomainAssignment[]>(`/api/c3pao/assessments/${engagementId}/domains`, { token })
+}
+
+export async function fetchMyDomains(engagementId: string, token: string): Promise<DomainAssignment[]> {
+  return apiRequest<DomainAssignment[]>(`/api/c3pao/assessments/${engagementId}/domains/mine`, { token })
+}
+
+export async function setAssessorDomains(engagementId: string, assessorId: string, familyCodes: string[], token: string): Promise<DomainAssignment[]> {
+  return apiRequest<DomainAssignment[]>(`/api/c3pao/assessments/${engagementId}/domains/${assessorId}`, {
+    method: 'PUT',
+    body: { familyCodes },
+    token,
+  })
+}
+
+// ---- Planning & Proposals ----
+
+export interface PlanningData {
+  assessmentScope: string | null
+  assessmentMethodology: string | null
+  planningNotes: string | null
+  assessmentTimeline: string | null
+}
+
+export async function fetchPlanning(engagementId: string, token: string): Promise<PlanningData> {
+  return apiRequest<PlanningData>(`/api/c3pao/assessments/${engagementId}/planning`, { token })
+}
+
+export async function updatePlanning(engagementId: string, body: Partial<PlanningData>, token: string): Promise<PlanningData> {
+  return apiRequest<PlanningData>(`/api/c3pao/assessments/${engagementId}/planning`, {
+    method: 'PUT',
+    body,
+    token,
+  })
+}
+
+export async function sendProposal(engagementId: string, body: Record<string, unknown>, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/planning/proposal`, {
+    method: 'POST',
+    body,
+    token,
+  })
+}
+
+export async function acknowledgeIntroduction(engagementId: string, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/planning/acknowledge`, {
+    method: 'POST',
+    token,
+  })
+}
+
+// ---- Progress ----
+
+export async function fetchDailyProgress(engagementId: string, token: string, date?: string): Promise<Record<string, unknown>> {
+  const qs = date ? `?date=${date}` : ''
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/progress/daily${qs}`, { token })
+}
+
+export async function fetchProgressByAssessor(engagementId: string, token: string): Promise<Record<string, unknown>[]> {
+  return apiRequest<Record<string, unknown>[]>(`/api/c3pao/assessments/${engagementId}/progress/by-assessor`, { token })
+}
+
+export async function fetchProgressByDomain(engagementId: string, token: string): Promise<Record<string, unknown>[]> {
+  return apiRequest<Record<string, unknown>[]>(`/api/c3pao/assessments/${engagementId}/progress/by-domain`, { token })
+}
+
+// ---- Objectives ----
+
+export interface ObjectiveView {
+  id: string
+  objectiveId: string
+  objectiveReference: string
+  requirementId: string
+  description: string
+  status: string
+  assessmentNotes: string | null
+  evidenceDescription: string | null
+  version: number
+  editingById: string | null
+  editingByName: string | null
+}
+
+export async function fetchObjectives(engagementId: string, token: string): Promise<ObjectiveView[]> {
+  return apiRequest<ObjectiveView[]>(`/api/c3pao/assessments/${engagementId}/objectives`, { token })
+}
+
+export async function updateObjective(engagementId: string, objectiveId: string, body: Record<string, unknown>, token: string): Promise<ObjectiveView> {
+  return apiRequest<ObjectiveView>(`/api/c3pao/assessments/${engagementId}/objectives/${objectiveId}`, {
+    method: 'PUT',
+    body,
+    token,
+  })
+}
+
+export async function lockObjective(engagementId: string, objectiveId: string, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/objectives/${objectiveId}/lock`, {
+    method: 'POST',
+    token,
+  })
+}
+
+export async function unlockObjective(engagementId: string, objectiveId: string, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/objectives/${objectiveId}/lock`, {
+    method: 'DELETE',
+    token,
+  })
+}
+
+export async function bulkUpdateObjectives(engagementId: string, body: { objectives: Record<string, unknown>[] }, token: string): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/objectives/bulk`, {
+    method: 'POST',
+    body,
+    token,
+  })
+}
+
+export async function fetchObjectiveHistory(engagementId: string, objectiveId: string, token: string): Promise<Record<string, unknown>[]> {
+  return apiRequest<Record<string, unknown>[]>(`/api/c3pao/assessments/${engagementId}/objectives/${objectiveId}/history`, { token })
+}
+
+// ---- STIGs ----
+
+export interface STIGData {
+  targets: Record<string, unknown>[]
+  statistics: Record<string, unknown>
+}
+
+export async function fetchSTIGs(engagementId: string, token: string): Promise<STIGData> {
+  return apiRequest<STIGData>(`/api/c3pao/assessments/${engagementId}/stigs`, { token })
+}
+
+// ---- Profile ----
+
+export interface C3PAOProfile {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  zipCode: string | null
+  website: string | null
+  description: string | null
+  averageRating: number | null
+  totalReviews: number | null
+  pricingInfo: string | null
+  typicalTimeline: string | null
+  specialties: string | null
+  servicesOffered: string | null
+}
+
+export async function fetchProfile(token: string): Promise<C3PAOProfile> {
+  return apiRequest<C3PAOProfile>('/api/c3pao/profile', { token })
+}
+
+export async function updateProfile(body: Partial<C3PAOProfile>, token: string): Promise<C3PAOProfile> {
+  return apiRequest<C3PAOProfile>('/api/c3pao/profile', {
+    method: 'PATCH',
+    body,
+    token,
+  })
+}
+
+// ---- Assessment Report ----
+
+export interface AssessmentReport {
+  id: string
+  engagementId: string
+  status: string
+  executiveSummary: string | null
+  scopeDescription: string | null
+  methodology: string | null
+  findingsSummary: string | null
+  recommendations: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchAssessmentReport(engagementId: string, token: string): Promise<AssessmentReport> {
+  return apiRequest<AssessmentReport>(`/api/c3pao/assessments/${engagementId}/report/assessment`, { token })
+}
+
+export async function saveAssessmentReport(engagementId: string, body: Partial<AssessmentReport>, token: string): Promise<AssessmentReport> {
+  return apiRequest<AssessmentReport>(`/api/c3pao/assessments/${engagementId}/report/assessment`, {
+    method: 'POST',
+    body,
+    token,
+  })
+}
+
+export async function updateReportStatus(engagementId: string, status: string, token: string): Promise<AssessmentReport> {
+  return apiRequest<AssessmentReport>(`/api/c3pao/assessments/${engagementId}/report/assessment/status`, {
+    method: 'PATCH',
     body: { status },
-    assessorToken,
+    token,
   })
 }
 
-// ---- Heartbeat ----
+// ---- Stats & SPRS ----
 
-export async function sendHeartbeat(): Promise<{ ok: boolean; serverTime: string }> {
-  return request<{ ok: boolean; serverTime: string }>('/heartbeat', {
-    method: 'POST',
-    body: {
-      version: process.env.npm_package_version || '0.1.0',
-      timestamp: new Date().toISOString(),
-    },
-  })
+export interface DomainStats {
+  familyCode: string
+  familyName: string
+  total: number
+  met: number
+  notMet: number
+  notApplicable: number
+  notAssessed: number
 }
 
-// ---- Evidence Download Proxy ----
+export interface StatsResponse {
+  domains: DomainStats[]
+  totals: DomainStats
+}
 
-export async function fetchEvidenceFile(engagementId: string, evidenceId: string, assessorToken: string): Promise<Response> {
-  const url = `${SAAS_API_URL()}/engagements/${engagementId}/evidence/${evidenceId}/download`
-  const response = await fetch(url, {
-    headers: {
-      'X-Instance-Key': INSTANCE_API_KEY(),
-      'Authorization': `Bearer ${assessorToken}`,
-    },
-  })
+export async function fetchStats(engagementId: string, token: string): Promise<StatsResponse> {
+  return apiRequest<StatsResponse>(`/api/c3pao/assessments/${engagementId}/stats`, { token })
+}
 
-  if (!response.ok) {
-    throw new ApiError(response.status, `Evidence download failed: ${response.status}`)
-  }
+export interface SPRSResponse {
+  score: number
+  maxScore: number
+  deductions: { code: string; title: string; weight: number }[]
+}
 
-  return response
+export async function fetchSPRS(engagementId: string, token: string): Promise<SPRSResponse> {
+  return apiRequest<SPRSResponse>(`/api/c3pao/assessments/${engagementId}/sprs`, { token })
+}
+
+// ---- Workload ----
+
+export interface WorkloadData {
+  assessors: {
+    id: string
+    name: string
+    email: string
+    activeEngagements: number
+    objectivesAssessed: number
+    domainsAssigned: number
+  }[]
+}
+
+export async function fetchWorkload(token: string): Promise<WorkloadData> {
+  return apiRequest<WorkloadData>('/api/c3pao/workload', { token })
 }

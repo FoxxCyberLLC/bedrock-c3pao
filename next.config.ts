@@ -1,8 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Always standalone for Docker container deployment
-  output: 'standalone',
+  // output: 'standalone', // Enable only for Docker container builds
 
   images: {
     unoptimized: true, // No Vercel image optimization in self-hosted
@@ -15,9 +14,9 @@ const nextConfig: NextConfig = {
     },
   },
 
-  // Allow connecting to the SaaS API
-  async rewrites() {
-    return [];
+  // Expose env vars to edge runtime (middleware)
+  env: {
+    AUTH_SECRET: process.env.AUTH_SECRET || 'development-only-insecure-key-do-not-use-in-production',
   },
 };
 

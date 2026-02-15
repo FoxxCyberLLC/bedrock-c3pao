@@ -1,6 +1,8 @@
 'use server'
 
+import { requireAuth } from '@/lib/auth'
 import { saveAssessmentFinding as _save, getAssessmentFindings as _getFindings, updateAssessorNotes as _updateNotes } from './assessment'
+import { fetchReport, fetchEMassExport, fetchStats, fetchSPRS, saveAssessmentReport as apiSaveReport, updateReportStatus as apiUpdateReportStatus } from '@/lib/api-client'
 
 export async function saveAssessmentFinding(...args: Parameters<typeof _save>) {
   return _save(...args)
@@ -15,28 +17,78 @@ export async function updateAssessorNotes(...args: Parameters<typeof _updateNote
 }
 
 export async function getAssessmentStats(engagementId: string) {
-  return { success: true, data: { total: 0, assessed: 0, met: 0, notMet: 0, notApplicable: 0, notAssessed: 0, findings: 0 } }
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, data: null, error: 'Unauthorized' }
+    const token = session.apiToken
+    const stats = await fetchStats(engagementId, token)
+    const totals = stats.totals
+    // Compute 'assessed' as total - notAssessed for component compatibility
+    const assessed = totals.total - (totals.notAssessed || 0)
+    return { success: true, data: { ...totals, assessed } }
+  } catch (error) {
+    return { success: false, data: null, error: error instanceof Error ? error.message : 'Failed to fetch assessment stats' }
+  }
 }
 
 export async function calculateSPRSScore(engagementId: string) {
-  return { score: 0, maxScore: 110 }
+  try {
+    const session = await requireAuth()
+    if (!session) return { score: 0, maxScore: 110 }
+    const token = session.apiToken
+    const data = await fetchSPRS(engagementId, token)
+    return { score: data.score, maxScore: data.maxScore }
+  } catch {
+    return { score: 0, maxScore: 110 }
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function saveAssessmentReport(data: any): Promise<{ success: boolean; data?: { id: string } | null; error?: string }> {
-  return { success: false, error: 'Report saving not yet implemented in standalone' }
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, data: null, error: 'Unauthorized' }
+    const token = session.apiToken
+    const result = await apiSaveReport(data.engagementId, { executiveSummary: data.reportData, status: data.status }, token)
+    return { success: true, data: { id: result.id || data.engagementId } }
+  } catch (error) {
+    return { success: false, data: null, error: error instanceof Error ? error.message : 'Failed to save report' }
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getAssessmentReport(engagementId: string): Promise<{ success: boolean; data?: any }> {
-  return { success: false, data: null }
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, data: null }
+    const report = await fetchReport(engagementId, session.apiToken)
+    return { success: true, data: report }
+  } catch {
+    return { success: false, data: null }
+  }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function updateReportStatus(engagementId: string, status: string): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: 'Not available in standalone mode' }
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    const token = session.apiToken
+    await apiUpdateReportStatus(engagementId, status, token)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to update report status' }
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function generateReportData(engagementId: string): Promise<{ success: boolean; data?: any }> {
-  return { success: false, data: null }
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, data: null }
+    const report = await fetchReport(engagementId, session.apiToken)
+    return { success: true, data: report }
+  } catch {
+    return { success: false, data: null }
+  }
 }
