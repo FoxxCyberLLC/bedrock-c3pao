@@ -7,13 +7,12 @@
 
 import { jwtVerify } from 'jose'
 
-// In production, AUTH_SECRET must be set via env. For dev/test, use the fallback.
-// Note: Edge runtime in Next.js may not have access to .env at runtime,
-// so we inline the fallback to prevent middleware auth failures.
-const AUTH_SECRET_FALLBACK = 'development-only-insecure-key-do-not-use-in-production'
-
 function getSecretKey(): string {
-  return process.env.AUTH_SECRET || AUTH_SECRET_FALLBACK
+  const secret = process.env.AUTH_SECRET
+  if (!secret) {
+    throw new Error('AUTH_SECRET environment variable is required')
+  }
+  return secret
 }
 
 function getKey(): Uint8Array {

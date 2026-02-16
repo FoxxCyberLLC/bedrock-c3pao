@@ -12,13 +12,16 @@ export async function middleware(request: NextRequest) {
   const cookie = request.cookies.get('bedrock_c3pao_session')?.value
   const session = cookie ? await decryptC3PAOSession(cookie) : null
 
+  // Check session expiry
+  const isValidSession = session && new Date(session.expires) > new Date()
+
   // If on login page and already authenticated, redirect to dashboard
-  if (isPublicRoute && session) {
+  if (isPublicRoute && isValidSession) {
     return NextResponse.redirect(new URL('/', request.url))
   }
 
   // If not on a public route and not authenticated, redirect to login
-  if (!isPublicRoute && !session) {
+  if (!isPublicRoute && !isValidSession) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 

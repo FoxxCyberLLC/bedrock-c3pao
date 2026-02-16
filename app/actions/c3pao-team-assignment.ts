@@ -18,7 +18,7 @@ export async function getEngagementTeam(engagementId: string) {
 export async function getAvailableAssessors(engagementId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
   try {
     const session = await requireAuth()
-    if (!session) return { success: true, data: [] }
+    if (!session) return { success: false, error: 'Unauthorized' }
     const assessors = await fetchAvailableAssessors(engagementId, session.apiToken)
     return { success: true, data: assessors as any[] }
   } catch (error) {

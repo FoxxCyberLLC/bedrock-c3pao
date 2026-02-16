@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
 
   // Expose env vars to edge runtime (middleware)
   env: {
-    AUTH_SECRET: process.env.AUTH_SECRET || 'development-only-insecure-key-do-not-use-in-production',
+    AUTH_SECRET: process.env.AUTH_SECRET,
   },
 };
 

@@ -9,7 +9,11 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 
-const secretKey = process.env.AUTH_SECRET || 'development-only-insecure-key-do-not-use-in-production'
+const secretKey = (() => {
+  const s = process.env.AUTH_SECRET
+  if (!s) throw new Error('AUTH_SECRET environment variable is required')
+  return s
+})()
 const key = new TextEncoder().encode(secretKey)
 
 const COOKIE_NAME = 'bedrock_c3pao_session'

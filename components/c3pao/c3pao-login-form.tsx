@@ -17,6 +17,7 @@ export default function C3PAOLoginForm() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (isLoading) return
     setError('')
     setIsLoading(true)
 
@@ -31,7 +32,7 @@ export default function C3PAOLoginForm() {
         return
       }
 
-      window.location.href = '/'
+      router.push('/')
     } catch {
       setError('An error occurred. Please try again.')
       setIsLoading(false)
