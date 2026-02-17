@@ -16,6 +16,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# Dummy build-time secret — replaced at runtime
+ENV AUTH_SECRET=build-placeholder
 RUN npm run build
 
 # Stage 3: Production runner

@@ -272,7 +272,6 @@ export async function addTeamMember(dataOrEngagementId: string | Record<string, 
     } else {
       // Component passes a single object with member data — this is a team member creation, not engagement assignment
       // Use the C3PAO team management endpoint instead
-      const { default: fetch } = await import('node-fetch' as string).catch(() => ({ default: globalThis.fetch }))
       const API_URL = process.env.BEDROCK_API_URL || 'http://localhost:8080'
       const response = await globalThis.fetch(`${API_URL}/api/c3pao/team`, {
         method: 'POST',

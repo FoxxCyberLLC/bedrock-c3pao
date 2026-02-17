@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // output: 'standalone', // Enable only for Docker container builds
+  output: 'standalone',
 
   images: {
     unoptimized: true, // No Vercel image optimization in self-hosted
