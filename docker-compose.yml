@@ -2,20 +2,18 @@ services:
   c3pao:
     build: .
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
+      - BEDROCK_API_URL=${BEDROCK_API_URL:-http://host.docker.internal:8080}
       - AUTH_SECRET=${AUTH_SECRET:-changeme-generate-a-real-secret}
-      - NEXT_PUBLIC_APP_URL=${APP_URL:-http://localhost:3000}
-      - SYNC_INTERVAL_MS=${SYNC_INTERVAL_MS:-30000}
-      - CACHE_TTL_MS=${CACHE_TTL_MS:-300000}
-      # Optional: SaaS URL and API key can also be configured via the Connection page UI
-      - SAAS_API_URL=${SAAS_API_URL:-}
-      - INSTANCE_API_KEY=${INSTANCE_API_KEY:-}
+      - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3001}
+      - NODE_ENV=${NODE_ENV:-production}
+      - FORCE_HTTPS=${FORCE_HTTPS:-false}
     volumes:
       - c3pao_data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

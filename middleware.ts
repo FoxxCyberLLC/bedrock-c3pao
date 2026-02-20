@@ -2,12 +2,31 @@ import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { decryptC3PAOSession } from './lib/auth-edge'
 
-const PUBLIC_ROUTES = ['/login']
+const PUBLIC_ROUTES = ['/login', '/setup']
 
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
 
   const isPublicRoute = PUBLIC_ROUTES.some((route) => path.startsWith(route))
+  const isSetupRoute = path.startsWith('/setup')
+
+  // Check if instance has been configured (cookie set during setup wizard)
+  const isConfigured = request.cookies.get('bedrock_instance_configured')?.value === 'true'
+
+  // If not configured and not on setup page → redirect to setup
+  if (!isConfigured && !isSetupRoute) {
+    return NextResponse.redirect(new URL('/setup', request.url))
+  }
+
+  // If configured and on setup page → redirect to login
+  if (isConfigured && isSetupRoute) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // Setup page doesn't need auth checks
+  if (isSetupRoute) {
+    return NextResponse.next()
+  }
 
   const cookie = request.cookies.get('bedrock_c3pao_session')?.value
   const session = cookie ? await decryptC3PAOSession(cookie) : null

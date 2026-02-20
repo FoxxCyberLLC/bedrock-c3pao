@@ -41,6 +41,24 @@ async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Pr
     headers['Authorization'] = `Bearer ${token}`
   }
 
+  // Inject instance API key for server-side tracking
+  // Check env var first, then fall back to instance config file
+  let instanceKey = process.env.INSTANCE_API_KEY
+  if (!instanceKey) {
+    try {
+      const { getInstanceConfig } = await import('./instance-config')
+      const config = getInstanceConfig()
+      if (config?.instanceApiKey) {
+        instanceKey = config.instanceApiKey
+      }
+    } catch {
+      // instance-config not available (e.g. edge runtime)
+    }
+  }
+  if (instanceKey) {
+    headers['X-Instance-Key'] = instanceKey
+  }
+
   const url = `${API_URL}${endpoint}`
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)

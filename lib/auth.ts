@@ -82,12 +82,15 @@ export async function setSession(user: SessionC3PAOUser, apiToken: string): Prom
     expires: expires.toISOString(),
   })
 
+  const isSecure = process.env.FORCE_HTTPS === 'true' ||
+    (process.env.NODE_ENV === 'production' && process.env.FORCE_HTTPS !== 'false')
+
   const cookieStore = await cookies()
   cookieStore.set(COOKIE_NAME, session, {
     expires,
     httpOnly: true,
-    secure: true,
-    sameSite: 'strict',
+    secure: isSecure,
+    sameSite: isSecure ? 'strict' : 'lax',
     path: '/',
   })
 }

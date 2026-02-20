@@ -9,12 +9,17 @@ import {
   XCircle,
   Server,
   Zap,
+  Shield,
+  Building2,
+  Users,
+  ClipboardCheck,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { getConnectionStatus, testConnection } from '@/app/actions/connection'
+import { getSetupStatus } from '@/app/actions/setup'
 
 interface ConnectionData {
   apiUrl: string
@@ -23,8 +28,16 @@ interface ConnectionData {
   timestamp: string
 }
 
+interface InstanceInfo {
+  c3paoName: string
+  c3paoId: string
+  activatedAt: string
+  apiUrl: string
+}
+
 export default function ConnectionPage() {
   const [data, setData] = useState<ConnectionData | null>(null)
+  const [instanceInfo, setInstanceInfo] = useState<InstanceInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [testing, setTesting] = useState(false)
 
@@ -35,9 +48,16 @@ export default function ConnectionPage() {
   async function loadStatus() {
     setLoading(true)
     try {
-      const result = await getConnectionStatus()
-      if (result.success && result.data) {
-        setData(result.data as ConnectionData)
+      const [connResult, setupResult] = await Promise.all([
+        getConnectionStatus(),
+        getSetupStatus(),
+      ])
+
+      if (connResult.success && connResult.data) {
+        setData(connResult.data as ConnectionData)
+      }
+      if (setupResult.configured && setupResult.config) {
+        setInstanceInfo(setupResult.config)
       }
     } catch (error) {
       console.error('Error loading connection status:', error)
@@ -104,6 +124,38 @@ export default function ConnectionPage() {
         </Button>
       </div>
 
+      {/* Instance Info */}
+      {instanceInfo && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              Instance
+            </CardTitle>
+            <CardDescription>Standalone instance configuration</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Organization</span>
+              <span className="text-sm font-medium">{instanceInfo.c3paoName}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Activated</span>
+              <span className="text-sm">
+                {new Date(instanceInfo.activatedAt).toLocaleDateString()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Instance ID</span>
+              <span className="text-sm font-mono text-muted-foreground">
+                {instanceInfo.c3paoId.slice(0, 12)}...
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* API Connection */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

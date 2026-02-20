@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { sendHeartbeat } from '@/lib/heartbeat'
 
 export async function GET() {
   const apiUrl = process.env.BEDROCK_API_URL || 'http://localhost:8080'
@@ -13,6 +14,9 @@ export async function GET() {
   } catch {
     apiStatus = 'unreachable'
   }
+
+  // Fire-and-forget heartbeat (piggybacks on Docker healthcheck every 30s)
+  sendHeartbeat()
 
   return NextResponse.json({
     status: 'healthy',
