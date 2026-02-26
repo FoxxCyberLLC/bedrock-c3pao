@@ -84,7 +84,8 @@ export default async function C3PAOSSPReviewPage({ params }: PageProps) {
     )
   }
 
-  const { ssp, families, atoPackage } = result.data
+  // API returns flat SSPView object
+  const ssp = result.data
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -103,7 +104,7 @@ export default async function C3PAOSSPReviewPage({ params }: PageProps) {
               System Security Plan
             </h1>
             <p className="text-muted-foreground">
-              {ssp.systemName || atoPackage?.name || ''} — Read-Only Review
+              {ssp.systemName || ''} — Read-Only Review
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -118,8 +119,6 @@ export default async function C3PAOSSPReviewPage({ params }: PageProps) {
 
       <SSPLongFormReadOnly
         ssp={ssp}
-        families={families}
-        atoPackage={atoPackage}
       />
     </div>
   )

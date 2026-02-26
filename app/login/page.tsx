@@ -1,8 +1,7 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { requireAuth } from '@/lib/auth'
 import C3PAOLoginForm from '@/components/c3pao-login-form'
-import { Building2, Users } from 'lucide-react'
+import { Building2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
 export default async function C3PAOLoginPage() {
@@ -28,21 +27,9 @@ export default async function C3PAOLoginPage() {
           <C3PAOLoginForm />
 
           <div className="mt-6 pt-6 border-t">
-            <p className="text-xs text-muted-foreground text-center mb-4">
+            <p className="text-xs text-muted-foreground text-center">
               This portal is for certified C3PAO assessors only.
               Access is logged and monitored.
-            </p>
-            <Link
-              href="/login"
-              className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-lg border border-dashed border-muted-foreground/30 hover:border-primary hover:bg-primary/5 transition-colors group"
-            >
-              <Users className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
-              <span className="text-sm text-muted-foreground group-hover:text-primary">
-                Customer Login
-              </span>
-            </Link>
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              Looking for your CMMC compliance dashboard?
             </p>
           </div>
         </CardContent>

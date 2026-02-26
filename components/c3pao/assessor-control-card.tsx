@@ -74,8 +74,9 @@ interface AssessmentFindingData {
   deficiency: string | null
   recommendation: string | null
   riskLevel: RiskLevel | null
-  assessedBy?: { name: string } | null
-  assessedAt?: Date | null
+  assessedById?: string | null
+  assessedAt?: string | Date | null
+  version?: number
 }
 
 interface AssessorControlCardProps {
@@ -182,7 +183,8 @@ export function AssessorControlCard({
     startTransition(async () => {
       const result = await saveAssessmentFinding({
         engagementId,
-        requirementId: requirement.id,
+        requirementId: requirement.requirementId,
+        findingId: existingFinding?.id,
         determination,
         methodInterview,
         methodExamine,
@@ -409,9 +411,9 @@ export function AssessorControlCard({
             {/* Save Button */}
             <div className="flex items-center justify-between pt-2 border-t">
               <div className="text-xs text-muted-foreground">
-                {existingFinding?.assessedBy && existingFinding.assessedAt && (
+                {existingFinding?.assessedAt && (
                   <>
-                    Last assessed by {existingFinding.assessedBy.name} on{' '}
+                    Last assessed on{' '}
                     {new Date(existingFinding.assessedAt).toLocaleDateString()}
                   </>
                 )}

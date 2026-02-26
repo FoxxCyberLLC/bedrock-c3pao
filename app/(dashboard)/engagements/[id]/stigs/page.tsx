@@ -42,7 +42,7 @@ export default async function STIGsPage({
         <div>
           <h1 className="text-2xl font-bold tracking-tight">STIG Checklists</h1>
           <p className="text-muted-foreground">
-            Review STIG scan results for {engResult.data.packageName}
+            Review STIG scan results for {engResult.data.atoPackage?.name || 'this engagement'}
           </p>
         </div>
         <Badge variant="secondary" className="flex items-center gap-1">

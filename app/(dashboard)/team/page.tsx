@@ -38,12 +38,11 @@ interface TeamMember {
   ccaNumber: string | null
   ccpNumber: string | null
   isLeadAssessor: boolean
+  assessorType: string
   status: string
-  lastLogin: Date | null
-  createdAt: Date
-  _count: {
-    engagements: number
-  }
+  lastLogin: string | null
+  createdAt: string
+  engagements: number
 }
 
 interface CurrentUser {
@@ -106,7 +105,7 @@ export default function C3PAOTeamPage() {
   // Calculate stats
   const leadAssessors = team.filter(m => m.isLeadAssessor).length
   const activeMembers = team.filter(m => m.status === 'ACTIVE').length
-  const totalEngagements = team.reduce((sum, m) => sum + (m._count?.engagements || 0), 0)
+  const totalEngagements = team.reduce((sum, m) => sum + (m.engagements || 0), 0)
 
   return (
     <div className="space-y-6">
@@ -285,7 +284,7 @@ export default function C3PAOTeamPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{member._count?.engagements || 0}</span>
+                      <span className="font-medium">{member.engagements || 0}</span>
                     </TableCell>
                     <TableCell>
                       {getStatusBadge(member.status)}

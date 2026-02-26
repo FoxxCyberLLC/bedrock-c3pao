@@ -69,14 +69,10 @@ export default async function C3PAOEvidenceRepositoryPage({ params }: PageProps)
     )
   }
 
-  const { engagement, evidence, storageUsed, storageLimit } = result.data
-  const atoPackage = engagement.atoPackage
-
-  const storagePercentage = getStoragePercentage(storageUsed, storageLimit)
+  // API returns flat EvidenceView[] array
+  const evidence = Array.isArray(result.data) ? result.data : []
 
   const totalEvidence = evidence.length
-  const linkedEvidence = evidence.filter((e: { requirementStatuses: unknown[] }) => e.requirementStatuses.length > 0).length
-  const unlinkedEvidence = totalEvidence - linkedEvidence
   const expiringEvidence = evidence.filter((e: { expirationDate: string | null }) => {
     if (!e.expirationDate) return false
     const daysUntilExpiration = Math.ceil(
@@ -106,33 +102,13 @@ export default async function C3PAOEvidenceRepositoryPage({ params }: PageProps)
               <Badge variant="outline">Read Only</Badge>
             </div>
             <p className="text-muted-foreground">
-              {atoPackage?.systemName || atoPackage?.name} - {atoPackage?.organization?.name}
+              Review OSC-uploaded evidence documents
             </p>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Storage Used</CardTitle>
-            {storagePercentage >= 90 ? (
-              <AlertTriangle className="h-4 w-4 text-red-500" />
-            ) : (
-              <HardDrive className="h-4 w-4 text-muted-foreground" />
-            )}
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${getStorageColorClass(storagePercentage)}`}>
-              {storagePercentage}%
-            </div>
-            <Progress value={storagePercentage} className={`h-2 mt-2 ${getStorageProgressClass(storagePercentage)}`} />
-            <p className="text-xs text-muted-foreground mt-2">
-              {formatBytes(storageUsed)} / {formatBytes(storageLimit)}
-            </p>
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Evidence</CardTitle>
@@ -146,36 +122,23 @@ export default async function C3PAOEvidenceRepositoryPage({ params }: PageProps)
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Linked to Controls</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{linkedEvidence}</div>
-            <p className="text-xs text-muted-foreground">
-              {totalEvidence > 0 ? `${Math.round((linkedEvidence / totalEvidence) * 100)}%` : '0%'} of total
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unlinked</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{unlinkedEvidence}</div>
-            <p className="text-xs text-muted-foreground">Not linked to any controls</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{expiringEvidence}</div>
             <p className="text-xs text-muted-foreground">Within 30 days</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Expired</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{expiredEvidence}</div>
+            <p className="text-xs text-muted-foreground">Past expiration date</p>
           </CardContent>
         </Card>
       </div>

@@ -22,6 +22,8 @@ import {
   FileSignature,
   Download,
   FileJson,
+  StopCircle,
+  Ban,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -44,7 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { updateEngagementStatus, addAssessorNotes, recordAssessmentResult, startAssessment, endAssessmentMode, calculateEngagementSPRSScore, submitAssessmentForApproval, rejectAssessmentSubmission } from '@/app/actions/c3pao-dashboard'
+import { updateEngagementStatus, addAssessorNotes, recordAssessmentResult, startAssessment, endAssessmentMode, stopAssessment, failAssessment, calculateEngagementSPRSScore, submitAssessmentForApproval, rejectAssessmentSubmission } from '@/app/actions/c3pao-dashboard'
 import { toast } from 'sonner'
 import { AssessmentControlsTable } from './assessment-controls-table'
 import { POAMViewer } from './poam-viewer'
@@ -54,6 +56,7 @@ import { AssessmentModeIndicator } from './assessment-mode-indicator'
 import { EngagementTeamCard } from './engagement-team-card'
 import { ConflictDialog } from './conflict-dialog'
 import { STIGViewer } from './stig-viewer'
+import { CheckinCard } from './checkin-card'
 import { getEngagementTeam } from '@/app/actions/c3pao-team-assignment'
 
 type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER' | string
@@ -192,6 +195,7 @@ interface EngagementDetailProps {
   engagement: {
     id: string
     status: string
+    assessmentType?: string
     targetLevel: string
     customerNotes: string | null
     assessmentNotes: string | null
@@ -254,23 +258,23 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
   const [isExporting, setIsExporting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
+  const [showStopDialog, setShowStopDialog] = useState(false)
+  const [showFailDialog, setShowFailDialog] = useState(false)
+  const [failNotes, setFailNotes] = useState('')
   const [submissionNotes, setSubmissionNotes] = useState('')
   const [rejectionReason, setRejectionReason] = useState('')
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const [team, setTeam] = useState<{
     id: string
-    engagementId: string
     assessorId: string
+    name: string
+    email: string
     role: EngagementAssessorRole
-    assignedAt: Date
-    assessor: {
-      id: string
-      name: string
-      email: string
-      jobTitle: string | null
-      isLeadAssessor: boolean
-      ccaNumber: string | null
-      ccpNumber: string | null
-    }
+    assessorType: string
+    jobTitle?: string | null
+    assignedAt: string
+    domains: string[]
   }[]>([])
   const [loadingTeam, setLoadingTeam] = useState(true)
   const [conflictDialog, setConflictDialog] = useState<{
@@ -317,6 +321,14 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
     }
   }
 
+  // Compute scoreColor from raw SPRS score
+  function getScoreColor(score: number): { bgColor: string; textColor: string; label: string } {
+    if (score >= 80) return { bgColor: 'bg-green-50 dark:bg-green-950/30', textColor: 'text-green-600', label: 'Good' }
+    if (score >= 50) return { bgColor: 'bg-yellow-50 dark:bg-yellow-950/30', textColor: 'text-yellow-600', label: 'Fair' }
+    if (score >= 0) return { bgColor: 'bg-orange-50 dark:bg-orange-950/30', textColor: 'text-orange-600', label: 'Poor' }
+    return { bgColor: 'bg-red-50 dark:bg-red-950/30', textColor: 'text-red-600', label: 'Critical' }
+  }
+
   // Load SPRS score on mount
   useEffect(() => {
     async function loadSPRSScore() {
@@ -324,7 +336,11 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
       try {
         const result = await calculateEngagementSPRSScore(engagement.id)
         if (result.success && result.data) {
-          setSPRSScore(result.data as typeof sprsScore)
+          const data = result.data as any
+          setSPRSScore({
+            ...data,
+            scoreColor: data.scoreColor || getScoreColor(data.score ?? 0),
+          })
         }
       } catch (error) {
         console.error('Failed to load SPRS score:', error)
@@ -511,6 +527,65 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
     }
   }
 
+  // Handle cancel/decline engagement
+  const handleCancelEngagement = async () => {
+    setIsUpdating(true)
+    try {
+      const result = await updateEngagementStatus(engagement.id, 'CANCELLED', cancelReason || undefined)
+      if (result.success) {
+        toast.success('Engagement cancelled')
+        setShowCancelDialog(false)
+        setCancelReason('')
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to cancel engagement')
+      }
+    } catch {
+      toast.error('An error occurred')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  // Handle stop assessment (end assessment mode, keep IN_PROGRESS)
+  const handleStopAssessment = async () => {
+    setIsUpdating(true)
+    try {
+      const result = await stopAssessment(engagement.id)
+      if (result.success) {
+        toast.success('Assessment mode deactivated')
+        setShowStopDialog(false)
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to stop assessment')
+      }
+    } catch {
+      toast.error('An error occurred')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  // Handle fail assessment (end mode + mark COMPLETED/FAILED)
+  const handleFailAssessment = async () => {
+    setIsUpdating(true)
+    try {
+      const result = await failAssessment(engagement.id, failNotes || undefined)
+      if (result.success) {
+        toast.success('Assessment marked as failed')
+        setShowFailDialog(false)
+        setFailNotes('')
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to fail assessment')
+      }
+    } catch {
+      toast.error('An error occurred')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
   // Check if current user is assigned to this engagement
   const isUserAssigned = team.some(t => t.assessorId === user.id && (t.role === 'LEAD' || t.role === 'ASSESSOR'))
 
@@ -626,8 +701,74 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </Button>
             </Link>
           )}
-          {/* Write Report button - visible during IN_PROGRESS, PENDING_APPROVAL, or COMPLETED */}
-          {(engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL' || engagement.status === 'COMPLETED') && user.isLeadAssessor && (
+          {/* Stop Assessment - deactivate assessment mode, stay IN_PROGRESS */}
+          {engagement.status === 'IN_PROGRESS' && engagement.assessmentModeActive && user.isLeadAssessor && (
+            <Dialog open={showStopDialog} onOpenChange={setShowStopDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="text-amber-600 border-amber-300 hover:bg-amber-50">
+                  <StopCircle className="h-4 w-4 mr-2" />
+                  Stop Assessment
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Stop Assessment</DialogTitle>
+                  <DialogDescription>
+                    This will deactivate assessment mode and unlock the customer&apos;s package. The assessment will remain in progress and can be resumed later.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowStopDialog(false)}>Cancel</Button>
+                  <Button variant="destructive" onClick={handleStopAssessment} disabled={isUpdating}>
+                    {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Stop Assessment
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+          {/* Fail Assessment - mark as COMPLETED/FAILED directly from IN_PROGRESS */}
+          {engagement.status === 'IN_PROGRESS' && user.isLeadAssessor && (
+            <Dialog open={showFailDialog} onOpenChange={setShowFailDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50">
+                  <Ban className="h-4 w-4 mr-2" />
+                  Fail Assessment
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Fail Assessment</DialogTitle>
+                  <DialogDescription>
+                    This will immediately end the assessment and mark it as FAILED. This action cannot be undone. The organization will need to request a new assessment.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Result Notes (Optional)</label>
+                    {engagement.assessmentType !== 'MOCK' && (
+                      <p className="text-xs text-muted-foreground">Do not include remediation advice per CMMC CAP Section 3.15</p>
+                    )}
+                    <Textarea
+                      placeholder="Enter any notes about the assessment result..."
+                      value={failNotes}
+                      onChange={(e) => setFailNotes(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowFailDialog(false)}>Cancel</Button>
+                  <Button variant="destructive" onClick={handleFailAssessment} disabled={isUpdating}>
+                    {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Fail Assessment
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+          {/* Write Report button - only for MOCK assessments */}
+          {engagement.assessmentType === 'MOCK' && (engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL' || engagement.status === 'COMPLETED') && user.isLeadAssessor && (
             <Link href={`/engagements/${engagement.id}/report`}>
               <Button variant="outline">
                 <FileSignature className="h-4 w-4 mr-2" />
@@ -693,15 +834,18 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
                           <SelectValue placeholder="Select result..." />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="passed">Passed - Certification Recommended</SelectItem>
-                          <SelectItem value="failed">Failed - Remediation Required</SelectItem>
+                          <SelectItem value="passed">Passed — Certification Recommended</SelectItem>
+                          <SelectItem value="failed">Failed — Does Not Meet Requirements</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium">Findings (Optional)</label>
+                      <label className="text-sm font-medium">Result Notes (Optional)</label>
+                      {engagement.assessmentType !== 'MOCK' && (
+                        <p className="text-xs text-muted-foreground">Do not include remediation advice per CMMC CAP Section 3.15</p>
+                      )}
                       <Textarea
-                        placeholder="Enter any findings or notes..."
+                        placeholder="Enter any notes about the assessment result..."
                         value={findings}
                         onChange={(e) => setFindings(e.target.value)}
                         rows={4}
@@ -754,6 +898,50 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </Dialog>
             </>
           )}
+          {/* Cancel / Decline Engagement — pre-assessment states only */}
+          {['REQUESTED', 'INTRODUCED', 'ACKNOWLEDGED', 'PROPOSAL_SENT', 'PROPOSAL_ACCEPTED', 'ACCEPTED'].includes(engagement.status) && (
+            <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-950/30">
+                  <XCircle className="h-4 w-4 mr-2" />
+                  {engagement.status === 'REQUESTED' ? 'Decline Request' : 'Cancel Engagement'}
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>
+                    {engagement.status === 'REQUESTED' ? 'Decline Request' : 'Cancel Engagement'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {engagement.status === 'REQUESTED'
+                      ? `Decline the assessment request from ${pkg?.organization?.name || 'this organization'}. This cannot be undone.`
+                      : `Cancel this engagement with ${pkg?.organization?.name || 'this organization'}. This cannot be undone.`
+                    }
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Reason (Optional)</label>
+                    <Textarea
+                      placeholder="Let the customer know why..."
+                      value={cancelReason}
+                      onChange={(e) => setCancelReason(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowCancelDialog(false)}>
+                    Keep Engagement
+                  </Button>
+                  <Button variant="destructive" onClick={handleCancelEngagement} disabled={isUpdating}>
+                    {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    {engagement.status === 'REQUESTED' ? 'Decline Request' : 'Cancel Engagement'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
       </div>
 
@@ -767,6 +955,14 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           startedAt={engagement.assessmentModeStartedAt || undefined}
           isLeadAssessor={user.isLeadAssessor}
           onToggle={() => router.refresh()}
+        />
+      )}
+
+      {/* Check-in Card (shown during IN_PROGRESS) */}
+      {engagement.status === 'IN_PROGRESS' && (
+        <CheckinCard
+          engagementId={engagement.id}
+          assessmentModeActive={engagement.assessmentModeActive}
         />
       )}
 
@@ -803,7 +999,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               <p className="text-sm text-muted-foreground">
                 {engagement.assessmentResult === 'PASSED'
                   ? 'This organization has been recommended for CMMC certification'
-                  : 'Remediation is required before certification can be granted'}
+                  : 'This organization did not meet CMMC requirements. A new assessment must be requested.'}
               </p>
               {engagement.resultNotes && (
                 <p className="text-sm mt-2">{engagement.resultNotes}</p>
@@ -814,8 +1010,10 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
       )}
 
       {/* SPRS Score Card */}
-      {sprsScore && (
-        <Card className={`${sprsScore.scoreColor.bgColor} border-2`}>
+      {sprsScore && (() => {
+        const sc = sprsScore.scoreColor || getScoreColor(sprsScore.score ?? 0)
+        return (
+        <Card className={`${sc.bgColor} border-2`}>
           <CardContent className="flex items-center justify-between pt-6">
             <div>
               <h3 className="font-semibold text-lg">SPRS Score</h3>
@@ -824,11 +1022,11 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </p>
             </div>
             <div className="text-right">
-              <div className={`text-4xl font-bold ${sprsScore.scoreColor.textColor}`}>
+              <div className={`text-4xl font-bold ${sc.textColor}`}>
                 {sprsScore.score > 0 ? `+${sprsScore.score}` : sprsScore.score}
               </div>
               <div className="text-sm text-muted-foreground">
-                of {sprsScore.maxScore} max | {sprsScore.scoreColor.label}
+                of {sprsScore.maxScore} max | {sc.label}
               </div>
               <div className="text-xs text-muted-foreground mt-1">
                 {sprsScore.metCount} Met | {sprsScore.notMetCount} Not Met | -{sprsScore.pointsDeducted} points
@@ -836,7 +1034,8 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
             </div>
           </CardContent>
         </Card>
-      )}
+        )
+      })()}
 
       {/* Overview Stats */}
       <div className="grid gap-4 md:grid-cols-5">
@@ -1022,7 +1221,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           ) : (
             <EngagementTeamCard
               engagementId={engagement.id}
-              team={team}
+              team={team as any}
               isLeadAssessor={user.isLeadAssessor}
               onTeamUpdated={loadTeam}
             />

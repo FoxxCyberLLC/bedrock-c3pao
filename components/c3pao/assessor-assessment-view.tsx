@@ -61,6 +61,7 @@ interface RequirementStatus {
 interface AssessmentFinding {
   id: string
   requirementId: string
+  requirementCode: string
   determination: AssessorDetermination
   methodInterview: boolean
   methodExamine: boolean
@@ -70,8 +71,9 @@ interface AssessmentFinding {
   deficiency: string | null
   recommendation: string | null
   riskLevel: string | null
-  assessedBy: { name: string } | null
-  assessedAt: Date | null
+  assessedById: string | null
+  assessedAt: string | null
+  version: number
 }
 
 interface AssessorAssessmentViewProps {
@@ -143,10 +145,11 @@ export function AssessorAssessmentView({
     loadData()
   }, [engagementId])
 
-  // Create a map of findings by requirement ID
+  // Create a map of findings by requirement code (CMMC code like "AC.L1-3.1.1")
   const findingsMap = useMemo(() => {
     const map = new Map<string, AssessmentFinding>()
-    findings.forEach((f) => map.set(f.requirementId, f))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    findings.forEach((f: any) => map.set(f.requirementCode || f.requirementId, f))
     return map
   }, [findings])
 
@@ -175,7 +178,7 @@ export function AssessorAssessmentView({
     return groupedControls.map((group) => ({
       ...group,
       controls: group.controls.filter((rs) => {
-        const finding = findingsMap.get(rs.requirement.id)
+        const finding = findingsMap.get(rs.requirement.requirementId)
         const determination = finding?.determination || 'NOT_ASSESSED'
 
         const matchesSearch =
@@ -194,7 +197,7 @@ export function AssessorAssessmentView({
   const getFamilyStats = useCallback((controls: RequirementStatus[]) => {
     const familyStats = { met: 0, notMet: 0, notApplicable: 0, notAssessed: 0 }
     controls.forEach((rs) => {
-      const finding = findingsMap.get(rs.requirement.id)
+      const finding = findingsMap.get(rs.requirement.requirementId)
       const determination = finding?.determination || 'NOT_ASSESSED'
       switch (determination) {
         case 'MET':
@@ -419,7 +422,7 @@ export function AssessorAssessmentView({
                 <CollapsibleContent>
                   <CardContent className="pt-0 space-y-3">
                     {group.controls.map((rs) => {
-                      const finding = findingsMap.get(rs.requirement.id)
+                      const finding = findingsMap.get(rs.requirement.requirementId)
                       return (
                         <AssessorControlCard
                           key={rs.id}
@@ -433,7 +436,9 @@ export function AssessorAssessmentView({
                           existingFinding={finding ? {
                             ...finding,
                             riskLevel: finding.riskLevel as 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW' | null,
-                          } : null}
+                            assessedAt: finding.assessedAt ? new Date(finding.assessedAt) : null,
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                          } as any : null}
                           onFindingSaved={(newFinding) =>
                             handleFindingSaved(rs.requirement.id, newFinding as AssessmentFinding)
                           }

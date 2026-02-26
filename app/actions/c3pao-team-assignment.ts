@@ -43,7 +43,7 @@ export async function assignAssessorToEngagement(dataOrEngagementId: string | Re
       uId = (dataOrEngagementId.assessorId || dataOrEngagementId.userId) as string
       r = (dataOrEngagementId.role as string) || 'ASSESSOR'
     }
-    await apiAddTeam(engId, { userId: uId, role: r }, session.apiToken)
+    await apiAddTeam(engId, { assessorId: uId, role: r }, session.apiToken)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to assign assessor' }

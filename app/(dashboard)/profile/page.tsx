@@ -49,9 +49,17 @@ interface C3PAOProfile {
   totalReviews: number
   status: string
   isListed: boolean
-  _count: {
-    engagements: number
-    reviews: number
+  teamStats?: {
+    total: number
+    active: number
+    cca: number
+    ccp: number
+  }
+  engagementStats?: {
+    total: number
+    active: number
+    completed: number
+    completedThisYear: number
   }
 }
 
@@ -275,7 +283,10 @@ export default function C3PAOProfilePage() {
             <CardTitle className="text-sm font-medium">Engagements</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{profile._count.engagements}</div>
+            <div className="text-2xl font-bold">{profile.engagementStats?.total ?? 0}</div>
+            {profile.engagementStats && profile.engagementStats.active > 0 && (
+              <p className="text-xs text-muted-foreground">{profile.engagementStats.active} active</p>
+            )}
           </CardContent>
         </Card>
         <Card>

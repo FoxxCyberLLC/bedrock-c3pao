@@ -242,14 +242,23 @@ export interface FindingView {
   requirementId: string
   requirementCode: string
   determination: string
-  findingDetails: string | null
+  methodInterview: boolean
+  methodExamine: boolean
+  methodTest: boolean
+  finding: string | null
+  objectiveEvidence: string | null
+  deficiency: string | null
+  recommendation: string | null
   riskLevel: string | null
-  assessorNotes: string | null
+  evidenceReviewed: string | null
+  assessedById: string | null
+  assessedAt: string | null
   version: number
+  editingById: string | null
+  editingByName: string | null
+  editingAt: string | null
   createdAt: string
   updatedAt: string
-  assessorId: string
-  assessorName: string | null
 }
 
 export interface NoteView {
@@ -323,9 +332,15 @@ export async function fetchEMassExport(engagementId: string, token: string): Pro
 export interface CreateFindingInput {
   requirementId: string
   determination: string
-  findingDetails?: string
+  methodInterview?: boolean
+  methodExamine?: boolean
+  methodTest?: boolean
+  finding?: string
+  objectiveEvidence?: string
+  deficiency?: string
+  recommendation?: string
   riskLevel?: string
-  assessorNotes?: string
+  evidenceReviewed?: string
 }
 
 export async function createFinding(engagementId: string, input: CreateFindingInput, token: string): Promise<FindingView> {
@@ -338,10 +353,15 @@ export async function createFinding(engagementId: string, input: CreateFindingIn
 
 export interface UpdateFindingInput {
   determination?: string
-  findingDetails?: string
+  methodInterview?: boolean
+  methodExamine?: boolean
+  methodTest?: boolean
+  finding?: string
+  objectiveEvidence?: string
+  deficiency?: string
+  recommendation?: string
   riskLevel?: string
-  assessorNotes?: string
-  version: number
+  evidenceReviewed?: string
 }
 
 export async function updateFinding(engagementId: string, findingId: string, input: UpdateFindingInput, token: string): Promise<FindingView> {
@@ -360,13 +380,39 @@ export async function createNote(engagementId: string, content: string, token: s
   })
 }
 
+// ---- Check-ins (Public Status Updates) ----
+
+export interface CheckinView {
+  id: string
+  title: string
+  description?: string | null
+  authorName: string
+  createdAt: string
+}
+
+export async function fetchCheckins(engagementId: string, token: string): Promise<CheckinView[]> {
+  return apiRequest<CheckinView[]>(`/api/c3pao/assessments/${engagementId}/checkins`, { token })
+}
+
+export async function createCheckin(
+  engagementId: string,
+  input: { title: string; description?: string },
+  token: string
+): Promise<CheckinView> {
+  return apiRequest<CheckinView>(`/api/c3pao/assessments/${engagementId}/checkins`, {
+    method: 'POST',
+    body: input,
+    token,
+  })
+}
+
 // ---- Engagement Detail & Status ----
 
 export async function fetchEngagementDetail(engagementId: string, token: string): Promise<Record<string, unknown>> {
   return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}`, { token })
 }
 
-export async function updateEngagementStatus(engagementId: string, body: { status: string; notes?: string }, token: string): Promise<Record<string, unknown>> {
+export async function updateEngagementStatus(engagementId: string, body: { status: string; assessmentResult?: string; resultNotes?: string }, token: string): Promise<Record<string, unknown>> {
   return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/status`, {
     method: 'PATCH',
     body,
@@ -386,13 +432,13 @@ export async function toggleAssessmentMode(engagementId: string, active: boolean
 
 export interface TeamMember {
   id: string
-  engagementId: string
-  c3paoUserId: string
-  role: string
-  assignedAt: string
+  assessorId: string
   name: string
   email: string
+  role: string
   assessorType: string
+  jobTitle?: string | null
+  assignedAt: string
   domains: string[]
 }
 
@@ -404,7 +450,7 @@ export async function fetchAvailableAssessors(engagementId: string, token: strin
   return apiRequest<Record<string, unknown>[]>(`/api/c3pao/assessments/${engagementId}/team/available`, { token })
 }
 
-export async function addTeamMember(engagementId: string, body: { userId: string; role: string }, token: string): Promise<Record<string, unknown>> {
+export async function addTeamMember(engagementId: string, body: { assessorId: string; role: string }, token: string): Promise<Record<string, unknown>> {
   return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/team`, {
     method: 'POST',
     body,
@@ -432,18 +478,18 @@ export async function removeTeamMember(engagementId: string, assessorId: string,
 export interface DomainAssignment {
   id: string
   engagementAssessorId: string
-  familyCode: string
-  familyId: string
-  assignedAt: string
+  assessorId: string
   assessorName: string
+  familyCode: string
+  assignedAt: string
 }
 
 export async function fetchDomains(engagementId: string, token: string): Promise<DomainAssignment[]> {
   return apiRequest<DomainAssignment[]>(`/api/c3pao/assessments/${engagementId}/domains`, { token })
 }
 
-export async function fetchMyDomains(engagementId: string, token: string): Promise<DomainAssignment[]> {
-  return apiRequest<DomainAssignment[]>(`/api/c3pao/assessments/${engagementId}/domains/mine`, { token })
+export async function fetchMyDomains(engagementId: string, token: string): Promise<string[]> {
+  return apiRequest<string[]>(`/api/c3pao/assessments/${engagementId}/domains/mine`, { token })
 }
 
 export async function setAssessorDomains(engagementId: string, assessorId: string, familyCodes: string[], token: string): Promise<DomainAssignment[]> {
@@ -457,10 +503,13 @@ export async function setAssessorDomains(engagementId: string, assessorId: strin
 // ---- Planning & Proposals ----
 
 export interface PlanningData {
+  engagementId?: string
   assessmentScope: string | null
   assessmentMethodology: string | null
   planningNotes: string | null
   assessmentTimeline: string | null
+  scheduledStartDate: string | null
+  scheduledEndDate: string | null
 }
 
 export async function fetchPlanning(engagementId: string, token: string): Promise<PlanningData> {
@@ -512,13 +561,34 @@ export interface ObjectiveView {
   objectiveId: string
   objectiveReference: string
   requirementId: string
+  familyCode: string
+  familyName: string
   description: string
   status: string
   assessmentNotes: string | null
   evidenceDescription: string | null
+  artifactsReviewed: string | null
+  interviewees: string | null
+  examineDescription: string | null
+  testDescription: string | null
+  timeToAssessMinutes: number | null
+  inheritedStatus: string | null
+  policyReference: string | null
+  procedureReference: string | null
+  implementationStatement: string | null
+  responsibilityDescription: string | null
+  assessorQuestionsForOSC: string | null
+  officialAssessment: boolean
+  officialAssessorId: string | null
+  officialAssessedAt: string | null
+  assessedBy: string | null
+  assessedAt: string | null
   version: number
   editingById: string | null
   editingByName: string | null
+  editingAt: string | null
+  createdAt: string
+  updatedAt: string
 }
 
 export async function fetchObjectives(engagementId: string, token: string): Promise<ObjectiveView[]> {
@@ -547,7 +617,7 @@ export async function unlockObjective(engagementId: string, objectiveId: string,
   })
 }
 
-export async function bulkUpdateObjectives(engagementId: string, body: { objectives: Record<string, unknown>[] }, token: string): Promise<Record<string, unknown>> {
+export async function bulkUpdateObjectives(engagementId: string, body: { updates: { objStatusId: string; status: string; version: number }[] }, token: string): Promise<Record<string, unknown>> {
   return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/objectives/bulk`, {
     method: 'POST',
     body,
@@ -575,20 +645,44 @@ export async function fetchSTIGs(engagementId: string, token: string): Promise<S
 export interface C3PAOProfile {
   id: string
   name: string
-  email: string | null
-  phone: string | null
-  address: string | null
-  city: string | null
-  state: string | null
-  zipCode: string | null
-  website: string | null
-  description: string | null
-  averageRating: number | null
-  totalReviews: number | null
-  pricingInfo: string | null
-  typicalTimeline: string | null
-  specialties: string | null
-  servicesOffered: string | null
+  legalName?: string | null
+  email: string
+  phone?: string | null
+  website?: string | null
+  description?: string | null
+  logo?: string | null
+  address1?: string | null
+  address2?: string | null
+  city?: string | null
+  state?: string | null
+  zipCode?: string | null
+  country?: string | null
+  dunsNumber?: string | null
+  cageCode?: string | null
+  cyberAbAccreditationId?: string | null
+  accreditationDate?: string | null
+  accreditationExpiry?: string | null
+  authorizedLevels?: string | null
+  status: string
+  isListed: boolean
+  averageRating?: number | null
+  totalReviews: number
+  pricingInfo?: string | null
+  typicalTimeline?: string | null
+  specialties?: string | null
+  servicesOffered?: string | null
+  teamStats: {
+    total: number
+    active: number
+    cca: number
+    ccp: number
+  }
+  engagementStats: {
+    total: number
+    active: number
+    completed: number
+    completedThisYear: number
+  }
 }
 
 export async function fetchProfile(token: string): Promise<C3PAOProfile> {
@@ -609,11 +703,24 @@ export interface AssessmentReport {
   id: string
   engagementId: string
   status: string
+  version: string | null
   executiveSummary: string | null
   scopeDescription: string | null
   methodology: string | null
   findingsSummary: string | null
   recommendations: string | null
+  conclusion: string | null
+  pdfUrl: string | null
+  preparedById: string | null
+  preparedByName: string | null
+  preparedAt: string | null
+  reviewedById: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  approvedById: string | null
+  approvedByName: string | null
+  approvedAt: string | null
+  deliveredAt: string | null
   createdAt: string
   updatedAt: string
 }
@@ -671,17 +778,71 @@ export async function fetchSPRS(engagementId: string, token: string): Promise<SP
 
 // ---- Workload ----
 
-export interface WorkloadData {
-  assessors: {
-    id: string
-    name: string
-    email: string
-    activeEngagements: number
-    objectivesAssessed: number
-    domainsAssigned: number
-  }[]
+export interface AssessorWorkloadItem {
+  assessorId: string
+  assessorName: string
+  assessorEmail: string
+  assessorType: string
+  activeEngagements: number
+  objectivesAssessed: number
+  domainsAssigned: number
 }
 
-export async function fetchWorkload(token: string): Promise<WorkloadData> {
-  return apiRequest<WorkloadData>('/api/c3pao/workload', { token })
+export async function fetchWorkload(token: string): Promise<AssessorWorkloadItem[]> {
+  return apiRequest<AssessorWorkloadItem[]>('/api/c3pao/workload', { token })
+}
+
+// ---- Org-level C3PAO User Management ----
+
+export interface C3PAOUserItem {
+  id: string
+  email: string
+  name: string
+  phone: string | null
+  jobTitle: string | null
+  ccaNumber: string | null
+  ccpNumber: string | null
+  isLeadAssessor: boolean
+  assessorType: string
+  status: string
+  lastLogin: string | null
+  createdAt: string
+  engagements: number
+}
+
+export async function fetchC3PAOUsers(token: string): Promise<C3PAOUserItem[]> {
+  return apiRequest<C3PAOUserItem[]>('/api/c3pao/users', { token })
+}
+
+export async function fetchC3PAOCurrentUser(token: string): Promise<C3PAOUserItem> {
+  return apiRequest<C3PAOUserItem>('/api/c3pao/users/me', { token })
+}
+
+export async function createC3PAOUser(body: {
+  name: string
+  email: string
+  password: string
+  phone?: string
+  jobTitle?: string
+  ccaNumber?: string
+  ccpNumber?: string
+  isLeadAssessor: boolean
+}, token: string): Promise<C3PAOUserItem> {
+  return apiRequest<C3PAOUserItem>('/api/c3pao/users', { method: 'POST', body, token })
+}
+
+export async function updateC3PAOUser(userId: string, body: {
+  name?: string
+  phone?: string
+  jobTitle?: string
+  ccaNumber?: string
+  ccpNumber?: string
+  isLeadAssessor?: boolean
+  status?: string
+}, token: string): Promise<unknown> {
+  return apiRequest<unknown>(`/api/c3pao/users/${userId}`, { method: 'PUT', body, token })
+}
+
+export async function deleteC3PAOUser(userId: string, token: string): Promise<unknown> {
+  return apiRequest<unknown>(`/api/c3pao/users/${userId}`, { method: 'DELETE', token })
 }

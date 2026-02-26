@@ -65,7 +65,8 @@ export default async function C3PAOPOAMDetailPage({ params }: PageProps) {
     )
   }
 
-  const { engagement, poam } = result.data
+  // API returns a single POAMView directly
+  const poam = result.data
   const completionPercentage = calculateCompletionPercentage(poam.milestones)
   const daysRemaining = getDaysRemaining(new Date(poam.deadline))
   const warningLevel = getDeadlineWarningLevel(new Date(poam.deadline))
@@ -90,7 +91,7 @@ export default async function C3PAOPOAMDetailPage({ params }: PageProps) {
             </div>
             <h1 className="text-3xl font-bold">{poam.title}</h1>
             <p className="text-muted-foreground">
-              {engagement.atoPackage?.name} - {engagement.atoPackage?.organization?.name}
+              POA&M Item — Read-Only Review
             </p>
           </div>
         </div>

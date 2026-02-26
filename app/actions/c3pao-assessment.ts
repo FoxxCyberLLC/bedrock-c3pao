@@ -2,7 +2,7 @@
 
 import { requireAuth } from '@/lib/auth'
 import { saveAssessmentFinding as _save, getAssessmentFindings as _getFindings, updateAssessorNotes as _updateNotes } from './assessment'
-import { fetchReport, fetchEMassExport, fetchStats, fetchSPRS, saveAssessmentReport as apiSaveReport, updateReportStatus as apiUpdateReportStatus } from '@/lib/api-client'
+import { fetchReport, fetchAssessmentReport as apiFetchAssessmentReport, fetchStats, fetchSPRS, saveAssessmentReport as apiSaveReport, updateReportStatus as apiUpdateReportStatus } from '@/lib/api-client'
 
 export async function saveAssessmentFinding(...args: Parameters<typeof _save>) {
   return _save(...args)
@@ -49,7 +49,14 @@ export async function saveAssessmentReport(data: any): Promise<{ success: boolea
     const session = await requireAuth()
     if (!session) return { success: false, data: null, error: 'Unauthorized' }
     const token = session.apiToken
-    const result = await apiSaveReport(data.engagementId, { executiveSummary: data.reportData, status: data.status }, token)
+    const result = await apiSaveReport(data.engagementId, {
+      executiveSummary: data.executiveSummary || data.reportData,
+      scopeDescription: data.scopeDescription,
+      methodology: data.methodology,
+      findingsSummary: data.findingsSummary,
+      recommendations: data.recommendations,
+      conclusion: data.conclusion,
+    }, token)
     return { success: true, data: { id: result.id || data.engagementId } }
   } catch (error) {
     return { success: false, data: null, error: error instanceof Error ? error.message : 'Failed to save report' }
@@ -61,7 +68,7 @@ export async function getAssessmentReport(engagementId: string): Promise<{ succe
   try {
     const session = await requireAuth()
     if (!session) return { success: false, data: null }
-    const report = await fetchReport(engagementId, session.apiToken)
+    const report = await apiFetchAssessmentReport(engagementId, session.apiToken)
     return { success: true, data: report }
   } catch {
     return { success: false, data: null }

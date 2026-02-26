@@ -92,8 +92,8 @@ interface SSPData {
 
 interface SSPLongFormReadOnlyProps {
   ssp: SSPData
-  families: Family[]
-  atoPackage: ATOPackage
+  families?: Family[]
+  atoPackage?: ATOPackage
 }
 
 function ReadOnlyField({ label, value, className }: { label: string; value: unknown; className?: string }) {
@@ -187,7 +187,7 @@ function DiagramDisplay({ label, url, fileName }: { label: string; url: string |
   )
 }
 
-export function SSPLongFormReadOnly({ ssp, families, atoPackage }: SSPLongFormReadOnlyProps) {
+export function SSPLongFormReadOnly({ ssp, families = [], atoPackage }: SSPLongFormReadOnlyProps) {
   const poamSummary = ssp.poamSummary ? JSON.parse(ssp.poamSummary) : null
   const assetInventory = ssp.assetInventorySummary ? JSON.parse(ssp.assetInventorySummary) : null
   const acronyms = ssp.acronyms ? JSON.parse(ssp.acronyms) : {}
@@ -289,19 +289,19 @@ export function SSPLongFormReadOnly({ ssp, families, atoPackage }: SSPLongFormRe
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">DUNS #</label>
                 <p className="text-sm border rounded-lg p-3 bg-muted/50">
-                  {atoPackage.organization?.dunsNumber || 'N/A'}
+                  {atoPackage?.organization?.dunsNumber || 'N/A'}
                 </p>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">CAGE Code</label>
                 <p className="text-sm border rounded-lg p-3 bg-muted/50">
-                  {atoPackage.organization?.cageCode || 'N/A'}
+                  {atoPackage?.organization?.cageCode || 'N/A'}
                 </p>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground">CMMC Level</label>
                 <div className="pt-1">
-                  <Badge variant="outline">Level {atoPackage.cmmcLevel.replace('LEVEL_', '')}</Badge>
+                  <Badge variant="outline">Level {atoPackage?.cmmcLevel?.replace('LEVEL_', '') || 'N/A'}</Badge>
                 </div>
               </div>
             </div>

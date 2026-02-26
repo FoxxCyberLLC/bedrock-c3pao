@@ -18,6 +18,11 @@ import {
   fetchPOAMs,
   createNote,
   fetchNotes,
+  createC3PAOUser,
+  updateC3PAOUser,
+  deleteC3PAOUser,
+  createCheckin as apiCreateCheckin,
+  fetchCheckins as apiFetchCheckins,
 } from '@/lib/api-client'
 import {
   getC3PAOEngagements as _getEngagements,
@@ -104,7 +109,7 @@ export async function updateC3PAOLogo(...args: any[]): Promise<{ success: boolea
 export async function updateEngagementStatus(engagementId: string, status: string, notes?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await apiUpdateEngagementStatus(engagementId, { status, notes }, token)
+    await apiUpdateEngagementStatus(engagementId, { status, resultNotes: notes }, token)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update engagement status' }
@@ -128,8 +133,12 @@ export async function addAssessorNotes(engagementId: string, content: string): P
 export async function recordAssessmentResult(engagementId: string, result: string | boolean, findings?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    const status = typeof result === 'boolean' ? (result ? 'PASSED' : 'FAILED') : result
-    await apiUpdateEngagementStatus(engagementId, { status, notes: findings }, token)
+    const assessmentResult = typeof result === 'boolean' ? (result ? 'PASSED' : 'FAILED') : result
+    await apiUpdateEngagementStatus(engagementId, {
+      status: 'COMPLETED',
+      assessmentResult,
+      resultNotes: findings,
+    }, token)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to record assessment result' }
@@ -141,6 +150,12 @@ export async function recordAssessmentResult(engagementId: string, result: strin
 export async function startAssessment(engagementId: string): Promise<{ success: boolean; error?: string; message?: string }> {
   try {
     const token = await getToken()
+    // First transition to IN_PROGRESS (required before assessment mode can be toggled)
+    try {
+      await apiUpdateEngagementStatus(engagementId, { status: 'IN_PROGRESS' }, token)
+    } catch {
+      // May already be IN_PROGRESS — ignore transition errors
+    }
     await toggleAssessmentMode(engagementId, true, token)
     return { success: true, message: 'Assessment mode activated' }
   } catch (error) {
@@ -155,6 +170,39 @@ export async function endAssessmentMode(engagementId: string): Promise<{ success
     return { success: true, message: 'Assessment mode deactivated' }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to end assessment mode' }
+  }
+}
+
+// ---- Stop / Fail Assessment ----
+
+export async function stopAssessment(engagementId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = await getToken()
+    await toggleAssessmentMode(engagementId, false, token)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to stop assessment' }
+  }
+}
+
+export async function failAssessment(engagementId: string, notes?: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = await getToken()
+    // End assessment mode first
+    try {
+      await toggleAssessmentMode(engagementId, false, token)
+    } catch {
+      // May not be in assessment mode
+    }
+    // Transition directly to COMPLETED with FAILED result
+    await apiUpdateEngagementStatus(engagementId, {
+      status: 'COMPLETED',
+      assessmentResult: 'FAILED',
+      resultNotes: notes,
+    }, token)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to fail assessment' }
   }
 }
 
@@ -176,7 +224,7 @@ export async function calculateEngagementSPRSScore(engagementId: string): Promis
 export async function submitAssessmentForApproval(engagementId: string, notes?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await apiUpdateEngagementStatus(engagementId, { status: 'SUBMITTED_FOR_APPROVAL', notes }, token)
+    await apiUpdateEngagementStatus(engagementId, { status: 'PENDING_APPROVAL', resultNotes: notes }, token)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to submit assessment for approval' }
@@ -186,7 +234,7 @@ export async function submitAssessmentForApproval(engagementId: string, notes?: 
 export async function rejectAssessmentSubmission(engagementId: string, reason?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await apiUpdateEngagementStatus(engagementId, { status: 'IN_PROGRESS', notes: reason }, token)
+    await apiUpdateEngagementStatus(engagementId, { status: 'IN_PROGRESS', resultNotes: reason }, token)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to reject assessment submission' }
@@ -227,7 +275,7 @@ export async function sendProposal(proposalDataOrEngagementId: string | Record<s
 export async function declineIntroduction(engagementId: string, reason?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await apiUpdateEngagementStatus(engagementId, { status: 'DECLINED', notes: reason }, token)
+    await apiUpdateEngagementStatus(engagementId, { status: 'CANCELLED', resultNotes: reason }, token)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to decline introduction' }
@@ -268,24 +316,15 @@ export async function addTeamMember(dataOrEngagementId: string | Record<string, 
   try {
     const token = await getToken()
     if (typeof dataOrEngagementId === 'string') {
-      await apiAddTeamMember(dataOrEngagementId, { userId: userId!, role: role || 'ASSESSOR' }, token)
+      // Called as (engagementId, userId, role) — engagement-level team assignment
+      await apiAddTeamMember(dataOrEngagementId, { assessorId: userId!, role: role || 'ASSESSOR' }, token)
     } else {
-      // Component passes a single object with member data — this is a team member creation, not engagement assignment
-      // Use the C3PAO team management endpoint instead
-      const API_URL = process.env.BEDROCK_API_URL || 'http://localhost:8080'
-      const response = await globalThis.fetch(`${API_URL}/api/c3pao/team`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(dataOrEngagementId),
-      })
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({ error: { message: 'Request failed' } }))
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        throw new Error((errBody as any)?.error?.message || 'Failed to add team member')
-      }
+      // Called as (data) — org-level user creation
+      await createC3PAOUser(dataOrEngagementId as {
+        name: string; email: string; password: string;
+        phone?: string; jobTitle?: string; ccaNumber?: string;
+        ccpNumber?: string; isLeadAssessor: boolean;
+      }, token)
     }
     return { success: true }
   } catch (error) {
@@ -298,24 +337,15 @@ export async function updateTeamMember(memberIdOrEngagementId: string, dataOrAss
   try {
     const token = await getToken()
     if (typeof dataOrAssessorId === 'string') {
-      // Called as (engagementId, assessorId, role)
+      // Called as (engagementId, assessorId, role) — engagement-level role update
       await updateTeamMemberRole(memberIdOrEngagementId, dataOrAssessorId, role!, token)
     } else {
-      // Called as (memberId, { name, phone, ... }) — update team member profile
-      const API_URL = process.env.BEDROCK_API_URL || 'http://localhost:8080'
-      const response = await globalThis.fetch(`${API_URL}/api/c3pao/team/${memberIdOrEngagementId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(dataOrAssessorId),
-      })
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({ error: { message: 'Request failed' } }))
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        throw new Error((errBody as any)?.error?.message || 'Failed to update team member')
-      }
+      // Called as (memberId, data) — org-level user update
+      await updateC3PAOUser(memberIdOrEngagementId, dataOrAssessorId as {
+        name?: string; phone?: string; jobTitle?: string;
+        ccaNumber?: string; ccpNumber?: string;
+        isLeadAssessor?: boolean; status?: string;
+      }, token)
     }
     return { success: true }
   } catch (error) {
@@ -327,22 +357,11 @@ export async function deleteTeamMember(memberIdOrEngagementId: string, assessorI
   try {
     const token = await getToken()
     if (assessorId) {
-      // Called as (engagementId, assessorId)
+      // Called as (engagementId, assessorId) — engagement-level team removal
       await removeTeamMember(memberIdOrEngagementId, assessorId, token)
     } else {
-      // Called as (memberId) — delete team member from C3PAO org
-      const API_URL = process.env.BEDROCK_API_URL || 'http://localhost:8080'
-      const response = await globalThis.fetch(`${API_URL}/api/c3pao/team/${memberIdOrEngagementId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      })
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({ error: { message: 'Request failed' } }))
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        throw new Error((errBody as any)?.error?.message || 'Failed to delete team member')
-      }
+      // Called as (memberId) — org-level user deactivation
+      await deleteC3PAOUser(memberIdOrEngagementId, token)
     }
     return { success: true }
   } catch (error) {
@@ -441,5 +460,32 @@ export async function getAssessorNotes(engagementId: string): Promise<{ success:
     return { success: true, data: notes }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load assessor notes' }
+  }
+}
+
+// ---- Check-ins (Public Status Updates) ----
+
+export async function createAssessmentCheckin(
+  engagementId: string,
+  title: string,
+  description?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = await getToken()
+    await apiCreateCheckin(engagementId, { title, description }, token)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to create check-in' }
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getAssessmentCheckins(engagementId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
+  try {
+    const token = await getToken()
+    const checkins = await apiFetchCheckins(engagementId, token)
+    return { success: true, data: checkins }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to load check-ins' }
   }
 }

@@ -43,23 +43,32 @@ export async function saveAssessmentFinding(input: {
     const reqId = input.controlId || input.requirementId || ''
 
     let result
-    if (input.findingId && input.version) {
+    if (input.findingId) {
       // Update existing finding
       result = await updateFinding(input.engagementId, input.findingId, {
         determination: input.determination || undefined,
-        findingDetails: input.findingText || input.finding || undefined,
+        methodInterview: input.methodInterview,
+        methodExamine: input.methodExamine,
+        methodTest: input.methodTest,
+        finding: input.findingText || input.finding || undefined,
+        objectiveEvidence: input.objectiveEvidence || undefined,
+        deficiency: input.deficiency || undefined,
+        recommendation: input.recommendation || undefined,
         riskLevel: input.riskLevel || undefined,
-        assessorNotes: input.objectiveEvidence || undefined,
-        version: input.version,
       }, token)
     } else {
       // Create new finding
       result = await createFinding(input.engagementId, {
         requirementId: reqId,
         determination: input.determination || 'NOT_ASSESSED',
-        findingDetails: input.findingText || input.finding || undefined,
+        methodInterview: input.methodInterview,
+        methodExamine: input.methodExamine,
+        methodTest: input.methodTest,
+        finding: input.findingText || input.finding || undefined,
+        objectiveEvidence: input.objectiveEvidence || undefined,
+        deficiency: input.deficiency || undefined,
+        recommendation: input.recommendation || undefined,
         riskLevel: input.riskLevel || undefined,
-        assessorNotes: input.objectiveEvidence || undefined,
       }, token)
     }
 

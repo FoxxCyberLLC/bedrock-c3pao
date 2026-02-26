@@ -10,8 +10,9 @@ export async function middleware(request: NextRequest) {
   const isPublicRoute = PUBLIC_ROUTES.some((route) => path.startsWith(route))
   const isSetupRoute = path.startsWith('/setup')
 
-  // Check if instance has been configured (cookie set during setup wizard)
-  const isConfigured = request.cookies.get('bedrock_instance_configured')?.value === 'true'
+  // Check if instance has been configured (env var OR cookie set during setup wizard)
+  const isConfigured = !!process.env.INSTANCE_API_KEY ||
+    request.cookies.get('bedrock_instance_configured')?.value === 'true'
 
   // If not configured and not on setup page → redirect to setup
   if (!isConfigured && !isSetupRoute) {

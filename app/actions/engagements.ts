@@ -3,17 +3,22 @@
 import { requireAuth } from '@/lib/auth'
 import {
   fetchAssessments,
+  fetchEngagementDetail,
   fetchControls,
   fetchEvidence,
   fetchPOAMs,
   fetchSSP,
   fetchTeam,
   fetchSTIGs,
+  fetchObjectives,
+  fetchC3PAOUsers,
   type EngagementSummary,
   type ControlView,
+  type ObjectiveView,
   type EvidenceView,
   type POAMView,
   type SSPView,
+  type C3PAOUserItem,
 } from '@/lib/api-client'
 
 async function getToken(): Promise<string> {
@@ -32,20 +37,74 @@ export async function getC3PAOEngagements(): Promise<{ success: boolean; data?: 
   }
 }
 
-export async function getEngagementById(id: string): Promise<{ success: boolean; data?: EngagementSummary; accessLevel?: string; error?: string }> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getEngagementById(id: string): Promise<{ success: boolean; data?: any; accessLevel?: string; error?: string }> {
   try {
     const token = await getToken()
-    const engagements = await fetchAssessments(token)
-    const engagement = engagements.find(e => e.id === id)
+    const detail = await fetchEngagementDetail(id, token) as Record<string, any>
 
-    if (!engagement) {
-      return { success: false, error: 'Engagement not found' }
+    // Fetch controls, objectives, evidence, POAMs, and SSP in parallel
+    const [controls, objectives, evidence, poams, ssp] = await Promise.allSettled([
+      fetchControls(id, token),
+      fetchObjectives(id, token),
+      fetchEvidence(id, token),
+      fetchPOAMs(id, token),
+      fetchSSP(id, token),
+    ])
+
+    const controlsData = controls.status === 'fulfilled' ? controls.value : []
+    const objectivesData = objectives.status === 'fulfilled' ? objectives.value : []
+    const evidenceData = evidence.status === 'fulfilled' ? evidence.value : []
+    const poamsData = poams.status === 'fulfilled' ? poams.value : []
+    const sspData = ssp.status === 'fulfilled' ? ssp.value : null
+
+    // Group objectives by requirementId and build nested control shapes
+    const objMap = groupObjectivesByRequirement(objectivesData as ObjectiveView[])
+    const requirementStatuses = (controlsData as ControlView[]).map(c => shapeControl(c, objMap))
+
+    // Shape into the nested structure EngagementDetail component expects
+    const shaped = {
+      id: detail.id,
+      status: detail.status,
+      assessmentType: (detail.assessmentType as string) || 'CERTIFICATION',
+      targetLevel: detail.targetLevel,
+      customerNotes: detail.customerNotes || null,
+      assessmentNotes: detail.assessmentNotes || null,
+      assessmentResult: detail.assessmentResult || null,
+      resultNotes: detail.resultNotes || null,
+      createdAt: detail.createdAt,
+      updatedAt: detail.updatedAt,
+      acceptedDate: detail.acceptedDate || null,
+      actualStartDate: detail.actualStartDate || null,
+      actualCompletionDate: detail.actualCompletionDate || null,
+      assessmentModeActive: detail.assessmentModeActive || false,
+      assessmentModeStartedAt: detail.assessmentModeStartedAt || null,
+      accessLevel: detail.accessLevel,
+      atoPackage: {
+        id: detail.atoPackageId,
+        name: detail.packageName || 'Unknown Package',
+        cmmcLevel: detail.packageCmmcLevel || detail.targetLevel,
+        description: null,
+        organization: {
+          id: '',
+          name: detail.organizationName || 'Unknown Organization',
+        },
+        requirementStatuses,
+        poams: poamsData || [],
+        evidence: evidenceData || [],
+        ssp: sspData || null,
+        assets: [],
+        externalServiceProviders: [],
+      },
+      leadAssessor: detail.leadAssessorName
+        ? { id: detail.leadAssessorId || '', name: detail.leadAssessorName, email: '' }
+        : null,
     }
 
     return {
       success: true,
-      data: engagement,
-      accessLevel: engagement.accessLevel,
+      data: shaped,
+      accessLevel: detail.accessLevel,
     }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load engagement' }
@@ -92,14 +151,11 @@ export async function getEngagementSSP(engagementId: string): Promise<{ success:
   }
 }
 
-export async function getC3PAOTeam(): Promise<{ success: boolean; data?: unknown[]; error?: string }> {
+export async function getC3PAOTeam(): Promise<{ success: boolean; data?: C3PAOUserItem[]; error?: string }> {
   try {
     const token = await getToken()
-    // Fetch team from first available engagement, or return empty
-    const engagements = await fetchAssessments(token)
-    if (engagements.length === 0) return { success: true, data: [] }
-    const team = await fetchTeam(engagements[0].id, token)
-    return { success: true, data: team }
+    const users = await fetchC3PAOUsers(token)
+    return { success: true, data: users }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load team' }
   }
@@ -143,21 +199,89 @@ export async function getEngagementStigs(engagementId: string): Promise<{ succes
   }
 }
 
+// Group objectives by requirementId for attachment to controls
+function groupObjectivesByRequirement(objectives: ObjectiveView[]): Map<string, ObjectiveView[]> {
+  const map = new Map<string, ObjectiveView[]>()
+  for (const obj of objectives) {
+    const list = map.get(obj.requirementId) || []
+    list.push(obj)
+    map.set(obj.requirementId, list)
+  }
+  return map
+}
+
+// Helper: shape a flat ControlView into the nested RequirementStatus the UI expects
+function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[]>) {
+  const objs = objectivesMap?.get(c.requirementId) || []
+  return {
+    id: c.id,
+    status: c.status || 'NOT_STARTED',
+    implementationNotes: c.implementationNotes,
+    assessmentNotes: null,
+    requirement: {
+      id: c.id,
+      requirementId: c.requirementId,
+      title: c.title,
+      basicRequirement: c.basicRequirement,
+      derivedRequirement: null,
+      discussion: '',
+      family: {
+        id: c.familyCode,
+        code: c.familyCode,
+        name: c.familyName,
+      },
+      objectives: objs.map(o => ({
+        id: o.id,
+        objectiveId: o.objectiveId,
+        objectiveReference: o.objectiveReference,
+        description: o.description,
+        sortOrder: 0,
+        statuses: [{
+          id: o.id,
+          status: o.status || 'NOT_ASSESSED',
+          assessmentNotes: o.assessmentNotes,
+        }],
+      })),
+    },
+    evidence: [],
+  }
+}
+
+// Helper: shape a flat EngagementSummary into the nested engagement object the UI expects
+function shapeEngagementForControl(e: EngagementSummary) {
+  return {
+    id: e.id,
+    status: e.status,
+    assessmentModeActive: e.assessmentModeActive,
+    atoPackage: {
+      id: e.atoPackageId,
+      name: e.packageName || 'Unknown Package',
+      organization: {
+        id: '',
+        name: e.organizationName || 'Unknown Organization',
+      },
+      externalServiceProviders: [],
+    },
+  }
+}
+
 // Control detail for individual assessment page
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getEngagementControlDetail(engagementId: string, controlId: string): Promise<{
   success: boolean
   data?: {
-    engagement: EngagementSummary
-    control: ControlView
+    engagement: any
+    control: any
     navigation: { prevId: string | null; prevName: string | null; nextId: string | null; nextName: string | null; currentIndex: number; total: number }
   }
   error?: string
 }> {
   try {
     const token = await getToken()
-    const [engagements, controls] = await Promise.all([
+    const [engagements, controls, objectivesResult] = await Promise.all([
       fetchAssessments(token),
       fetchControls(engagementId, token),
+      fetchObjectives(engagementId, token).catch(() => [] as ObjectiveView[]),
     ])
 
     const engagement = engagements.find(e => e.id === engagementId)
@@ -170,6 +294,7 @@ export async function getEngagementControlDetail(engagementId: string, controlId
       return { success: false, error: 'Control not found' }
     }
 
+    const objMap = groupObjectivesByRequirement(objectivesResult)
     const control = controls[controlIndex]
     const prev = controlIndex > 0 ? controls[controlIndex - 1] : null
     const next = controlIndex < controls.length - 1 ? controls[controlIndex + 1] : null
@@ -177,8 +302,8 @@ export async function getEngagementControlDetail(engagementId: string, controlId
     return {
       success: true,
       data: {
-        engagement,
-        control,
+        engagement: shapeEngagementForControl(engagement),
+        control: shapeControl(control, objMap),
         navigation: {
           prevId: prev?.id || null,
           prevName: prev?.requirementId || null,

@@ -46,19 +46,14 @@ type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER' | string
 
 interface TeamMember {
   id: string
-  engagementId: string
   assessorId: string
+  name: string
+  email: string
   role: EngagementAssessorRole
-  assignedAt: Date
-  assessor: {
-    id: string
-    name: string
-    email: string
-    jobTitle: string | null
-    isLeadAssessor: boolean
-    ccaNumber: string | null
-    ccpNumber: string | null
-  }
+  assessorType: string
+  jobTitle?: string | null
+  assignedAt: string
+  domains: string[]
 }
 
 interface EngagementTeamCardProps {
@@ -106,7 +101,7 @@ export function EngagementTeamCard({
       })
 
       if (result.success) {
-        toast.success(`${member.assessor.name} removed from team`)
+        toast.success(`${member.name} removed from team`)
         onTeamUpdated()
       } else {
         toast.error(result.error || 'Failed to remove team member')
@@ -131,7 +126,7 @@ export function EngagementTeamCard({
       })
 
       if (result.success) {
-        toast.success(`${member.assessor.name} role updated to ${roleConfig[newRole].label}`)
+        toast.success(`${member.name} role updated to ${roleConfig[newRole].label}`)
         onTeamUpdated()
       } else {
         toast.error(result.error || 'Failed to update role')
@@ -194,13 +189,13 @@ export function EngagementTeamCard({
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-medium">{member.assessor.name}</span>
+                          <span className="font-medium">{member.name}</span>
                           <Badge variant="outline" className={`text-xs ${config.color}`}>
                             {config.label}
                           </Badge>
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {member.assessor.jobTitle || member.assessor.email}
+                          {member.jobTitle || member.email}
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5">
                           Assigned {formatDistanceToNow(new Date(member.assignedAt), { addSuffix: true })}
@@ -269,7 +264,7 @@ export function EngagementTeamCard({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove {confirmRemove?.assessor.name} from this engagement?
+              Are you sure you want to remove {confirmRemove?.name} from this engagement?
               They will no longer have access to this assessment.
             </AlertDialogDescription>
           </AlertDialogHeader>

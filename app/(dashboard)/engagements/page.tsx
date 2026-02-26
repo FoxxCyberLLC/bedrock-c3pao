@@ -32,16 +32,11 @@ interface Engagement {
   status: string
   targetLevel: string
   customerNotes: string | null
-  createdAt: Date
-  updatedAt: Date
-  atoPackage: {
-    id: string
-    name: string
-    cmmcLevel: string
-    organization: {
-      name: string
-    } | null
-  } | null
+  createdAt: string
+  updatedAt: string
+  packageName: string
+  organizationName: string
+  assessmentType?: string
 }
 
 export default function C3PAOEngagementsPage() {
@@ -72,9 +67,14 @@ export default function C3PAOEngagementsPage() {
   }
 
   const filteredEngagements = engagements.filter(engagement => {
+    if (!searchQuery) {
+      if (statusFilter === 'all') return true
+      return engagement.status === statusFilter
+    }
+    const q = searchQuery.toLowerCase()
     const matchesSearch =
-      engagement.atoPackage?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      engagement.atoPackage?.organization?.name?.toLowerCase().includes(searchQuery.toLowerCase())
+      engagement.packageName?.toLowerCase().includes(q) ||
+      engagement.organizationName?.toLowerCase().includes(q)
 
     if (statusFilter === 'all') return matchesSearch
     return matchesSearch && engagement.status === statusFilter
@@ -190,9 +190,9 @@ export default function C3PAOEngagementsPage() {
                       {getStatusIcon(engagement.status)}
                     </div>
                     <div>
-                      <p className="font-medium">{engagement.atoPackage?.name || 'Unknown Package'}</p>
+                      <p className="font-medium">{engagement.packageName || 'Unknown Package'}</p>
                       <p className="text-sm text-muted-foreground">
-                        {engagement.atoPackage?.organization?.name || 'Unknown Organization'}
+                        {engagement.organizationName || 'Unknown Organization'}
                       </p>
                       <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                         <Calendar className="h-3 w-3" />
