@@ -331,15 +331,21 @@ export function AssessmentControlsTable({
     )
   }
 
-  // Overall stats
+  // Overall stats (OSC + C3PAO)
   const overallStats = useMemo(() => {
     const stats = {
       total: requirementStatuses.length,
+      // OSC stats
       met: 0,
       notMet: 0,
       inProgress: 0,
       notStarted: 0,
       assessed: 0,
+      // C3PAO objective stats
+      totalObjectives: 0,
+      objectivesAssessed: 0,
+      objectivesMet: 0,
+      objectivesNotMet: 0,
     }
 
     requirementStatuses.forEach((rs) => {
@@ -361,6 +367,18 @@ export function AssessmentControlsTable({
         default:
           stats.notStarted++
       }
+
+      // C3PAO objective stats
+      const objs = rs.requirement.objectives || []
+      stats.totalObjectives += objs.length
+      objs.forEach((obj) => {
+        const objStatus = obj.statuses?.[0]?.status
+        if (objStatus && objStatus !== 'NOT_ASSESSED') {
+          stats.objectivesAssessed++
+          if (objStatus === 'MET') stats.objectivesMet++
+          if (objStatus === 'NOT_MET') stats.objectivesNotMet++
+        }
+      })
     })
 
     return stats
@@ -371,59 +389,75 @@ export function AssessmentControlsTable({
       {/* Overall Progress Card */}
       <Card className="bg-card border-border">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-xl font-bold">NIST SP 800-171 Assessment</CardTitle>
-              <CardDescription className="text-sm mt-1">
-                {overallStats.assessed} of {overallStats.total} controls assessed
-              </CardDescription>
-            </div>
-            <div className="text-right">
-              <div className="text-3xl font-bold text-primary">
-                {Math.round((overallStats.assessed / overallStats.total) * 100)}%
+          <CardTitle className="text-xl font-bold">NIST SP 800-171 Assessment</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* C3PAO Assessment Progress (primary) */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary" />
+                <span className="text-sm font-semibold">C3PAO Assessment Progress</span>
               </div>
-              <div className="text-xs text-muted-foreground">Complete</div>
+              <div className="text-right">
+                <span className="text-2xl font-bold text-primary">
+                  {overallStats.totalObjectives > 0 ? Math.round((overallStats.objectivesAssessed / overallStats.totalObjectives) * 100) : 0}%
+                </span>
+                <span className="text-xs text-muted-foreground ml-2">
+                  {overallStats.objectivesAssessed}/{overallStats.totalObjectives} objectives
+                </span>
+              </div>
+            </div>
+            <Progress value={overallStats.totalObjectives > 0 ? (overallStats.objectivesAssessed / overallStats.totalObjectives) * 100 : 0} className="h-3" />
+            <div className="grid grid-cols-3 gap-4 mt-3">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
+                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <div>
+                  <div className="text-xl font-bold text-green-700 dark:text-green-300">{overallStats.objectivesMet}</div>
+                  <div className="text-xs text-green-600 dark:text-green-400">Met</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+                <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                <div>
+                  <div className="text-xl font-bold text-red-700 dark:text-red-300">{overallStats.objectivesNotMet}</div>
+                  <div className="text-xs text-red-600 dark:text-red-400">Not Met</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
+                <Minus className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                <div>
+                  <div className="text-xl font-bold text-gray-700 dark:text-gray-300">{overallStats.totalObjectives - overallStats.objectivesAssessed}</div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">Remaining</div>
+                </div>
+              </div>
             </div>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Progress value={(overallStats.assessed / overallStats.total) * 100} className="h-3" />
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800">
-              <div className="p-2 rounded-lg bg-green-500/20">
-                <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-green-700 dark:text-green-300">{overallStats.met}</div>
-                <div className="text-sm text-green-600 dark:text-green-400">Met</div>
-              </div>
+          {/* OSC Self-Assessment Summary (secondary) */}
+          <div className="pt-4 border-t">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-muted-foreground">OSC Self-Assessment</span>
+              <span className="text-xs text-muted-foreground">
+                {overallStats.assessed}/{overallStats.total} controls reported
+              </span>
             </div>
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
-              <div className="p-2 rounded-lg bg-red-500/20">
-                <XCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+            <div className="flex items-center gap-3 text-sm">
+              <div className="flex items-center gap-1">
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                <span className="text-green-600 dark:text-green-400 font-medium">{overallStats.met} Met</span>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-red-700 dark:text-red-300">{overallStats.notMet}</div>
-                <div className="text-sm text-red-600 dark:text-red-400">Not Met</div>
+              <div className="flex items-center gap-1">
+                <XCircle className="h-3.5 w-3.5 text-red-500" />
+                <span className="text-red-600 dark:text-red-400 font-medium">{overallStats.notMet} Not Met</span>
               </div>
-            </div>
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
-              <div className="p-2 rounded-lg bg-blue-500/20">
-                <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <div className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5 text-blue-500" />
+                <span className="text-blue-600 dark:text-blue-400 font-medium">{overallStats.inProgress} In Progress</span>
               </div>
-              <div>
-                <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{overallStats.inProgress}</div>
-                <div className="text-sm text-blue-600 dark:text-blue-400">In Progress</div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 p-4 rounded-xl bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
-              <div className="p-2 rounded-lg bg-gray-500/20">
-                <Minus className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-gray-700 dark:text-gray-300">{overallStats.notStarted}</div>
-                <div className="text-sm text-gray-600 dark:text-gray-400">Not Started</div>
+              <div className="flex items-center gap-1">
+                <Minus className="h-3.5 w-3.5 text-gray-500" />
+                <span className="text-gray-600 dark:text-gray-400 font-medium">{overallStats.notStarted} Not Started</span>
               </div>
             </div>
           </div>
@@ -568,12 +602,12 @@ export function AssessmentControlsTable({
                       <table className="w-full table-fixed">
                         <thead className="bg-muted/50">
                           <tr>
-                            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[160px]">Control ID</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[140px]">Control ID</th>
                             <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Title</th>
-                            <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[80px]" title="SPRS Point Value">Points</th>
-                            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider hidden lg:table-cell w-[120px]">Evidence</th>
-                            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[100px]">Status</th>
-                            <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[100px]">Actions</th>
+                            <th className="text-center px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[70px]" title="SPRS Point Value">Points</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[100px]">OSC Status</th>
+                            <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[130px]">C3PAO Assessment</th>
+                            <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[80px]">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
@@ -584,11 +618,13 @@ export function AssessmentControlsTable({
                             const objectivesAssessed = objectives.filter(
                               obj => obj.statuses?.[0]?.status && obj.statuses[0].status !== 'NOT_ASSESSED'
                             ).length
+                            const objMet = objectives.filter(obj => obj.statuses?.[0]?.status === 'MET').length
+                            const objNotMet = objectives.filter(obj => obj.statuses?.[0]?.status === 'NOT_MET').length
 
                             return (
                               <React.Fragment key={rs.id}>
                                 <tr className="hover:bg-muted/50 transition-colors group">
-                                  <td className="px-4 py-3 w-[160px]">
+                                  <td className="px-4 py-3 w-[140px]">
                                     <div className="flex items-center gap-2">
                                       {hasObjectives && (
                                         <Button
@@ -611,39 +647,44 @@ export function AssessmentControlsTable({
                                   </td>
                                   <td className="px-4 py-3">
                                     <div className="text-sm font-medium text-foreground truncate">{rs.requirement.title}</div>
-                                    {hasObjectives && (
-                                      <div className="flex items-center gap-2 mt-1">
-                                        <div className="h-1.5 w-20 bg-muted rounded-full overflow-hidden">
-                                          <div
-                                            className="h-full bg-primary rounded-full transition-all"
-                                            style={{ width: `${(objectivesAssessed / objectives.length) * 100}%` }}
-                                          />
-                                        </div>
-                                        <span className="text-xs text-muted-foreground">
-                                          {objectivesAssessed}/{objectives.length} objectives
-                                        </span>
-                                      </div>
-                                    )}
                                   </td>
-                                  <td className="px-4 py-3 text-center w-[80px]">
+                                  <td className="px-4 py-3 text-center w-[70px]">
                                     {getPointValueDisplay(rs.requirement.requirementId)}
-                                  </td>
-                                  <td className="px-4 py-3 hidden lg:table-cell w-[120px]">
-                                    {rs.evidence.length > 0 ? (
-                                      <div className="flex items-center gap-1.5 text-sm">
-                                        <div className="p-1 rounded bg-primary/10">
-                                          <FileText className="h-3.5 w-3.5 text-primary" />
-                                        </div>
-                                        <span className="text-muted-foreground">{rs.evidence.length} file{rs.evidence.length !== 1 ? 's' : ''}</span>
-                                      </div>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground italic">No evidence</span>
-                                    )}
                                   </td>
                                   <td className="px-4 py-3 w-[100px]">
                                     {getStatusDisplay(rs.status)}
                                   </td>
-                                  <td className="px-4 py-3 text-right w-[100px]">
+                                  <td className="px-4 py-3 w-[130px]">
+                                    {hasObjectives ? (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center gap-1.5">
+                                          <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
+                                            <div
+                                              className="h-full bg-primary rounded-full transition-all"
+                                              style={{ width: `${(objectivesAssessed / objectives.length) * 100}%` }}
+                                            />
+                                          </div>
+                                          <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                            {objectivesAssessed}/{objectives.length}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 text-[10px]">
+                                          {objMet > 0 && (
+                                            <span className="text-green-600 dark:text-green-400 font-medium">{objMet} Met</span>
+                                          )}
+                                          {objNotMet > 0 && (
+                                            <span className="text-red-600 dark:text-red-400 font-medium">{objNotMet} Not Met</span>
+                                          )}
+                                          {objectivesAssessed === 0 && (
+                                            <span className="text-muted-foreground">Not started</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground italic">No objectives</span>
+                                    )}
+                                  </td>
+                                  <td className="px-4 py-3 text-right w-[80px]">
                                     {engagementId ? (
                                       <Button
                                         variant="outline"
@@ -652,13 +693,13 @@ export function AssessmentControlsTable({
                                         className="opacity-0 group-hover:opacity-100 transition-opacity"
                                       >
                                         <Link href={`/engagements/${engagementId}/control/${rs.id}`}>
-                                          <ExternalLink className="h-4 w-4 mr-1.5" />
+                                          <ExternalLink className="h-3.5 w-3.5 mr-1" />
                                           Assess
                                         </Link>
                                       </Button>
                                     ) : (
                                       <Button variant="ghost" size="sm" disabled>
-                                        <ExternalLink className="h-4 w-4 mr-1" />
+                                        <ExternalLink className="h-3.5 w-3.5 mr-1" />
                                         View
                                       </Button>
                                     )}

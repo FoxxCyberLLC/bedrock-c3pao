@@ -18,7 +18,6 @@ import {
   TestTube,
   MessageCircleQuestion,
 } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -61,7 +60,7 @@ interface ObjectiveData {
   questionsForOSC: string | null
 }
 
-interface ObjectiveStatusData {
+interface AssessorStatusData {
   id?: string
   status: ObjectiveComplianceStatus
   assessmentNotes: string | null
@@ -82,7 +81,7 @@ interface ObjectiveStatusData {
 interface ObjectiveAssessmentCardProps {
   engagementId: string
   objective: ObjectiveData
-  customerStatus: ObjectiveStatusData | null
+  assessorStatus: AssessorStatusData | null
   requirementEvidence: Evidence[]
   packageESPs: ESP[]
   onSaved?: () => void
@@ -104,7 +103,7 @@ const inheritedOptions = [
 export function ObjectiveAssessmentCard({
   engagementId,
   objective,
-  customerStatus,
+  assessorStatus,
   requirementEvidence,
   packageESPs,
   onSaved,
@@ -113,31 +112,27 @@ export function ObjectiveAssessmentCard({
   const [isExpanded, setIsExpanded] = useState(false)
 
   // Parse existing artifacts (JSON array of evidence IDs)
-  const existingArtifacts = customerStatus?.artifactsReviewed
-    ? JSON.parse(customerStatus.artifactsReviewed) as string[]
+  const existingArtifacts = assessorStatus?.artifactsReviewed
+    ? JSON.parse(assessorStatus.artifactsReviewed) as string[]
     : []
 
-  // Form state
+  // Form state — initialized from C3PAO assessor's previous assessment
   const [status, setStatus] = useState<ObjectiveComplianceStatus>(
-    customerStatus?.status || 'NOT_ASSESSED'
+    assessorStatus?.status || 'NOT_ASSESSED'
   )
-  const [findings, setFindings] = useState(customerStatus?.assessmentNotes || '')
+  const [findings, setFindings] = useState(assessorStatus?.assessmentNotes || '')
   const [selectedArtifacts, setSelectedArtifacts] = useState<string[]>(existingArtifacts)
-  const [interviewees, setInterviewees] = useState(customerStatus?.interviewees || '')
-  const [examineDescription, setExamineDescription] = useState(customerStatus?.examineDescription || '')
-  const [testDescription, setTestDescription] = useState(customerStatus?.testDescription || '')
-  const [timeToAssess, setTimeToAssess] = useState(customerStatus?.timeToAssessMinutes?.toString() || '')
+  const [interviewees, setInterviewees] = useState(assessorStatus?.interviewees || '')
+  const [examineDescription, setExamineDescription] = useState(assessorStatus?.examineDescription || '')
+  const [testDescription, setTestDescription] = useState(assessorStatus?.testDescription || '')
+  const [timeToAssess, setTimeToAssess] = useState(assessorStatus?.timeToAssessMinutes?.toString() || '')
   const [inheritedStatus, setInheritedStatus] = useState<InheritedStatus | ''>(
-    customerStatus?.inheritedStatus || ''
+    assessorStatus?.inheritedStatus || ''
   )
-  const [dependentESPId, setDependentESPId] = useState(customerStatus?.dependentESPId || '__none__')
+  const [dependentESPId, setDependentESPId] = useState(assessorStatus?.dependentESPId || '__none__')
 
   const statusConfig = statusOptions.find(s => s.value === status)
   const StatusIcon = statusConfig?.icon || Minus
-
-  // Customer's self-assessment (read-only display)
-  const customerSelfStatus = customerStatus?.status
-  const customerStatusConfig = statusOptions.find(s => s.value === customerSelfStatus)
 
   const handleArtifactToggle = (evidenceId: string) => {
     setSelectedArtifacts(prev =>
@@ -154,7 +149,7 @@ export function ObjectiveAssessmentCard({
         objectiveId: objective.id,
         status,
         assessmentNotes: findings || undefined,
-        version: customerStatus?.version,
+        version: assessorStatus?.version,
         // eMASS fields
         artifactsReviewed: selectedArtifacts.length > 0 ? selectedArtifacts : undefined,
         interviewees: interviewees || undefined,
@@ -196,20 +191,18 @@ export function ObjectiveAssessmentCard({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Customer self-assessment badge */}
-              {customerSelfStatus && customerStatusConfig && (
-                <Badge variant="outline" className={`text-xs ${customerStatusConfig.bgColor} ${customerStatusConfig.color}`}>
-                  OSC: {customerStatusConfig.label}
-                </Badge>
-              )}
-
-              {/* Assessor status */}
+              {/* C3PAO assessor status badge */}
               <div className={`flex items-center gap-1 px-2 py-0.5 rounded ${statusConfig?.bgColor}`}>
                 <StatusIcon className={`h-3.5 w-3.5 ${statusConfig?.color}`} />
                 <span className={`text-xs font-medium ${statusConfig?.color}`}>
                   {statusConfig?.label}
                 </span>
               </div>
+              {assessorStatus?.officialAssessorId && (
+                <Badge variant="outline" className="text-[10px] bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-800">
+                  Official
+                </Badge>
+              )}
             </div>
           </div>
         </CollapsibleTrigger>
@@ -233,11 +226,11 @@ export function ObjectiveAssessmentCard({
               </div>
             )}
 
-            {/* Customer's Evidence Description (if available) */}
-            {customerStatus?.evidenceDescription && (
+            {/* Evidence Description (if available) */}
+            {assessorStatus?.evidenceDescription && (
               <div className="bg-blue-500/5 p-3 rounded-lg text-sm">
-                <div className="font-medium mb-1 text-blue-700">Customer Evidence Description:</div>
-                <p className="text-muted-foreground">{customerStatus.evidenceDescription}</p>
+                <div className="font-medium mb-1 text-blue-700 dark:text-blue-300">Evidence Description:</div>
+                <p className="text-muted-foreground">{assessorStatus.evidenceDescription}</p>
               </div>
             )}
 
@@ -401,8 +394,8 @@ export function ObjectiveAssessmentCard({
             {/* Save Button */}
             <div className="flex items-center justify-between pt-2 border-t">
               <div className="text-xs text-muted-foreground">
-                {customerStatus?.officialAssessedAt && (
-                  <>Last assessed: {new Date(customerStatus.officialAssessedAt).toLocaleDateString()}</>
+                {assessorStatus?.officialAssessedAt && (
+                  <>Last assessed: {new Date(assessorStatus.officialAssessedAt).toLocaleDateString()}</>
                 )}
               </div>
               <Button size="sm" onClick={handleSave} disabled={isPending}>

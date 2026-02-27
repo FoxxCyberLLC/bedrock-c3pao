@@ -257,6 +257,11 @@ export interface FindingView {
   editingById: string | null
   editingByName: string | null
   editingAt: string | null
+  reviewStatus: string | null
+  reviewedById: string | null
+  reviewedByName: string | null
+  reviewedAt: string | null
+  reviewNotes: string | null
   createdAt: string
   updatedAt: string
 }
@@ -368,6 +373,14 @@ export async function updateFinding(engagementId: string, findingId: string, inp
   return apiRequest<FindingView>(`/api/c3pao/assessments/${engagementId}/findings/${findingId}`, {
     method: 'PUT',
     body: input,
+    token,
+  })
+}
+
+export async function reviewFinding(engagementId: string, findingId: string, body: { status: string; notes?: string }, token: string): Promise<FindingView> {
+  return apiRequest<FindingView>(`/api/c3pao/assessments/${engagementId}/findings/${findingId}/review`, {
+    method: 'PATCH',
+    body,
     token,
   })
 }
@@ -541,17 +554,46 @@ export async function acknowledgeIntroduction(engagementId: string, token: strin
 
 // ---- Progress ----
 
-export async function fetchDailyProgress(engagementId: string, token: string, date?: string): Promise<Record<string, unknown>> {
+export interface DailyProgress {
+  total: number
+  assessed: number
+  met: number
+  notMet: number
+  notApplicable: number
+  notAssessed: number
+  date?: string
+}
+
+export interface AssessorProgress {
+  assessorId: string
+  assessorName: string
+  assessed: number
+  met: number
+  notMet: number
+  notApplicable: number
+}
+
+export interface DomainProgress {
+  familyCode: string
+  familyName: string
+  total: number
+  assessed: number
+  met: number
+  notMet: number
+  notApplicable: number
+}
+
+export async function fetchDailyProgress(engagementId: string, token: string, date?: string): Promise<DailyProgress> {
   const qs = date ? `?date=${date}` : ''
-  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/progress/daily${qs}`, { token })
+  return apiRequest<DailyProgress>(`/api/c3pao/assessments/${engagementId}/progress/daily${qs}`, { token })
 }
 
-export async function fetchProgressByAssessor(engagementId: string, token: string): Promise<Record<string, unknown>[]> {
-  return apiRequest<Record<string, unknown>[]>(`/api/c3pao/assessments/${engagementId}/progress/by-assessor`, { token })
+export async function fetchProgressByAssessor(engagementId: string, token: string): Promise<AssessorProgress[]> {
+  return apiRequest<AssessorProgress[]>(`/api/c3pao/assessments/${engagementId}/progress/by-assessor`, { token })
 }
 
-export async function fetchProgressByDomain(engagementId: string, token: string): Promise<Record<string, unknown>[]> {
-  return apiRequest<Record<string, unknown>[]>(`/api/c3pao/assessments/${engagementId}/progress/by-domain`, { token })
+export async function fetchProgressByDomain(engagementId: string, token: string): Promise<DomainProgress[]> {
+  return apiRequest<DomainProgress[]>(`/api/c3pao/assessments/${engagementId}/progress/by-domain`, { token })
 }
 
 // ---- Objectives ----

@@ -23,6 +23,8 @@ import {
   ExternalLink,
   Save,
   MessageSquare,
+  User,
+  Wrench,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -33,6 +35,11 @@ import { Label } from '@/components/ui/label'
 import { updateAssessorNotes } from '@/app/actions/c3pao-dashboard'
 import { toast } from 'sonner'
 import { ObjectiveAssessmentCard } from './objective-assessment-card'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 
 interface Evidence {
   id: string
@@ -50,8 +57,9 @@ interface ObjectiveStatus {
   status: 'NOT_ASSESSED' | 'MET' | 'NOT_MET' | 'NOT_APPLICABLE'
   assessmentNotes: string | null
   evidenceDescription: string | null
-  officialAssessorId: string | null
-  officialAssessedAt: Date | null
+  officialAssessment?: boolean
+  officialAssessorId?: string | null
+  officialAssessedAt?: Date | null
   version: number
   // eMASS fields
   artifactsReviewed: string | null
@@ -99,6 +107,8 @@ interface RequirementStatus {
   id: string
   status: string
   implementationNotes: string | null
+  implementationType?: string | null
+  processOwner?: string | null
   assessmentNotes: string | null
   requirement: Requirement
   evidence: Evidence[]
@@ -137,7 +147,7 @@ interface ControlDetailPageProps {
   }
 }
 
-const statusConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string }> = {
+const oscStatusConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string }> = {
   NOT_STARTED: { label: 'Not Started', icon: Minus, color: 'text-gray-500', bgColor: 'bg-gray-500/10' },
   IN_PROGRESS: { label: 'In Progress', icon: Clock, color: 'text-blue-500', bgColor: 'bg-blue-500/10' },
   COMPLIANT: { label: 'Met', icon: CheckCircle2, color: 'text-green-500', bgColor: 'bg-green-500/10' },
@@ -174,15 +184,6 @@ function formatFileSize(bytes: number | null): string {
   return `${size.toFixed(1)} ${units[unitIndex]}`
 }
 
-function getFileIcon(mimeType: string | null): React.ReactNode {
-  if (!mimeType) return <FileText className="h-5 w-5" />
-  if (mimeType.startsWith('image/')) return <FileText className="h-5 w-5 text-blue-500" />
-  if (mimeType === 'application/pdf') return <FileText className="h-5 w-5 text-red-500" />
-  if (mimeType.includes('spreadsheet') || mimeType.includes('excel')) return <FileText className="h-5 w-5 text-green-500" />
-  if (mimeType.includes('document') || mimeType.includes('word')) return <FileText className="h-5 w-5 text-blue-600" />
-  return <FileText className="h-5 w-5" />
-}
-
 export function ControlDetailPage({
   engagementId,
   engagement,
@@ -193,6 +194,7 @@ export function ControlDetailPage({
   const [assessorNotes, setAssessorNotes] = useState(control.assessmentNotes || '')
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesChanged, setNotesChanged] = useState(false)
+  const [reqDetailsOpen, setReqDetailsOpen] = useState(false)
 
   const handleNotesChange = (value: string) => {
     setAssessorNotes(value)
@@ -221,13 +223,24 @@ export function ControlDetailPage({
     }
   }
 
-  const status = statusConfig[control.status] || statusConfig.NOT_STARTED
-  const StatusIcon = status.icon
+  const oscStatus = oscStatusConfig[control.status] || oscStatusConfig.NOT_STARTED
+  const OscStatusIcon = oscStatus.icon
   const objectives = control.requirement.objectives || []
   const assessmentModeActive = engagement.assessmentModeActive
 
+  // C3PAO assessment stats
+  const objectivesAssessed = objectives.filter(
+    obj => obj.statuses?.[0]?.status && obj.statuses[0].status !== 'NOT_ASSESSED'
+  ).length
+  const objectivesMet = objectives.filter(
+    obj => obj.statuses?.[0]?.status === 'MET'
+  ).length
+  const objectivesNotMet = objectives.filter(
+    obj => obj.statuses?.[0]?.status === 'NOT_MET'
+  ).length
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Header Navigation */}
       <div className="flex items-center justify-between">
         <Button variant="ghost" asChild>
@@ -307,9 +320,23 @@ export function ControlDetailPage({
             </div>
           </div>
 
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg ${status.bgColor}`}>
-            <StatusIcon className={`h-5 w-5 ${status.color}`} />
-            <span className={`text-lg font-semibold ${status.color}`}>{status.label}</span>
+          {/* Status badges: OSC + C3PAO */}
+          <div className="flex flex-col gap-2 items-end">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${oscStatus.bgColor}`}>
+              <span className="text-xs font-medium text-muted-foreground">OSC:</span>
+              <OscStatusIcon className={`h-4 w-4 ${oscStatus.color}`} />
+              <span className={`text-sm font-semibold ${oscStatus.color}`}>{oscStatus.label}</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/20">
+              <span className="text-xs font-medium text-muted-foreground">C3PAO:</span>
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold text-primary">
+                {objectivesAssessed}/{objectives.length} assessed
+              </span>
+              {objectivesNotMet > 0 && (
+                <Badge variant="destructive" className="text-[10px] px-1 py-0">{objectivesNotMet} Not Met</Badge>
+              )}
+            </div>
           </div>
         </div>
 
@@ -320,7 +347,7 @@ export function ControlDetailPage({
             <div>
               <span className="font-medium text-amber-800 dark:text-amber-200">Assessment Mode Active</span>
               <span className="text-amber-700 dark:text-amber-300 ml-2">
-                - You can update objective statuses as official C3PAO assessments
+                — You can update objective statuses as official C3PAO assessments
               </span>
             </div>
           </div>
@@ -329,67 +356,199 @@ export function ControlDetailPage({
 
       <Separator />
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column - Requirement Info */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Basic Requirement */}
+      {/* Main Content — Two Column Split */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* ═══ LEFT COLUMN: OSC Self-Assessment (read-only) ═══ */}
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-blue-600" />
+            OSC Self-Assessment
+            <Badge variant="outline" className="text-xs font-normal">Read-Only</Badge>
+          </h2>
+
+          {/* OSC Status + Metadata */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <ScrollText className="h-5 w-5" />
-                Basic Security Requirement
-              </CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Organization Status</CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                {control.requirement.basicRequirement}
-              </p>
+            <CardContent className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${oscStatus.bgColor}`}>
+                  <OscStatusIcon className={`h-5 w-5 ${oscStatus.color}`} />
+                  <span className={`font-semibold ${oscStatus.color}`}>{oscStatus.label}</span>
+                </div>
+              </div>
+
+              {(control.implementationType || control.processOwner) && (
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
+                  {control.implementationType && (
+                    <div>
+                      <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-1">
+                        <Wrench className="h-3 w-3" />
+                        Implementation Type
+                      </div>
+                      <p className="text-sm">{control.implementationType}</p>
+                    </div>
+                  )}
+                  {control.processOwner && (
+                    <div>
+                      <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-1">
+                        <User className="h-3 w-3" />
+                        Process Owner
+                      </div>
+                      <p className="text-sm">{control.processOwner}</p>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-          {/* Derived Requirement */}
-          {control.requirement.derivedRequirement && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Derived Security Requirement</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                  {control.requirement.derivedRequirement}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          {/* Implementation Notes */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <StickyNote className="h-4 w-4" />
+                Implementation Notes
+              </CardTitle>
+              <CardDescription>How the organization implements this control</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {control.implementationNotes ? (
+                <div className="bg-muted/50 p-4 rounded-lg">
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                    {control.implementationNotes}
+                  </p>
+                </div>
+              ) : (
+                <div className="text-center py-6 border border-dashed rounded-lg">
+                  <StickyNote className="mx-auto h-8 w-8 text-muted-foreground/50" />
+                  <p className="mt-2 text-sm text-muted-foreground">No implementation notes provided</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          {/* Discussion */}
-          {control.requirement.discussion && (
+          {/* Evidence */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-4 w-4" />
+                Evidence ({control.evidence.length})
+              </CardTitle>
+              <CardDescription>Supporting documentation for this control</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {control.evidence.length > 0 ? (
+                <div className="space-y-3">
+                  {control.evidence.map((ev) => (
+                    <div key={ev.id} className="p-3 rounded-lg border bg-card">
+                      <div className="flex items-start gap-3">
+                        <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm truncate">{ev.fileName}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            {formatFileSize(ev.fileSize)} • {format(new Date(ev.createdAt), 'MMM d, yyyy')}
+                          </div>
+                          {ev.description && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{ev.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-2">
+                        <Button variant="outline" size="sm" className="w-full" disabled>
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          View
+                        </Button>
+                        <Button variant="outline" size="sm" className="w-full" disabled>
+                          <Download className="h-3 w-3 mr-1" />
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 border border-dashed rounded-lg">
+                  <FileText className="mx-auto h-8 w-8 text-muted-foreground/50" />
+                  <p className="mt-2 text-sm text-muted-foreground">No evidence linked to this control</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Requirement Details (collapsible reference) */}
+          <Collapsible open={reqDetailsOpen} onOpenChange={setReqDetailsOpen}>
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Discussion</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground whitespace-pre-wrap leading-relaxed">
-                  {control.requirement.discussion}
-                </p>
-              </CardContent>
+              <CollapsibleTrigger asChild>
+                <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors pb-3">
+                  <CardTitle className="flex items-center justify-between text-base">
+                    <span className="flex items-center gap-2">
+                      <ScrollText className="h-4 w-4" />
+                      Requirement Details
+                    </span>
+                    {reqDetailsOpen ? (
+                      <ChevronLeft className="h-4 w-4 text-muted-foreground rotate-[-90deg]" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </CardTitle>
+                  <CardDescription>NIST SP 800-171 requirement text</CardDescription>
+                </CardHeader>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <CardContent className="space-y-4 pt-0">
+                  <div>
+                    <h4 className="text-sm font-medium mb-2">Basic Security Requirement</h4>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                      {control.requirement.basicRequirement}
+                    </p>
+                  </div>
+                  {control.requirement.derivedRequirement && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Derived Security Requirement</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                        {control.requirement.derivedRequirement}
+                      </p>
+                    </div>
+                  )}
+                  {control.requirement.discussion && (
+                    <div>
+                      <h4 className="text-sm font-medium mb-2">Discussion</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+                        {control.requirement.discussion}
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </CollapsibleContent>
             </Card>
-          )}
+          </Collapsible>
+        </div>
+
+        {/* ═══ RIGHT COLUMN: C3PAO Assessment (editable) ═══ */}
+        <div className="space-y-6">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Shield className="h-5 w-5 text-amber-600" />
+            C3PAO Assessment
+          </h2>
 
           {/* Assessment Objectives */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center justify-between text-base">
                 <span className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
+                  <Shield className="h-4 w-4" />
                   Assessment Objectives ({objectives.length})
                 </span>
                 <span className="text-sm font-normal text-muted-foreground">
-                  {objectives.filter(obj => obj.statuses?.[0]?.status && obj.statuses[0].status !== 'NOT_ASSESSED').length}/{objectives.length} assessed
+                  {objectivesAssessed}/{objectives.length} assessed
+                  {objectivesMet > 0 && <span className="text-green-600 ml-2">{objectivesMet} Met</span>}
+                  {objectivesNotMet > 0 && <span className="text-red-600 ml-2">{objectivesNotMet} Not Met</span>}
                 </span>
               </CardTitle>
               <CardDescription>
-                Per NIST SP 800-171A, each objective must be individually assessed. Use the forms below to capture all eMASS-required data.
+                Per NIST SP 800-171A, each objective must be individually assessed.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -407,13 +566,13 @@ export function ControlDetailPage({
                         description: objective.description,
                         questionsForOSC: objective.questionsForOSC,
                       }}
-                      customerStatus={objStatus ? {
+                      assessorStatus={objStatus ? {
                         id: objStatus.id,
                         status: objStatus.status,
                         assessmentNotes: objStatus.assessmentNotes,
                         evidenceDescription: objStatus.evidenceDescription,
-                        officialAssessorId: objStatus.officialAssessorId,
-                        officialAssessedAt: objStatus.officialAssessedAt,
+                        officialAssessorId: objStatus.officialAssessorId ?? null,
+                        officialAssessedAt: objStatus.officialAssessedAt ?? null,
                         version: objStatus.version || 0,
                         artifactsReviewed: objStatus.artifactsReviewed,
                         interviewees: objStatus.interviewees,
@@ -421,7 +580,7 @@ export function ControlDetailPage({
                         testDescription: objStatus.testDescription,
                         timeToAssessMinutes: objStatus.timeToAssessMinutes,
                         inheritedStatus: objStatus.inheritedStatus,
-                        dependentESPId: objStatus.dependentESPId,
+                        dependentESPId: objStatus.dependentESPId ?? null,
                       } : null}
                       requirementEvidence={control.evidence}
                       packageESPs={engagement.atoPackage?.externalServiceProviders || []}
@@ -437,49 +596,17 @@ export function ControlDetailPage({
               )}
             </CardContent>
           </Card>
-        </div>
 
-        {/* Right Column - Status & Evidence */}
-        <div className="space-y-6">
-          {/* Implementation Notes */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <StickyNote className="h-5 w-5" />
-                Implementation Notes
-              </CardTitle>
-              <CardDescription>
-                How the organization implements this control
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {control.implementationNotes ? (
-                <div className="bg-muted/50 p-4 rounded-lg">
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                    {control.implementationNotes}
-                  </p>
-                </div>
-              ) : (
-                <div className="text-center py-6 border border-dashed rounded-lg">
-                  <StickyNote className="mx-auto h-8 w-8 text-muted-foreground/50" />
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    No implementation notes provided
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Assessor Notes - Editable for C3PAO */}
+          {/* Assessor Findings */}
           <Card className={assessmentModeActive ? 'border-amber-300 dark:border-amber-700' : ''}>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <MessageSquare className="h-5 w-5 text-amber-600" />
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <MessageSquare className="h-4 w-4 text-amber-600" />
                 Assessor Findings
               </CardTitle>
               <CardDescription>
                 {assessmentModeActive
-                  ? 'Write your assessment findings - these will be visible to the customer'
+                  ? 'Write your assessment findings — these will be visible to the customer'
                   : 'Official C3PAO assessment comments'}
               </CardDescription>
             </CardHeader>
@@ -527,63 +654,7 @@ export function ControlDetailPage({
               ) : (
                 <div className="text-center py-6 border border-dashed rounded-lg">
                   <MessageSquare className="mx-auto h-8 w-8 text-muted-foreground/50" />
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    No assessor findings recorded yet
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Evidence */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <FileText className="h-5 w-5" />
-                Evidence ({control.evidence.length})
-              </CardTitle>
-              <CardDescription>
-                Supporting documentation for this control
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {control.evidence.length > 0 ? (
-                <div className="space-y-3">
-                  {control.evidence.map((ev) => (
-                    <div key={ev.id} className="p-3 rounded-lg border bg-card">
-                      <div className="flex items-start gap-3">
-                        {getFileIcon(ev.mimeType)}
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{ev.fileName}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {formatFileSize(ev.fileSize)} • {format(new Date(ev.createdAt), 'MMM d, yyyy')}
-                          </div>
-                          {ev.description && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                              {ev.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <Button variant="outline" size="sm" className="w-full" disabled>
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                          View
-                        </Button>
-                        <Button variant="outline" size="sm" className="w-full" disabled>
-                          <Download className="h-3 w-3 mr-1" />
-                          Download
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 border border-dashed rounded-lg">
-                  <FileText className="mx-auto h-10 w-10 text-muted-foreground/50" />
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    No evidence linked to this control
-                  </p>
+                  <p className="mt-2 text-sm text-muted-foreground">No assessor findings recorded yet</p>
                 </div>
               )}
             </CardContent>

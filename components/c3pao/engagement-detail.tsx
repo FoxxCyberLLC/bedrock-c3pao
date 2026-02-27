@@ -24,6 +24,9 @@ import {
   FileJson,
   StopCircle,
   Ban,
+  ClipboardList,
+  BarChart3,
+  CheckSquare,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -56,6 +59,9 @@ import { AssessmentModeIndicator } from './assessment-mode-indicator'
 import { EngagementTeamCard } from './engagement-team-card'
 import { ConflictDialog } from './conflict-dialog'
 import { STIGViewer } from './stig-viewer'
+import { AssessmentPlanningBoard } from './assessment-planning-board'
+import { AssessmentProgressTracker } from './assessment-progress-tracker'
+import { FindingsReviewQueue } from './findings-review-queue'
 import { CheckinCard } from './checkin-card'
 import { getEngagementTeam } from '@/app/actions/c3pao-team-assignment'
 
@@ -1090,11 +1096,23 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
 
       {/* Tabs */}
       <Tabs defaultValue="controls" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="flex w-full flex-wrap h-auto gap-1">
           <TabsTrigger value="controls" className="gap-2">
             <Shield className="h-4 w-4" />
             <span className="hidden sm:inline">Controls</span>
             <Badge variant="secondary" className="ml-1">{controlStats.total}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="planning" className="gap-2">
+            <ClipboardList className="h-4 w-4" />
+            <span className="hidden sm:inline">Planning</span>
+          </TabsTrigger>
+          <TabsTrigger value="progress" className="gap-2">
+            <BarChart3 className="h-4 w-4" />
+            <span className="hidden sm:inline">Progress</span>
+          </TabsTrigger>
+          <TabsTrigger value="review" className="gap-2">
+            <CheckSquare className="h-4 w-4" />
+            <span className="hidden sm:inline">Review</span>
           </TabsTrigger>
           <TabsTrigger value="documents" className="gap-2">
             <FileText className="h-4 w-4" />
@@ -1150,6 +1168,27 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Planning Tab */}
+        <TabsContent value="planning">
+          <AssessmentPlanningBoard
+            engagementId={engagement.id}
+            isLeadAssessor={user.isLeadAssessor}
+          />
+        </TabsContent>
+
+        {/* Progress Tab */}
+        <TabsContent value="progress">
+          <AssessmentProgressTracker engagementId={engagement.id} />
+        </TabsContent>
+
+        {/* Review Tab */}
+        <TabsContent value="review">
+          <FindingsReviewQueue
+            engagementId={engagement.id}
+            isLeadAssessor={user.isLeadAssessor}
+          />
         </TabsContent>
 
         {/* Documents Tab */}
