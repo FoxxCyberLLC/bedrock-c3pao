@@ -37,6 +37,7 @@ interface Engagement {
   packageName: string
   organizationName: string
   assessmentType?: string
+  assessmentResult?: string | null
 }
 
 export default function C3PAOEngagementsPage() {
@@ -179,38 +180,71 @@ export default function C3PAOEngagementsPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {filteredEngagements.map((engagement) => (
-                <Link
-                  key={engagement.id}
-                  href={`/engagements/${engagement.id}`}
-                  className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                      {getStatusIcon(engagement.status)}
-                    </div>
-                    <div>
-                      <p className="font-medium">{engagement.packageName || 'Unknown Package'}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {engagement.organizationName || 'Unknown Organization'}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                        <Calendar className="h-3 w-3" />
-                        <span>
-                          {formatDistanceToNow(new Date(engagement.createdAt), { addSuffix: true })}
-                        </span>
+              {filteredEngagements.map((engagement) => {
+                const isTerminal = engagement.status === 'COMPLETED' || engagement.status === 'CANCELLED'
+                const rowContent = (
+                  <>
+                    <div className="flex items-center gap-4">
+                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
+                        {getStatusIcon(engagement.status)}
+                      </div>
+                      <div>
+                        <p className="font-medium">{engagement.packageName || 'Unknown Package'}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {engagement.organizationName || 'Unknown Organization'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          <span>
+                            {formatDistanceToNow(new Date(engagement.createdAt), { addSuffix: true })}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="hidden sm:inline-flex">
-                      {engagement.targetLevel.replace('_', ' ')}
-                    </Badge>
-                    {getStatusBadge(engagement.status)}
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </Link>
-              ))}
+                    <div className="flex items-center gap-3">
+                      <Badge variant="outline" className="hidden sm:inline-flex">
+                        {engagement.targetLevel.replace('_', ' ')}
+                      </Badge>
+                      {getStatusBadge(engagement.status)}
+                      {isTerminal && engagement.assessmentResult ? (
+                        <Badge
+                          variant="outline"
+                          className={
+                            engagement.assessmentResult === 'PASSED'
+                              ? 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20'
+                              : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20'
+                          }
+                        >
+                          {engagement.assessmentResult}
+                        </Badge>
+                      ) : !isTerminal ? (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      ) : null}
+                    </div>
+                  </>
+                )
+
+                if (isTerminal) {
+                  return (
+                    <div
+                      key={engagement.id}
+                      className="flex items-center justify-between p-4 rounded-lg border opacity-75 cursor-default"
+                    >
+                      {rowContent}
+                    </div>
+                  )
+                }
+
+                return (
+                  <Link
+                    key={engagement.id}
+                    href={`/engagements/${engagement.id}`}
+                    className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
+                  >
+                    {rowContent}
+                  </Link>
+                )
+              })}
             </div>
           )}
         </CardContent>

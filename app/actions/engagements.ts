@@ -27,6 +27,24 @@ async function getToken(): Promise<string> {
   return session.apiToken
 }
 
+// checkEngagementStatus fetches only the status and assessmentResult for an engagement.
+// Used by the layout to determine if a redirect is needed before rendering any sub-page.
+// Returns null if the engagement is not found or the request fails.
+export async function checkEngagementStatus(
+  id: string,
+): Promise<{ status: string; assessmentResult: string | null } | null> {
+  try {
+    const token = await getToken()
+    const detail = await fetchEngagementDetail(id, token)
+    return {
+      status: (detail.status as string) || '',
+      assessmentResult: (detail.assessmentResult as string) || null,
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function getC3PAOEngagements(): Promise<{ success: boolean; data?: EngagementSummary[]; error?: string }> {
   try {
     const token = await getToken()
@@ -42,6 +60,16 @@ export async function getEngagementById(id: string): Promise<{ success: boolean;
   try {
     const token = await getToken()
     const detail = await fetchEngagementDetail(id, token) as Record<string, any>
+
+    // Short-circuit for COMPLETED: the layout will redirect before this page renders,
+    // but if called directly return minimal data to avoid 5 failing parallel fetches.
+    if (detail.status === 'COMPLETED') {
+      return {
+        success: true,
+        data: { id: detail.id, status: 'COMPLETED', assessmentResult: detail.assessmentResult || null },
+        accessLevel: detail.accessLevel as string,
+      }
+    }
 
     // Fetch controls, objectives, evidence, POAMs, and SSP in parallel
     const [controls, objectives, evidence, poams, ssp] = await Promise.allSettled([

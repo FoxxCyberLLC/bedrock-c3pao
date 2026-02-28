@@ -123,19 +123,53 @@ export default async function DashboardPage() {
               <p className="text-muted-foreground text-sm">No engagements yet.</p>
             ) : (
               <div className="space-y-3">
-                {engagements.slice(0, 5).map((eng) => (
-                  <Link
-                    key={eng.id}
-                    href={`/engagements/${eng.id}`}
-                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                  >
-                    <div>
-                      <p className="font-medium text-sm">{eng.packageName}</p>
-                      <p className="text-xs text-muted-foreground">{eng.organizationName || 'Customer'}</p>
-                    </div>
-                    <Badge variant="outline">{eng.status.replace(/_/g, ' ')}</Badge>
-                  </Link>
-                ))}
+                {engagements.slice(0, 5).map((eng) => {
+                  const isTerminal = eng.status === 'COMPLETED' || eng.status === 'CANCELLED'
+                  const inner = (
+                    <>
+                      <div>
+                        <p className="font-medium text-sm">{eng.packageName}</p>
+                        <p className="text-xs text-muted-foreground">{eng.organizationName || 'Customer'}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{eng.status.replace(/_/g, ' ')}</Badge>
+                        {isTerminal && eng.assessmentResult && (
+                          <Badge
+                            variant="outline"
+                            className={
+                              eng.assessmentResult === 'PASSED'
+                                ? 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20'
+                                : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20'
+                            }
+                          >
+                            {eng.assessmentResult}
+                          </Badge>
+                        )}
+                      </div>
+                    </>
+                  )
+
+                  if (isTerminal) {
+                    return (
+                      <div
+                        key={eng.id}
+                        className="flex items-center justify-between p-3 rounded-lg border opacity-75 cursor-default"
+                      >
+                        {inner}
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <Link
+                      key={eng.id}
+                      href={`/engagements/${eng.id}`}
+                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                    >
+                      {inner}
+                    </Link>
+                  )
+                })}
               </div>
             )}
           </CardContent>

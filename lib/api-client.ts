@@ -288,10 +288,42 @@ export interface ReportData {
   }
 }
 
+export interface EMassExportFinding {
+  controlId: string
+  familyCode: string
+  title: string
+  determination: string
+  methodInterview: boolean
+  methodExamine: boolean
+  methodTest: boolean
+  finding: string | null
+  objectiveEvidence: string | null
+  deficiency: string | null
+  recommendation: string | null
+  riskLevel: string | null
+}
+
+export interface EMassExportPOAM {
+  title: string
+  description: string
+  riskLevel: string
+  status: string
+  remediationPlan: string
+  scheduledCompletionDate: string
+}
+
+// EMassExportData matches the Go backend AssessmentExport struct exactly.
 export interface EMassExportData {
-  metadata: Record<string, unknown>
-  controls: Record<string, unknown>[]
-  findings: Record<string, unknown>[]
+  engagementId: string
+  exportDate: string
+  cmmcLevel: string
+  organization: string
+  assessorOrganization: string
+  systemName: string | null
+  assessmentStartDate: string | null
+  assessmentEndDate: string | null
+  findings: EMassExportFinding[]
+  poams: EMassExportPOAM[]
 }
 
 // ---- Fetch Functions ----

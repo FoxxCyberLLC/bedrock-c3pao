@@ -698,8 +698,9 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </DialogContent>
             </Dialog>
           )}
-          {/* Export to eMASS button - visible during IN_PROGRESS, PENDING_APPROVAL, or COMPLETED */}
-          {(engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL' || engagement.status === 'COMPLETED') && (
+          {/* Export to eMASS button - visible during IN_PROGRESS or PENDING_APPROVAL only.
+              COMPLETED engagements are locked out at the layout level before this renders. */}
+          {(engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL') && (
             <Link href={`/engagements/${engagement.id}/emass-export`}>
               <Button variant="outline">
                 <Download className="h-4 w-4 mr-2" />
@@ -774,7 +775,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
             </Dialog>
           )}
           {/* Write Report button - only for MOCK assessments */}
-          {engagement.assessmentType === 'MOCK' && (engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL' || engagement.status === 'COMPLETED') && user.isLeadAssessor && (
+          {engagement.assessmentType === 'MOCK' && (engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL') && user.isLeadAssessor && (
             <Link href={`/engagements/${engagement.id}/report`}>
               <Button variant="outline">
                 <FileSignature className="h-4 w-4 mr-2" />

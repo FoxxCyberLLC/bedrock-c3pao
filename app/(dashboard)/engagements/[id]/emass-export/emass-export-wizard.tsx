@@ -46,6 +46,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { toast } from 'sonner'
 import type { EMASSWizardData } from '@/app/actions/cmmc-export'
 
 interface EMASSExportWizardProps {
@@ -107,13 +108,14 @@ export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'cmmc_export.xlsx'
+      a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'cmmc_export.json'
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
       a.remove()
     } catch (error) {
       console.error('Export failed:', error)
+      toast.error('Export failed. Please try again.')
     } finally {
       setIsExporting(false)
     }
