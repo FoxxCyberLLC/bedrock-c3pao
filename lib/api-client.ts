@@ -192,6 +192,7 @@ export interface EvidenceView {
   uploadedBy: string | null
   uploadedAt: string
   expirationDate: string | null
+  requirementIds: string[]
 }
 
 export interface SSPView {
@@ -652,6 +653,7 @@ export interface ObjectiveView {
   implementationStatement: string | null
   responsibilityDescription: string | null
   assessorQuestionsForOSC: string | null
+  nistQuestionsForOSC: string | null
   officialAssessment: boolean
   officialAssessorId: string | null
   officialAssessedAt: string | null

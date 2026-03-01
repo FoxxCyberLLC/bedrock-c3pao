@@ -57,6 +57,7 @@ interface ObjectiveStatus {
   status: 'NOT_ASSESSED' | 'MET' | 'NOT_MET' | 'NOT_APPLICABLE'
   assessmentNotes: string | null
   evidenceDescription: string | null
+  implementationStatement: string | null
   officialAssessment?: boolean
   officialAssessorId?: string | null
   officialAssessedAt?: Date | null
@@ -404,30 +405,82 @@ export function ControlDetailPage({
             </CardContent>
           </Card>
 
-          {/* Implementation Notes */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <StickyNote className="h-4 w-4" />
-                Implementation Notes
-              </CardTitle>
-              <CardDescription>How the organization implements this control</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {control.implementationNotes ? (
+          {/* Per-Objective Self-Assessment */}
+          {objectives.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <StickyNote className="h-4 w-4" />
+                  Per-Objective Self-Assessment
+                </CardTitle>
+                <CardDescription>OSC-provided data for each assessment objective</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {objectives.map((obj) => {
+                  const objStatus = obj.statuses?.[0]
+                  const hasData = objStatus && (
+                    objStatus.implementationStatement ||
+                    objStatus.evidenceDescription ||
+                    objStatus.assessmentNotes
+                  )
+                  return (
+                    <div key={obj.id} className="border rounded-lg p-3 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded shrink-0">
+                          {obj.objectiveReference}
+                        </code>
+                        <p className="text-xs text-muted-foreground leading-tight">{obj.description}</p>
+                      </div>
+                      {hasData ? (
+                        <div className="space-y-2 pl-1">
+                          {objStatus.implementationStatement && (
+                            <div>
+                              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Implementation Statement</p>
+                              <p className="text-sm whitespace-pre-wrap leading-relaxed">{objStatus.implementationStatement}</p>
+                            </div>
+                          )}
+                          {objStatus.evidenceDescription && (
+                            <div>
+                              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Evidence Description</p>
+                              <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{objStatus.evidenceDescription}</p>
+                            </div>
+                          )}
+                          {objStatus.assessmentNotes && (
+                            <div>
+                              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">OSC Notes</p>
+                              <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{objStatus.assessmentNotes}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic pl-1">No self-assessment data provided</p>
+                      )}
+                    </div>
+                  )
+                })}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Implementation Notes (control-level) */}
+          {control.implementationNotes && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <StickyNote className="h-4 w-4" />
+                  Implementation Notes
+                </CardTitle>
+                <CardDescription>How the organization implements this control</CardDescription>
+              </CardHeader>
+              <CardContent>
                 <div className="bg-muted/50 p-4 rounded-lg">
                   <p className="text-sm whitespace-pre-wrap leading-relaxed">
                     {control.implementationNotes}
                   </p>
                 </div>
-              ) : (
-                <div className="text-center py-6 border border-dashed rounded-lg">
-                  <StickyNote className="mx-auto h-8 w-8 text-muted-foreground/50" />
-                  <p className="mt-2 text-sm text-muted-foreground">No implementation notes provided</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Evidence */}
           <Card>

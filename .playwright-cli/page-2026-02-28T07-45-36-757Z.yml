@@ -1,0 +1,23 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]:
+      - img [ref=e6]
+      - generic [ref=e10]: C3PAO Portal
+      - generic [ref=e11]: Sign in to access your assessment engagements
+    - generic [ref=e12]:
+      - generic [ref=e13]:
+        - generic [ref=e14]:
+          - generic [ref=e15]: Email
+          - textbox "Email" [ref=e16]:
+            - /placeholder: assessor@c3pao.com
+        - generic [ref=e17]:
+          - generic [ref=e18]:
+            - generic [ref=e19]: Password
+            - link "Forgot password?" [ref=e20] [cursor=pointer]:
+              - /url: /forgot-password?type=C3PAO_USER
+          - textbox "Password" [ref=e21]:
+            - /placeholder: ••••••••
+        - button "Sign In" [ref=e22]
+      - paragraph [ref=e24]: This portal is for certified C3PAO assessors only. Access is logged and monitored.
+  - region "Notifications alt+T"
+  - alert [ref=e25]

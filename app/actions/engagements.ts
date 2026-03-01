@@ -88,7 +88,7 @@ export async function getEngagementById(id: string): Promise<{ success: boolean;
 
     // Group objectives by requirementId and build nested control shapes
     const objMap = groupObjectivesByRequirement(objectivesData as ObjectiveView[])
-    const requirementStatuses = (controlsData as ControlView[]).map(c => shapeControl(c, objMap))
+    const requirementStatuses = (controlsData as ControlView[]).map(c => shapeControl(c, objMap, evidenceData as EvidenceView[]))
 
     // Shape into the nested structure EngagementDetail component expects
     const shaped = {
@@ -239,8 +239,11 @@ function groupObjectivesByRequirement(objectives: ObjectiveView[]): Map<string, 
 }
 
 // Helper: shape a flat ControlView into the nested RequirementStatus the UI expects
-function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[]>) {
+function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[]>, evidenceData?: EvidenceView[]) {
   const objs = objectivesMap?.get(c.requirementId) || []
+  const controlEvidence = (evidenceData || []).filter(ev =>
+    (ev.requirementIds || []).includes(c.requirementId)
+  )
   return {
     id: c.id,
     status: c.status || 'NOT_STARTED',
@@ -265,13 +268,15 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
         objectiveId: o.objectiveId,
         objectiveReference: o.objectiveReference,
         description: o.description,
-        questionsForOSC: o.assessorQuestionsForOSC,
+        questionsForOSC: o.nistQuestionsForOSC || null,
+        assessorQuestionsForOSC: o.assessorQuestionsForOSC || null,
         sortOrder: 0,
         statuses: [{
           id: o.id,
           status: o.status || 'NOT_ASSESSED',
           assessmentNotes: o.assessmentNotes,
           evidenceDescription: o.evidenceDescription,
+          implementationStatement: o.implementationStatement,
           officialAssessment: o.officialAssessment,
           officialAssessorId: o.officialAssessorId,
           officialAssessedAt: o.officialAssessedAt,
@@ -285,7 +290,7 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
         }],
       })),
     },
-    evidence: [],
+    evidence: controlEvidence,
   }
 }
 
