@@ -1,6 +1,7 @@
 'use client'
 
 import { format } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   CheckCircle2,
   XCircle,
@@ -304,7 +305,7 @@ export function ControlDetailDialog({
                             <div>
                               <div className="font-medium text-sm">{ev.fileName}</div>
                               <div className="text-xs text-muted-foreground mt-0.5">
-                                {formatFileSize(ev.fileSize)} • Uploaded {format(new Date(ev.createdAt), 'MMM d, yyyy')}
+                                {formatFileSize(ev.fileSize)} • Uploaded {safeDate(ev.createdAt) ? format(safeDate(ev.createdAt)!, 'MMM d, yyyy') : '--'}
                               </div>
                               {ev.description && (
                                 <p className="text-sm text-muted-foreground mt-2">

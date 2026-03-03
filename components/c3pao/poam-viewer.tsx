@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { format, differenceInDays, isPast } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   AlertTriangle,
   Clock,
@@ -84,7 +85,7 @@ export function POAMViewer({ poams }: POAMViewerProps) {
     open: poams.filter(p => p.status === 'OPEN').length,
     inProgress: poams.filter(p => p.status === 'IN_PROGRESS').length,
     closed: poams.filter(p => p.status === 'CLOSED').length,
-    overdue: poams.filter(p => p.status === 'OVERDUE' || (p.status !== 'CLOSED' && isPast(new Date(p.deadline)))).length,
+    overdue: poams.filter(p => p.status === 'OVERDUE' || (p.status !== 'CLOSED' && safeDate(p.deadline) && isPast(safeDate(p.deadline)!))).length,
     critical: poams.filter(p => p.riskLevel === 'CRITICAL').length,
     high: poams.filter(p => p.riskLevel === 'HIGH').length,
   }
@@ -112,7 +113,7 @@ export function POAMViewer({ poams }: POAMViewerProps) {
 
   const getStatusDisplay = (status: string, deadline: Date) => {
     // Check if overdue
-    const isOverdue = status !== 'CLOSED' && isPast(new Date(deadline))
+    const isOverdue = status !== 'CLOSED' && safeDate(deadline) != null && isPast(safeDate(deadline)!)
     const config = isOverdue ? statusConfig.OVERDUE : (statusConfig[status] || statusConfig.OPEN)
     const Icon = config.icon
 
@@ -125,7 +126,9 @@ export function POAMViewer({ poams }: POAMViewerProps) {
   }
 
   const getDaysRemaining = (deadline: Date) => {
-    const days = differenceInDays(new Date(deadline), new Date())
+    const d = safeDate(deadline)
+    if (!d) return { text: 'No deadline', color: 'text-muted-foreground' }
+    const days = differenceInDays(d, new Date())
     if (days < 0) return { text: `${Math.abs(days)} days overdue`, color: 'text-red-600' }
     if (days === 0) return { text: 'Due today', color: 'text-orange-600' }
     if (days <= 7) return { text: `${days} days remaining`, color: 'text-yellow-600' }
@@ -206,7 +209,7 @@ export function POAMViewer({ poams }: POAMViewerProps) {
               open={isExpanded}
               onOpenChange={() => togglePoam(poam.id)}
             >
-              <Card className={poam.status === 'OVERDUE' || (poam.status !== 'CLOSED' && isPast(new Date(poam.deadline))) ? 'border-red-500/50' : ''}>
+              <Card className={poam.status === 'OVERDUE' || (poam.status !== 'CLOSED' && safeDate(poam.deadline) && isPast(safeDate(poam.deadline)!)) ? 'border-red-500/50' : ''}>
                 <CollapsibleTrigger asChild>
                   <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
                     <div className="flex items-start justify-between">
@@ -236,7 +239,7 @@ export function POAMViewer({ poams }: POAMViewerProps) {
                           {daysInfo.text}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          Due: {format(new Date(poam.scheduledCompletionDate), 'MMM d, yyyy')}
+                          Due: {safeDate(poam.scheduledCompletionDate) ? format(safeDate(poam.scheduledCompletionDate)!, 'MMM d, yyyy') : '—'}
                         </div>
                         {poam.milestones.length > 0 && (
                           <div className="flex items-center gap-2 justify-end">
@@ -254,7 +257,7 @@ export function POAMViewer({ poams }: POAMViewerProps) {
                 <CollapsibleContent>
                   <CardContent className="pt-0 space-y-4">
                     {/* Linked Requirements */}
-                    {poam.requirements.length > 0 && (
+                    {(poam.requirements ?? []).length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-2">
                           <Target className="h-4 w-4 text-muted-foreground" />
@@ -287,7 +290,7 @@ export function POAMViewer({ poams }: POAMViewerProps) {
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <div className="text-xs text-muted-foreground">Created</div>
-                          <div className="font-medium">{format(new Date(poam.createdAt), 'MMM d, yyyy')}</div>
+                          <div className="font-medium">{safeDate(poam.createdAt) ? format(safeDate(poam.createdAt)!, 'MMM d, yyyy') : '—'}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -301,7 +304,7 @@ export function POAMViewer({ poams }: POAMViewerProps) {
                         <Target className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <div className="text-xs text-muted-foreground">Deadline</div>
-                          <div className="font-medium">{format(new Date(poam.deadline), 'MMM d, yyyy')}</div>
+                          <div className="font-medium">{safeDate(poam.deadline) ? format(safeDate(poam.deadline)!, 'MMM d, yyyy') : '—'}</div>
                         </div>
                       </div>
                       {poam.actualCompletionDate && (
@@ -309,7 +312,7 @@ export function POAMViewer({ poams }: POAMViewerProps) {
                           <CheckCircle2 className="h-4 w-4 text-green-500" />
                           <div>
                             <div className="text-xs text-muted-foreground">Completed</div>
-                            <div className="font-medium">{format(new Date(poam.actualCompletionDate), 'MMM d, yyyy')}</div>
+                            <div className="font-medium">{safeDate(poam.actualCompletionDate) ? format(safeDate(poam.actualCompletionDate)!, 'MMM d, yyyy') : '—'}</div>
                           </div>
                         </div>
                       )}
@@ -342,10 +345,10 @@ export function POAMViewer({ poams }: POAMViewerProps) {
                                   {milestone.description}
                                 </p>
                                 <div className="text-xs text-muted-foreground mt-0.5">
-                                  Due: {format(new Date(milestone.dueDate), 'MMM d, yyyy')}
-                                  {milestone.completedDate && (
+                                  Due: {safeDate(milestone.dueDate) ? format(safeDate(milestone.dueDate)!, 'MMM d, yyyy') : '—'}
+                                  {safeDate(milestone.completedDate) && (
                                     <span className="ml-2 text-green-600">
-                                      • Completed {format(new Date(milestone.completedDate), 'MMM d, yyyy')}
+                                      • Completed {format(safeDate(milestone.completedDate)!, 'MMM d, yyyy')}
                                     </span>
                                   )}
                                 </div>

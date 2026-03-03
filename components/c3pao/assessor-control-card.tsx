@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { safeDate } from '@/lib/utils'
 import {
   CheckCircle2,
   XCircle,
@@ -411,10 +412,10 @@ export function AssessorControlCard({
             {/* Save Button */}
             <div className="flex items-center justify-between pt-2 border-t">
               <div className="text-xs text-muted-foreground">
-                {existingFinding?.assessedAt && (
+                {existingFinding?.assessedAt && safeDate(existingFinding.assessedAt) && (
                   <>
                     Last assessed on{' '}
-                    {new Date(existingFinding.assessedAt).toLocaleDateString()}
+                    {safeDate(existingFinding.assessedAt)!.toLocaleDateString()}
                   </>
                 )}
               </div>

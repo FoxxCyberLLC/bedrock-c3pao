@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { safeDate } from '@/lib/utils'
 import {
   CheckCircle2,
   XCircle,
@@ -277,7 +278,7 @@ export function ObjectiveAssessmentCard({
                   <FileText className="h-3.5 w-3.5" />
                   Artifacts Reviewed
                 </Label>
-                <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 border rounded-lg bg-muted/30">
+                <div className="relative grid grid-cols-2 gap-2 max-h-32 overflow-y-auto p-2 border rounded-lg bg-muted/30">
                   {requirementEvidence.map((evidence) => (
                     <div key={evidence.id} className="flex items-center gap-2">
                       <Checkbox
@@ -394,8 +395,8 @@ export function ObjectiveAssessmentCard({
             {/* Save Button */}
             <div className="flex items-center justify-between pt-2 border-t">
               <div className="text-xs text-muted-foreground">
-                {assessorStatus?.officialAssessedAt && (
-                  <>Last assessed: {new Date(assessorStatus.officialAssessedAt).toLocaleDateString()}</>
+                {assessorStatus?.officialAssessedAt && safeDate(assessorStatus.officialAssessedAt) && (
+                  <>Last assessed: {safeDate(assessorStatus.officialAssessedAt)!.toLocaleDateString()}</>
                 )}
               </div>
               <Button size="sm" onClick={handleSave} disabled={isPending}>

@@ -3,7 +3,7 @@
 import { requireAuth } from '@/lib/auth'
 import { saveAssessmentFinding as _save, getAssessmentFindings as _getFindings, updateAssessorNotes as _updateNotes } from './assessment'
 import {
-  fetchReport, fetchAssessmentReport as apiFetchAssessmentReport, fetchStats, fetchSPRS,
+  fetchReport, fetchAssessmentReport as apiFetchAssessmentReport, fetchStats,
   saveAssessmentReport as apiSaveReport, updateReportStatus as apiUpdateReportStatus,
   fetchDailyProgress, fetchProgressByAssessor, fetchProgressByDomain,
   reviewFinding as apiReviewFinding, fetchPlanning, updatePlanning as apiUpdatePlanning,
@@ -34,18 +34,6 @@ export async function getAssessmentStats(engagementId: string) {
     return { success: true, data: { ...totals, assessed } }
   } catch (error) {
     return { success: false, data: null, error: error instanceof Error ? error.message : 'Failed to fetch assessment stats' }
-  }
-}
-
-export async function calculateSPRSScore(engagementId: string) {
-  try {
-    const session = await requireAuth()
-    if (!session) return { score: 0, maxScore: 110 }
-    const token = session.apiToken
-    const data = await fetchSPRS(engagementId, token)
-    return { score: data.score, maxScore: data.maxScore }
-  } catch {
-    return { score: 0, maxScore: 110 }
   }
 }
 

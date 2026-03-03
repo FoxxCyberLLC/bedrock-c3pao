@@ -341,6 +341,16 @@ export async function fetchEvidence(engagementId: string, token: string): Promis
   return apiRequest<EvidenceView[]>(`/api/c3pao/assessments/${engagementId}/evidence`, { token })
 }
 
+export interface EvidenceDownloadURLResponse {
+  downloadUrl: string
+  fileName: string
+  expiresAt: string
+}
+
+export async function fetchEvidenceDownloadURL(engagementId: string, evidenceId: string, token: string): Promise<EvidenceDownloadURLResponse> {
+  return apiRequest<EvidenceDownloadURLResponse>(`/api/c3pao/assessments/${engagementId}/evidence/${evidenceId}/download-url`, { token })
+}
+
 export async function fetchSSP(engagementId: string, token: string): Promise<SSPView> {
   return apiRequest<SSPView>(`/api/c3pao/assessments/${engagementId}/ssp`, { token })
 }
@@ -663,6 +673,14 @@ export interface ObjectiveView {
   editingById: string | null
   editingByName: string | null
   editingAt: string | null
+  // OSC self-assessment context
+  oscStatus: string | null
+  oscImplementationStatement: string | null
+  oscEvidenceDescription: string | null
+  oscAssessmentNotes: string | null
+  oscPolicyReference: string | null
+  oscProcedureReference: string | null
+  oscResponsibilityDescription: string | null
   createdAt: string
   updatedAt: string
 }
@@ -821,7 +839,7 @@ export async function updateReportStatus(engagementId: string, status: string, t
   })
 }
 
-// ---- Stats & SPRS ----
+// ---- Stats ----
 
 export interface DomainStats {
   familyCode: string
@@ -840,16 +858,6 @@ export interface StatsResponse {
 
 export async function fetchStats(engagementId: string, token: string): Promise<StatsResponse> {
   return apiRequest<StatsResponse>(`/api/c3pao/assessments/${engagementId}/stats`, { token })
-}
-
-export interface SPRSResponse {
-  score: number
-  maxScore: number
-  deductions: { code: string; title: string; weight: number }[]
-}
-
-export async function fetchSPRS(engagementId: string, token: string): Promise<SPRSResponse> {
-  return apiRequest<SPRSResponse>(`/api/c3pao/assessments/${engagementId}/sprs`, { token })
 }
 
 // ---- Workload ----
@@ -903,6 +911,7 @@ export async function createC3PAOUser(body: {
   ccaNumber?: string
   ccpNumber?: string
   isLeadAssessor: boolean
+  assessorType?: string
 }, token: string): Promise<C3PAOUserItem> {
   return apiRequest<C3PAOUserItem>('/api/c3pao/users', { method: 'POST', body, token })
 }

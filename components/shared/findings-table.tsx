@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { format } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   CheckCircle,
   XCircle,
@@ -227,7 +228,7 @@ export function FindingsTable({
       ]
         .filter(Boolean)
         .join(', '),
-      f.assessedAt ? format(new Date(f.assessedAt), 'yyyy-MM-dd') : '',
+      safeDate(f.assessedAt) ? format(safeDate(f.assessedAt)!, 'yyyy-MM-dd') : '',
       f.assessedBy?.name || '',
     ])
 
@@ -524,8 +525,8 @@ function FindingRow({
         </td>
         <td className="px-4 py-3">
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            {finding.assessedAt
-              ? format(new Date(finding.assessedAt), 'MMM d, yyyy')
+            {safeDate(finding.assessedAt)
+              ? format(safeDate(finding.assessedAt)!, 'MMM d, yyyy')
               : '—'}
           </span>
         </td>

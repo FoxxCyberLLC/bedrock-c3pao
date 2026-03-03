@@ -6,7 +6,7 @@ import {
   updateProfile,
   updateEngagementStatus as apiUpdateEngagementStatus,
   toggleAssessmentMode,
-  fetchSPRS,
+
   sendProposal as apiSendProposal,
   acknowledgeIntroduction as apiAcknowledgeIntroduction,
   updateObjective,
@@ -14,6 +14,7 @@ import {
   updateTeamMemberRole,
   removeTeamMember,
   fetchEvidence,
+  fetchEvidenceDownloadURL,
   fetchSSP,
   fetchPOAMs,
   createNote,
@@ -99,9 +100,14 @@ export async function updateC3PAOProfile(data: FormData | Record<string, unknown
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function updateC3PAOLogo(...args: any[]): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: 'Logo upload not yet available (S3 not implemented)' }
+export async function updateC3PAOLogo(base64DataUri: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = await getToken()
+    await updateProfile({ logo: base64DataUri }, token)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to update logo' }
+  }
 }
 
 // ---- Engagement Status ----
@@ -203,19 +209,6 @@ export async function failAssessment(engagementId: string, notes?: string): Prom
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to fail assessment' }
-  }
-}
-
-// ---- SPRS Score ----
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function calculateEngagementSPRSScore(engagementId: string): Promise<{ success: boolean; score?: number; data?: any }> {
-  try {
-    const token = await getToken()
-    const data = await fetchSPRS(engagementId, token)
-    return { success: true, score: data.score, data }
-  } catch (error) {
-    return { success: false, score: 0 }
   }
 }
 
@@ -324,6 +317,7 @@ export async function addTeamMember(dataOrEngagementId: string | Record<string, 
         name: string; email: string; password: string;
         phone?: string; jobTitle?: string; ccaNumber?: string;
         ccpNumber?: string; isLeadAssessor: boolean;
+        assessorType?: string;
       }, token)
     }
     return { success: true }
@@ -433,10 +427,15 @@ export async function getEvidenceDetailsForC3PAO(evidenceId: string, engagementI
   }
 }
 
-// Evidence download URL for C3PAO
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getEvidenceDownloadUrlForC3PAO(evidenceId: string, engagementId: string): Promise<{ success: boolean; data?: any; error?: string }> {
-  return { success: false, error: 'Evidence downloads not yet available (S3 not implemented)' }
+  try {
+    const token = await getToken()
+    const result = await fetchEvidenceDownloadURL(engagementId, evidenceId, token)
+    return { success: true, data: { url: result.downloadUrl, fileName: result.fileName } }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to get download URL' }
+  }
 }
 
 // ---- Assessor Notes (individual) ----

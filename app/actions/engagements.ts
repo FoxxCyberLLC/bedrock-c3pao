@@ -271,6 +271,7 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
         questionsForOSC: o.nistQuestionsForOSC || null,
         assessorQuestionsForOSC: o.assessorQuestionsForOSC || null,
         sortOrder: 0,
+        // C3PAO assessment (engagement-scoped)
         statuses: [{
           id: o.id,
           status: o.status || 'NOT_ASSESSED',
@@ -287,6 +288,12 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
           testDescription: o.testDescription,
           timeToAssessMinutes: o.timeToAssessMinutes,
           inheritedStatus: o.inheritedStatus,
+        }],
+        // OSC self-assessment context (package-scoped)
+        oscStatuses: [{
+          implementationStatement: o.oscImplementationStatement,
+          evidenceDescription: o.oscEvidenceDescription,
+          assessmentNotes: o.oscAssessmentNotes,
         }],
       })),
     },
@@ -325,10 +332,11 @@ export async function getEngagementControlDetail(engagementId: string, controlId
 }> {
   try {
     const token = await getToken()
-    const [engagements, controls, objectivesResult] = await Promise.all([
+    const [engagements, controls, objectivesResult, evidenceResult] = await Promise.all([
       fetchAssessments(token),
       fetchControls(engagementId, token),
       fetchObjectives(engagementId, token).catch(() => [] as ObjectiveView[]),
+      fetchEvidence(engagementId, token).catch(() => [] as EvidenceView[]),
     ])
 
     const engagement = engagements.find(e => e.id === engagementId)
@@ -350,7 +358,7 @@ export async function getEngagementControlDetail(engagementId: string, controlId
       success: true,
       data: {
         engagement: shapeEngagementForControl(engagement),
-        control: shapeControl(control, objMap),
+        control: shapeControl(control, objMap, evidenceResult),
         navigation: {
           prevId: prev?.id || null,
           prevName: prev?.requirementId || null,

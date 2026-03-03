@@ -18,7 +18,7 @@ import {
   Building2,
   Bot,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, safeDate } from '@/lib/utils'
 
 interface Activity {
   id: string
@@ -161,9 +161,9 @@ function ActivityItem({
 
                 {/* Timestamp */}
                 <span className="text-gray-500 dark:text-gray-400">
-                  {formatDistanceToNow(new Date(activity.createdAt), {
-                    addSuffix: true,
-                  })}
+                  {safeDate(activity.createdAt)
+                    ? formatDistanceToNow(safeDate(activity.createdAt)!, { addSuffix: true })
+                    : 'Unknown'}
                 </span>
               </div>
             </div>
@@ -340,9 +340,9 @@ export function ActivityBoardCompact({
                 {activity.title}
               </p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                {formatDistanceToNow(new Date(activity.createdAt), {
-                  addSuffix: true,
-                })}
+                {safeDate(activity.createdAt)
+                  ? formatDistanceToNow(safeDate(activity.createdAt)!, { addSuffix: true })
+                  : 'Unknown'}
               </p>
             </div>
           </div>

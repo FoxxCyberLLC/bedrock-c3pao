@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   ArrowLeft,
   Building2,
@@ -347,7 +348,7 @@ export function LimitedEngagementDetail({ engagement, user }: LimitedEngagementD
               Introduction Message
             </CardTitle>
             <CardDescription>
-              Received on {engagement.introducedAt ? format(new Date(engagement.introducedAt), 'PPP') : 'Unknown'}
+              Received on {safeDate(engagement.introducedAt) ? format(safeDate(engagement.introducedAt)!, 'PPP') : 'Unknown'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -367,9 +368,9 @@ export function LimitedEngagementDetail({ engagement, user }: LimitedEngagementD
               Proposal Sent
             </CardTitle>
             <CardDescription>
-              Sent on {engagement.proposalSentAt ? format(new Date(engagement.proposalSentAt), 'PPP') : 'Unknown'}
-              {engagement.proposalValidUntil && (
-                <> | Valid until {format(new Date(engagement.proposalValidUntil), 'PPP')}</>
+              Sent on {safeDate(engagement.proposalSentAt) ? format(safeDate(engagement.proposalSentAt)!, 'PPP') : 'Unknown'}
+              {safeDate(engagement.proposalValidUntil) && (
+                <> | Valid until {format(safeDate(engagement.proposalValidUntil)!, 'PPP')}</>
               )}
             </CardDescription>
           </CardHeader>
@@ -476,7 +477,7 @@ export function LimitedEngagementDetail({ engagement, user }: LimitedEngagementD
                 <div className="h-3 w-3 rounded-full bg-blue-500" />
                 <span className="font-medium">Introduction Received</span>
                 <span className="text-muted-foreground">
-                  {engagement.introducedAt ? format(new Date(engagement.introducedAt), 'PPP') : format(new Date(engagement.createdAt), 'PPP')}
+                  {safeDate(engagement.introducedAt) ? format(safeDate(engagement.introducedAt)!, 'PPP') : safeDate(engagement.createdAt) ? format(safeDate(engagement.createdAt)!, 'PPP') : '—'}
                 </span>
               </div>
             </div>
@@ -486,7 +487,7 @@ export function LimitedEngagementDetail({ engagement, user }: LimitedEngagementD
                   <div className="h-3 w-3 rounded-full bg-purple-500" />
                   <span className="font-medium">Acknowledged</span>
                   <span className="text-muted-foreground">
-                    {format(new Date(engagement.acknowledgedAt), 'PPP')}
+                    {safeDate(engagement.acknowledgedAt) ? format(safeDate(engagement.acknowledgedAt)!, 'PPP') : '—'}
                   </span>
                 </div>
               </div>
@@ -497,7 +498,7 @@ export function LimitedEngagementDetail({ engagement, user }: LimitedEngagementD
                   <div className="h-3 w-3 rounded-full bg-amber-500" />
                   <span className="font-medium">Proposal Sent</span>
                   <span className="text-muted-foreground">
-                    {format(new Date(engagement.proposalSentAt), 'PPP')}
+                    {safeDate(engagement.proposalSentAt) ? format(safeDate(engagement.proposalSentAt)!, 'PPP') : '—'}
                   </span>
                 </div>
               </div>

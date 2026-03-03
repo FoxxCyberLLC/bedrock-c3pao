@@ -7,7 +7,8 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 # Stage 2: Build the application
 FROM node:20-alpine AS builder
@@ -16,6 +17,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NEXT_PRIVATE_WORKER_THREADS=true
 # Dummy build-time secret — replaced at runtime
 ENV AUTH_SECRET=build-placeholder
 RUN npm run build

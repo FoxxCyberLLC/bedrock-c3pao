@@ -30,3 +30,13 @@ export function getStorageProgressClass(percentage: number): string {
   if (percentage >= 75) return '[&>div]:bg-yellow-600'
   return ''
 }
+
+/**
+ * Safely parse a date value, returning null if invalid.
+ * Prevents "RangeError: Invalid time value" from crashing renders.
+ */
+export function safeDate(value: string | Date | null | undefined): Date | null {
+  if (!value) return null
+  const d = new Date(value)
+  return isNaN(d.getTime()) ? null : d
+}

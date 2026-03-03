@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { format } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   Download,
   FileText,
@@ -124,16 +125,18 @@ export function EvidenceTableReadOnly({ evidence, engagementId }: EvidenceTableR
   }
 
   const isExpiring = (expirationDate: Date | null): boolean => {
-    if (!expirationDate) return false
+    const d = safeDate(expirationDate)
+    if (!d) return false
     const daysUntilExpiration = Math.ceil(
-      (new Date(expirationDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      (d.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
     )
     return daysUntilExpiration <= 30 && daysUntilExpiration > 0
   }
 
   const isExpired = (expirationDate: Date | null): boolean => {
-    if (!expirationDate) return false
-    return new Date(expirationDate) < new Date()
+    const d = safeDate(expirationDate)
+    if (!d) return false
+    return d < new Date()
   }
 
   return (
@@ -197,10 +200,10 @@ export function EvidenceTableReadOnly({ evidence, engagementId }: EvidenceTableR
                   )}
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {format(new Date(item.uploadedAt), 'MMM d, yyyy')}
+                  {safeDate(item.uploadedAt) ? format(safeDate(item.uploadedAt)!, 'MMM d, yyyy') : '—'}
                 </TableCell>
                 <TableCell className="text-sm">
-                  {item.expirationDate ? (
+                  {safeDate(item.expirationDate) ? (
                     <span
                       className={
                         isExpired(item.expirationDate)
@@ -210,7 +213,7 @@ export function EvidenceTableReadOnly({ evidence, engagementId }: EvidenceTableR
                           : 'text-muted-foreground'
                       }
                     >
-                      {format(new Date(item.expirationDate), 'MMM d, yyyy')}
+                      {format(safeDate(item.expirationDate)!, 'MMM d, yyyy')}
                     </span>
                   ) : (
                     <span className="text-muted-foreground">No expiration</span>
@@ -271,7 +274,7 @@ export function EvidenceTableReadOnly({ evidence, engagementId }: EvidenceTableR
                   {selectedEvidence?.uploadedAt && (
                     <>
                       <span className="text-muted-foreground">•</span>
-                      <span>Uploaded {format(new Date(selectedEvidence.uploadedAt), 'MMM d, yyyy h:mm a')}</span>
+                      <span>Uploaded {safeDate(selectedEvidence.uploadedAt) ? format(safeDate(selectedEvidence.uploadedAt)!, 'MMM d, yyyy h:mm a') : '—'}</span>
                     </>
                   )}
                 </DialogDescription>
@@ -324,11 +327,11 @@ export function EvidenceTableReadOnly({ evidence, engagementId }: EvidenceTableR
                   )}
                   <div className="text-sm">
                     {isExpired(selectedEvidence.expirationDate) ? (
-                      <>Evidence expired on {format(new Date(selectedEvidence.expirationDate), 'MMM d, yyyy')}</>
+                      <>Evidence expired on {safeDate(selectedEvidence.expirationDate) ? format(safeDate(selectedEvidence.expirationDate)!, 'MMM d, yyyy') : '—'}</>
                     ) : isExpiring(selectedEvidence.expirationDate) ? (
-                      <>Evidence expires on {format(new Date(selectedEvidence.expirationDate), 'MMM d, yyyy')}</>
+                      <>Evidence expires on {safeDate(selectedEvidence.expirationDate) ? format(safeDate(selectedEvidence.expirationDate)!, 'MMM d, yyyy') : '—'}</>
                     ) : (
-                      <>Expires: {format(new Date(selectedEvidence.expirationDate), 'MMM d, yyyy')}</>
+                      <>Expires: {safeDate(selectedEvidence.expirationDate) ? format(safeDate(selectedEvidence.expirationDate)!, 'MMM d, yyyy') : '—'}</>
                     )}
                   </div>
                 </div>

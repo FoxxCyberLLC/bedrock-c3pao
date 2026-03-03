@@ -41,6 +41,7 @@ import {
 } from '@/app/actions/c3pao-team-assignment'
 // Prisma types replaced - data comes from SaaS API as JSON
 import { formatDistanceToNow } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 
 type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER' | string
 
@@ -198,7 +199,7 @@ export function EngagementTeamCard({
                           {member.jobTitle || member.email}
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5">
-                          Assigned {formatDistanceToNow(new Date(member.assignedAt), { addSuffix: true })}
+                          Assigned {safeDate(member.assignedAt) ? formatDistanceToNow(safeDate(member.assignedAt)!, { addSuffix: true }) : '--'}
                         </div>
                       </div>
                     </div>

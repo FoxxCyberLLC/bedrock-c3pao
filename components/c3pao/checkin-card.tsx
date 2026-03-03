@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { formatDistanceToNow } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import { MessageSquare, Send, Loader2, Eye } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -133,7 +134,7 @@ export function CheckinCard({ engagementId, assessmentModeActive }: CheckinCardP
                     <p className="text-muted-foreground mt-0.5">{checkin.description}</p>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
-                    {checkin.authorName} &middot; {formatDistanceToNow(new Date(checkin.createdAt), { addSuffix: true })}
+                    {checkin.authorName} &middot; {safeDate(checkin.createdAt) ? formatDistanceToNow(safeDate(checkin.createdAt)!, { addSuffix: true }) : '--'}
                   </p>
                 </div>
               </div>

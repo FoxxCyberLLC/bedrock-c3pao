@@ -84,6 +84,7 @@ export function AddTeamMemberDialog({
         ccaNumber: data.ccaNumber || undefined,
         ccpNumber: data.ccpNumber || undefined,
         isLeadAssessor: data.isLeadAssessor,
+        assessorType: data.ccaNumber ? 'CCA' : 'CCP',
         password: data.password,
       })
 

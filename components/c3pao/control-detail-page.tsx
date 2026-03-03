@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,6 +26,7 @@ import {
   MessageSquare,
   User,
   Wrench,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -32,9 +34,10 @@ import { Separator } from '@/components/ui/separator'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { updateAssessorNotes } from '@/app/actions/c3pao-dashboard'
+import { updateAssessorNotes, getEvidenceDownloadUrlForC3PAO } from '@/app/actions/c3pao-dashboard'
 import { toast } from 'sonner'
 import { ObjectiveAssessmentCard } from './objective-assessment-card'
+import { OSCObjectiveCard } from './osc-objective-card'
 import {
   Collapsible,
   CollapsibleContent,
@@ -44,6 +47,7 @@ import {
 interface Evidence {
   id: string
   fileName: string
+  fileUrl: string | null
   mimeType: string | null
   fileSize: number | null
   description: string | null
@@ -196,6 +200,24 @@ export function ControlDetailPage({
   const [savingNotes, setSavingNotes] = useState(false)
   const [notesChanged, setNotesChanged] = useState(false)
   const [reqDetailsOpen, setReqDetailsOpen] = useState(false)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  const handleEvidenceDownload = async (evidenceId: string, fileName: string) => {
+    setDownloadingId(evidenceId)
+    try {
+      const result = await getEvidenceDownloadUrlForC3PAO(evidenceId, engagementId)
+      if (result.success && result.data) {
+        window.open(result.data.url, '_blank')
+        toast.success(`Downloading ${fileName}`)
+      } else {
+        toast.error(result.error || 'Could not generate download URL')
+      }
+    } catch {
+      toast.error('An unexpected error occurred')
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   const handleNotesChange = (value: string) => {
     setAssessorNotes(value)
@@ -367,100 +389,44 @@ export function ControlDetailPage({
             <Badge variant="outline" className="text-xs font-normal">Read-Only</Badge>
           </h2>
 
-          {/* OSC Status + Metadata */}
+          {/* OSC Objectives */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Organization Status</CardTitle>
+              <CardTitle className="flex items-center justify-between text-base">
+                <span className="flex items-center gap-2">
+                  <StickyNote className="h-4 w-4" />
+                  Self-Assessment ({objectives.length})
+                </span>
+                <span className="text-sm font-normal text-muted-foreground">
+                  {objectives.filter(obj => {
+                    const s = obj.statuses?.[0]
+                    return s && (s.implementationStatement || s.evidenceDescription || s.assessmentNotes)
+                  }).length}/{objectives.length} provided
+                </span>
+              </CardTitle>
+              <CardDescription>
+                Per-objective implementation data from the OSC
+                {(control.implementationType || control.processOwner) && (
+                  <span className="block mt-1">
+                    {control.implementationType && <span className="inline-flex items-center gap-1 mr-3"><Wrench className="h-3 w-3 inline" /> {control.implementationType}</span>}
+                    {control.processOwner && <span className="inline-flex items-center gap-1"><User className="h-3 w-3 inline" /> {control.processOwner}</span>}
+                  </span>
+                )}
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${oscStatus.bgColor}`}>
-                  <OscStatusIcon className={`h-5 w-5 ${oscStatus.color}`} />
-                  <span className={`font-semibold ${oscStatus.color}`}>{oscStatus.label}</span>
-                </div>
-              </div>
-
-              {(control.implementationType || control.processOwner) && (
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                  {control.implementationType && (
-                    <div>
-                      <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-1">
-                        <Wrench className="h-3 w-3" />
-                        Implementation Type
-                      </div>
-                      <p className="text-sm">{control.implementationType}</p>
-                    </div>
-                  )}
-                  {control.processOwner && (
-                    <div>
-                      <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground mb-1">
-                        <User className="h-3 w-3" />
-                        Process Owner
-                      </div>
-                      <p className="text-sm">{control.processOwner}</p>
-                    </div>
-                  )}
+            <CardContent className="space-y-3">
+              {objectives.length > 0 ? (
+                objectives.map((obj) => (
+                  <OSCObjectiveCard key={obj.id} objective={obj} />
+                ))
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Building2 className="mx-auto h-10 w-10 text-muted-foreground/50 mb-2" />
+                  <p>No assessment objectives defined for this control</p>
                 </div>
               )}
             </CardContent>
           </Card>
-
-          {/* Per-Objective Self-Assessment */}
-          {objectives.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <StickyNote className="h-4 w-4" />
-                  Per-Objective Self-Assessment
-                </CardTitle>
-                <CardDescription>OSC-provided data for each assessment objective</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {objectives.map((obj) => {
-                  const objStatus = obj.statuses?.[0]
-                  const hasData = objStatus && (
-                    objStatus.implementationStatement ||
-                    objStatus.evidenceDescription ||
-                    objStatus.assessmentNotes
-                  )
-                  return (
-                    <div key={obj.id} className="border rounded-lg p-3 space-y-2">
-                      <div className="flex items-start gap-2">
-                        <code className="text-xs font-mono bg-muted px-1.5 py-0.5 rounded shrink-0">
-                          {obj.objectiveReference}
-                        </code>
-                        <p className="text-xs text-muted-foreground leading-tight">{obj.description}</p>
-                      </div>
-                      {hasData ? (
-                        <div className="space-y-2 pl-1">
-                          {objStatus.implementationStatement && (
-                            <div>
-                              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Implementation Statement</p>
-                              <p className="text-sm whitespace-pre-wrap leading-relaxed">{objStatus.implementationStatement}</p>
-                            </div>
-                          )}
-                          {objStatus.evidenceDescription && (
-                            <div>
-                              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">Evidence Description</p>
-                              <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{objStatus.evidenceDescription}</p>
-                            </div>
-                          )}
-                          {objStatus.assessmentNotes && (
-                            <div>
-                              <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">OSC Notes</p>
-                              <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{objStatus.assessmentNotes}</p>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground italic pl-1">No self-assessment data provided</p>
-                      )}
-                    </div>
-                  )
-                })}
-              </CardContent>
-            </Card>
-          )}
 
           {/* Implementation Notes (control-level) */}
           {control.implementationNotes && (
@@ -483,7 +449,7 @@ export function ControlDetailPage({
           )}
 
           {/* Evidence */}
-          <Card>
+          <Card className="relative isolate overflow-hidden">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
                 <FileText className="h-4 w-4" />
@@ -495,13 +461,13 @@ export function ControlDetailPage({
               {control.evidence.length > 0 ? (
                 <div className="space-y-3">
                   {control.evidence.map((ev) => (
-                    <div key={ev.id} className="p-3 rounded-lg border bg-card">
+                    <div key={ev.id} className="relative p-3 rounded-lg border bg-muted/30">
                       <div className="flex items-start gap-3">
                         <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-sm truncate">{ev.fileName}</div>
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            {formatFileSize(ev.fileSize)} • {format(new Date(ev.createdAt), 'MMM d, yyyy')}
+                            {formatFileSize(ev.fileSize)} • {safeDate(ev.createdAt) ? format(safeDate(ev.createdAt)!, 'MMM d, yyyy') : '--'}
                           </div>
                           {ev.description && (
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{ev.description}</p>
@@ -509,12 +475,32 @@ export function ControlDetailPage({
                         </div>
                       </div>
                       <div className="flex items-center gap-2 mt-2">
-                        <Button variant="outline" size="sm" className="w-full" disabled>
-                          <ExternalLink className="h-3 w-3 mr-1" />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          disabled={downloadingId === ev.id}
+                          onClick={() => handleEvidenceDownload(ev.id, ev.fileName)}
+                        >
+                          {downloadingId === ev.id ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                          )}
                           View
                         </Button>
-                        <Button variant="outline" size="sm" className="w-full" disabled>
-                          <Download className="h-3 w-3 mr-1" />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1"
+                          disabled={downloadingId === ev.id}
+                          onClick={() => handleEvidenceDownload(ev.id, ev.fileName)}
+                        >
+                          {downloadingId === ev.id ? (
+                            <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                          ) : (
+                            <Download className="h-3 w-3 mr-1" />
+                          )}
                           Download
                         </Button>
                       </div>

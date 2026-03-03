@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { format } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   FileText,
   Image as ImageIcon,
@@ -17,6 +18,7 @@ import {
   HardDrive,
   SortAsc,
   SortDesc,
+  Loader2,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -38,6 +40,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { toast } from 'sonner'
+import { getEvidenceDownloadUrlForC3PAO } from '@/app/actions/c3pao-dashboard'
 
 interface Evidence {
   id: string
@@ -50,6 +54,7 @@ interface Evidence {
 
 interface EvidenceViewerProps {
   evidence: Evidence[]
+  engagementId: string
 }
 
 type SortField = 'fileName' | 'createdAt' | 'fileSize'
@@ -107,8 +112,9 @@ const categoryLabels: Record<string, string> = {
   other: 'Other',
 }
 
-export function EvidenceViewer({ evidence }: EvidenceViewerProps) {
+export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sortField, setSortField] = useState<SortField>('createdAt')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
@@ -145,7 +151,7 @@ export function EvidenceViewer({ evidence }: EvidenceViewerProps) {
           comparison = a.fileName.localeCompare(b.fileName)
           break
         case 'createdAt':
-          comparison = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          comparison = (safeDate(a.createdAt)?.getTime() ?? 0) - (safeDate(b.createdAt)?.getTime() ?? 0)
           break
         case 'fileSize':
           comparison = (a.fileSize || 0) - (b.fileSize || 0)
@@ -164,6 +170,23 @@ export function EvidenceViewer({ evidence }: EvidenceViewerProps) {
 
   const toggleSortOrder = () => {
     setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+  }
+
+  const handleDownload = async (evidenceId: string, fileName: string) => {
+    setDownloadingId(evidenceId)
+    try {
+      const result = await getEvidenceDownloadUrlForC3PAO(evidenceId, engagementId)
+      if (result.success && result.data) {
+        window.open(result.data.url, '_blank')
+        toast.success('Download Started', { description: `Opening ${fileName}` })
+      } else {
+        toast.error('Download Failed', { description: result.error || 'Could not generate download URL' })
+      }
+    } catch {
+      toast.error('Download Failed', { description: 'An unexpected error occurred' })
+    } finally {
+      setDownloadingId(null)
+    }
   }
 
   if (evidence.length === 0) {
@@ -293,15 +316,33 @@ export function EvidenceViewer({ evidence }: EvidenceViewerProps) {
                       {formatFileSize(ev.fileSize)}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
-                      {format(new Date(ev.createdAt), 'MMM d, yyyy')}
+                      {safeDate(ev.createdAt) ? format(safeDate(ev.createdAt)!, 'MMM d, yyyy') : '--'}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" disabled>
-                          <ExternalLink className="h-4 w-4" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={downloadingId === ev.id}
+                          onClick={() => handleDownload(ev.id, ev.fileName)}
+                        >
+                          {downloadingId === ev.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <ExternalLink className="h-4 w-4" />
+                          )}
                         </Button>
-                        <Button variant="ghost" size="sm" disabled>
-                          <Download className="h-4 w-4" />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={downloadingId === ev.id}
+                          onClick={() => handleDownload(ev.id, ev.fileName)}
+                        >
+                          {downloadingId === ev.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Download className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </TableCell>
@@ -334,18 +375,36 @@ export function EvidenceViewer({ evidence }: EvidenceViewerProps) {
                       </div>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {format(new Date(ev.createdAt), 'MMM d')}
+                        {safeDate(ev.createdAt) ? format(safeDate(ev.createdAt)!, 'MMM d') : '--'}
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t">
-                  <Button variant="ghost" size="sm" disabled>
-                    <ExternalLink className="h-4 w-4 mr-1" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={downloadingId === ev.id}
+                    onClick={() => handleDownload(ev.id, ev.fileName)}
+                  >
+                    {downloadingId === ev.id ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <ExternalLink className="h-4 w-4 mr-1" />
+                    )}
                     View
                   </Button>
-                  <Button variant="ghost" size="sm" disabled>
-                    <Download className="h-4 w-4 mr-1" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={downloadingId === ev.id}
+                    onClick={() => handleDownload(ev.id, ev.fileName)}
+                  >
+                    {downloadingId === ev.id ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-1" />
+                    )}
                     Download
                   </Button>
                 </div>

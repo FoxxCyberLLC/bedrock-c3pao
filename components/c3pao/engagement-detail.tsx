@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   ArrowLeft,
   Building2,
@@ -49,7 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { updateEngagementStatus, addAssessorNotes, recordAssessmentResult, startAssessment, endAssessmentMode, stopAssessment, failAssessment, calculateEngagementSPRSScore, submitAssessmentForApproval, rejectAssessmentSubmission } from '@/app/actions/c3pao-dashboard'
+import { updateEngagementStatus, addAssessorNotes, recordAssessmentResult, startAssessment, endAssessmentMode, stopAssessment, failAssessment, submitAssessmentForApproval, rejectAssessmentSubmission } from '@/app/actions/c3pao-dashboard'
 import { toast } from 'sonner'
 import { AssessmentControlsTable } from './assessment-controls-table'
 import { POAMViewer } from './poam-viewer'
@@ -252,15 +253,6 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
   const [showStartAssessmentDialog, setShowStartAssessmentDialog] = useState(false)
   const [assessmentPassed, setAssessmentPassed] = useState<string>('')
   const [findings, setFindings] = useState('')
-  const [sprsScore, setSPRSScore] = useState<{
-    score: number
-    maxScore: number
-    pointsDeducted: number
-    metCount: number
-    notMetCount: number
-    scoreColor: { bgColor: string; textColor: string; label: string }
-  } | null>(null)
-  const [loadingSPRS, setLoadingSPRS] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
@@ -326,36 +318,6 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
       setIsExporting(false)
     }
   }
-
-  // Compute scoreColor from raw SPRS score
-  function getScoreColor(score: number): { bgColor: string; textColor: string; label: string } {
-    if (score >= 80) return { bgColor: 'bg-green-50 dark:bg-green-950/30', textColor: 'text-green-600', label: 'Good' }
-    if (score >= 50) return { bgColor: 'bg-yellow-50 dark:bg-yellow-950/30', textColor: 'text-yellow-600', label: 'Fair' }
-    if (score >= 0) return { bgColor: 'bg-orange-50 dark:bg-orange-950/30', textColor: 'text-orange-600', label: 'Poor' }
-    return { bgColor: 'bg-red-50 dark:bg-red-950/30', textColor: 'text-red-600', label: 'Critical' }
-  }
-
-  // Load SPRS score on mount
-  useEffect(() => {
-    async function loadSPRSScore() {
-      setLoadingSPRS(true)
-      try {
-        const result = await calculateEngagementSPRSScore(engagement.id)
-        if (result.success && result.data) {
-          const data = result.data as any
-          setSPRSScore({
-            ...data,
-            scoreColor: data.scoreColor || getScoreColor(data.score ?? 0),
-          })
-        }
-      } catch (error) {
-        console.error('Failed to load SPRS score:', error)
-      } finally {
-        setLoadingSPRS(false)
-      }
-    }
-    loadSPRSScore()
-  }, [engagement.id])
 
   // Load team assignments
   const loadTeam = async () => {
@@ -905,23 +867,29 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </Dialog>
             </>
           )}
-          {/* Cancel / Decline Engagement — pre-assessment states only */}
-          {['REQUESTED', 'INTRODUCED', 'ACKNOWLEDGED', 'PROPOSAL_SENT', 'PROPOSAL_ACCEPTED', 'ACCEPTED'].includes(engagement.status) && (
+          {/* Cancel / Decline / Withdraw Engagement */}
+          {['REQUESTED', 'INTRODUCED', 'ACKNOWLEDGED', 'PROPOSAL_SENT', 'PROPOSAL_ACCEPTED', 'ACCEPTED', 'IN_PROGRESS', 'PENDING_APPROVAL'].includes(engagement.status) && (
             <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
               <DialogTrigger asChild>
                 <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50 dark:text-red-400 dark:border-red-700 dark:hover:bg-red-950/30">
                   <XCircle className="h-4 w-4 mr-2" />
-                  {engagement.status === 'REQUESTED' ? 'Decline Request' : 'Cancel Engagement'}
+                  {engagement.status === 'REQUESTED' ? 'Decline Request'
+                    : ['IN_PROGRESS', 'PENDING_APPROVAL'].includes(engagement.status) ? 'Cancel Assessment'
+                    : 'Cancel Engagement'}
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>
-                    {engagement.status === 'REQUESTED' ? 'Decline Request' : 'Cancel Engagement'}
+                    {engagement.status === 'REQUESTED' ? 'Decline Request'
+                      : ['IN_PROGRESS', 'PENDING_APPROVAL'].includes(engagement.status) ? 'Cancel Assessment'
+                      : 'Cancel Engagement'}
                   </DialogTitle>
                   <DialogDescription>
                     {engagement.status === 'REQUESTED'
                       ? `Decline the assessment request from ${pkg?.organization?.name || 'this organization'}. This cannot be undone.`
+                      : ['IN_PROGRESS', 'PENDING_APPROVAL'].includes(engagement.status)
+                      ? `Cancel the active assessment for ${pkg?.organization?.name || 'this organization'}. All assessment data for this engagement will be removed. This cannot be undone.`
                       : `Cancel this engagement with ${pkg?.organization?.name || 'this organization'}. This cannot be undone.`
                     }
                   </DialogDescription>
@@ -943,7 +911,9 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
                   </Button>
                   <Button variant="destructive" onClick={handleCancelEngagement} disabled={isUpdating}>
                     {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    {engagement.status === 'REQUESTED' ? 'Decline Request' : 'Cancel Engagement'}
+                    {engagement.status === 'REQUESTED' ? 'Decline Request'
+                      : ['IN_PROGRESS', 'PENDING_APPROVAL'].includes(engagement.status) ? 'Cancel Assessment'
+                      : 'Cancel Engagement'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -1015,34 +985,6 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           </CardContent>
         </Card>
       )}
-
-      {/* SPRS Score Card */}
-      {sprsScore && (() => {
-        const sc = sprsScore.scoreColor || getScoreColor(sprsScore.score ?? 0)
-        return (
-        <Card className={`${sc.bgColor} border-2`}>
-          <CardContent className="flex items-center justify-between pt-6">
-            <div>
-              <h3 className="font-semibold text-lg">SPRS Score</h3>
-              <p className="text-sm text-muted-foreground">
-                Supplier Performance Risk System score based on control compliance
-              </p>
-            </div>
-            <div className="text-right">
-              <div className={`text-4xl font-bold ${sc.textColor}`}>
-                {sprsScore.score > 0 ? `+${sprsScore.score}` : sprsScore.score}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                of {sprsScore.maxScore} max | {sc.label}
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                {sprsScore.metCount} Met | {sprsScore.notMetCount} Not Met | -{sprsScore.pointsDeducted} points
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        )
-      })()}
 
       {/* Overview Stats */}
       <div className="grid gap-4 md:grid-cols-5">
@@ -1224,7 +1166,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </Button>
             </CardContent>
           </Card>
-          <EvidenceViewer evidence={pkg?.evidence || []} />
+          <EvidenceViewer evidence={pkg?.evidence || []} engagementId={engagement.id} />
         </TabsContent>
 
         {/* STIGs Tab */}
@@ -1286,7 +1228,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
                     <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
                     <div>
                       <div className="text-xs text-muted-foreground">Request Date</div>
-                      <div className="font-medium">{format(new Date(engagement.createdAt), 'PPP')}</div>
+                      <div className="font-medium">{safeDate(engagement.createdAt) ? format(safeDate(engagement.createdAt)!, 'PPP') : '—'}</div>
                     </div>
                   </div>
                   {engagement.acceptedDate && (
@@ -1294,7 +1236,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
                       <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
                       <div>
                         <div className="text-xs text-muted-foreground">Accepted Date</div>
-                        <div className="font-medium">{format(new Date(engagement.acceptedDate), 'PPP')}</div>
+                        <div className="font-medium">{safeDate(engagement.acceptedDate) ? format(safeDate(engagement.acceptedDate)!, 'PPP') : '—'}</div>
                       </div>
                     </div>
                   )}
@@ -1303,7 +1245,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
                       <Clock className="h-5 w-5 text-blue-500 mt-0.5" />
                       <div>
                         <div className="text-xs text-muted-foreground">Assessment Started</div>
-                        <div className="font-medium">{format(new Date(engagement.actualStartDate), 'PPP')}</div>
+                        <div className="font-medium">{safeDate(engagement.actualStartDate) ? format(safeDate(engagement.actualStartDate)!, 'PPP') : '—'}</div>
                       </div>
                     </div>
                   )}
@@ -1312,7 +1254,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
                       <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5" />
                       <div>
                         <div className="text-xs text-muted-foreground">Assessment Completed</div>
-                        <div className="font-medium">{format(new Date(engagement.actualCompletionDate), 'PPP')}</div>
+                        <div className="font-medium">{safeDate(engagement.actualCompletionDate) ? format(safeDate(engagement.actualCompletionDate)!, 'PPP') : '—'}</div>
                       </div>
                     </div>
                   )}

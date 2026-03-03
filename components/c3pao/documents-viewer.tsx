@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { format } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 import {
   FileText,
   Download,
@@ -176,8 +177,9 @@ export function DocumentsViewer({ ssp, assets, externalServiceProviders }: Docum
     total: externalServiceProviders.length,
     certified: externalServiceProviders.filter(e => e.cmmcCertified || e.fedRampCertified).length,
     expiringSoon: externalServiceProviders.filter(e => {
-      if (!e.contractEndDate) return false
-      const days = Math.ceil((new Date(e.contractEndDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+      const d = safeDate(e.contractEndDate)
+      if (!d) return false
+      const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
       return days <= 90 && days > 0
     }).length,
   }
@@ -243,7 +245,7 @@ export function DocumentsViewer({ ssp, assets, externalServiceProviders }: Docum
                         <CheckCircle2 className="h-5 w-5 text-green-600 mt-0.5" />
                         <div>
                           <div className="text-xs text-muted-foreground">Approved</div>
-                          <div className="text-sm font-medium">{format(new Date(ssp.approvedAt), 'MMM d, yyyy')}</div>
+                          <div className="text-sm font-medium">{safeDate(ssp.approvedAt) ? format(safeDate(ssp.approvedAt)!, 'MMM d, yyyy') : '—'}</div>
                           {ssp.approvedBy && <div className="text-xs text-muted-foreground">by {ssp.approvedBy}</div>}
                         </div>
                       </div>
@@ -253,7 +255,7 @@ export function DocumentsViewer({ ssp, assets, externalServiceProviders }: Docum
                         <Clock className="h-5 w-5 text-yellow-600 mt-0.5" />
                         <div>
                           <div className="text-xs text-muted-foreground">Expires</div>
-                          <div className="text-sm font-medium">{format(new Date(ssp.expirationDate), 'MMM d, yyyy')}</div>
+                          <div className="text-sm font-medium">{safeDate(ssp.expirationDate) ? format(safeDate(ssp.expirationDate)!, 'MMM d, yyyy') : '—'}</div>
                         </div>
                       </div>
                     )}
@@ -261,7 +263,7 @@ export function DocumentsViewer({ ssp, assets, externalServiceProviders }: Docum
                       <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
                       <div>
                         <div className="text-xs text-muted-foreground">Last Modified</div>
-                        <div className="text-sm font-medium">{format(new Date(ssp.lastModified), 'MMM d, yyyy')}</div>
+                        <div className="text-sm font-medium">{safeDate(ssp.lastModified) ? format(safeDate(ssp.lastModified)!, 'MMM d, yyyy') : '—'}</div>
                       </div>
                     </div>
                     {ssp.generatedAt && (
@@ -269,7 +271,7 @@ export function DocumentsViewer({ ssp, assets, externalServiceProviders }: Docum
                         <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
                         <div>
                           <div className="text-xs text-muted-foreground">Generated</div>
-                          <div className="text-sm font-medium">{format(new Date(ssp.generatedAt), 'MMM d, yyyy')}</div>
+                          <div className="text-sm font-medium">{safeDate(ssp.generatedAt) ? format(safeDate(ssp.generatedAt)!, 'MMM d, yyyy') : '—'}</div>
                         </div>
                       </div>
                     )}
@@ -506,8 +508,8 @@ export function DocumentsViewer({ ssp, assets, externalServiceProviders }: Docum
                           </div>
                         </TableCell>
                         <TableCell className="text-sm">
-                          {esp.contractEndDate
-                            ? format(new Date(esp.contractEndDate), 'MMM d, yyyy')
+                          {safeDate(esp.contractEndDate)
+                            ? format(safeDate(esp.contractEndDate)!, 'MMM d, yyyy')
                             : '-'}
                         </TableCell>
                       </TableRow>

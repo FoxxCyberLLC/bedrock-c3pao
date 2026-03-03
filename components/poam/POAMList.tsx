@@ -115,9 +115,9 @@ function POAMCard({ poam, atoPackageId }: POAMCardProps) {
         {/* Requirements Info */}
         <div className="flex items-center gap-2 text-sm">
           <span className="text-muted-foreground">
-            Requirement{poam.requirements.length !== 1 ? 's' : ''}:
+            Requirement{(poam.requirements ?? []).length !== 1 ? 's' : ''}:
           </span>
-          {poam.requirements.length > 0 ? (
+          {(poam.requirements ?? []).length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {poam.requirements.map((req: any, idx: number) => (
                 <span key={req.id}>

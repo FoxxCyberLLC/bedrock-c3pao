@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select'
 import { getC3PAOEngagements } from '@/app/actions/c3pao-dashboard'
 import { formatDistanceToNow } from 'date-fns'
+import { safeDate } from '@/lib/utils'
 
 interface Engagement {
   id: string
@@ -196,7 +197,9 @@ export default function C3PAOEngagementsPage() {
                         <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
                           <Calendar className="h-3 w-3" />
                           <span>
-                            {formatDistanceToNow(new Date(engagement.createdAt), { addSuffix: true })}
+                            {safeDate(engagement.createdAt)
+                              ? formatDistanceToNow(safeDate(engagement.createdAt)!, { addSuffix: true })
+                              : 'Unknown'}
                           </span>
                         </div>
                       </div>
