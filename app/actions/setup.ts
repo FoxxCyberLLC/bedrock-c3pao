@@ -1,7 +1,7 @@
 'use server'
 
 import crypto from 'crypto'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { setConfigBatch, getConfig, isAppConfigured } from '@/lib/config'
 import { createLocalAdmin } from '@/lib/local-auth'
 
@@ -73,6 +73,7 @@ interface SetupParams {
   adminName: string
   adminEmail: string
   adminPassword: string
+  forceHttps?: boolean
 }
 
 export async function completeSetup(
@@ -81,12 +82,18 @@ export async function completeSetup(
   try {
     const authSecret = crypto.randomBytes(32).toString('base64')
 
+    // Auto-detect HTTPS from the incoming request
+    const reqHeaders = await headers()
+    const proto = reqHeaders.get('x-forwarded-proto') || 'http'
+    const isHttps = proto === 'https'
+    const forceHttps = params.forceHttps ?? isHttps
+
     // Save all config to encrypted SQLite
     setConfigBatch({
       BEDROCK_API_URL: params.apiUrl,
       AUTH_SECRET: authSecret,
       INSTANCE_API_KEY: params.apiKey,
-      FORCE_HTTPS: 'true',
+      FORCE_HTTPS: forceHttps ? 'true' : 'false',
       C3PAO_ID: params.c3paoId,
       C3PAO_NAME: params.c3paoName,
       ACTIVATED_AT: new Date().toISOString(),
@@ -99,7 +106,7 @@ export async function completeSetup(
     process.env.BEDROCK_API_URL = params.apiUrl
     process.env.AUTH_SECRET = authSecret
     process.env.INSTANCE_API_KEY = params.apiKey
-    process.env.FORCE_HTTPS = 'true'
+    process.env.FORCE_HTTPS = forceHttps ? 'true' : 'false'
 
     // Set cookie so Edge middleware knows setup is done
     const cookieStore = await cookies()

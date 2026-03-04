@@ -117,21 +117,26 @@ export default function SetupPage() {
     setStep('saving')
     setError('')
 
-    const result = await completeSetup({
-      apiKey: apiKey.trim(),
-      apiUrl: apiUrl.trim(),
-      c3paoId: activationData.c3paoId,
-      c3paoName: activationData.c3paoName,
-      adminName: adminName.trim(),
-      adminEmail: adminEmail.trim(),
-      adminPassword,
-    })
+    try {
+      const result = await completeSetup({
+        apiKey: apiKey.trim(),
+        apiUrl: apiUrl.trim(),
+        c3paoId: activationData.c3paoId,
+        c3paoName: activationData.c3paoName,
+        adminName: adminName.trim(),
+        adminEmail: adminEmail.trim(),
+        adminPassword,
+      })
 
-    if (result.success) {
-      setStep('complete')
-      setTimeout(() => router.push('/login'), 2000)
-    } else {
-      setError(result.error || 'Failed to save configuration')
+      if (result.success) {
+        setStep('complete')
+        setTimeout(() => router.push('/login'), 2000)
+      } else {
+        setError(result.error || 'Failed to save configuration')
+        setStep('admin')
+      }
+    } catch {
+      setError('Setup failed — check server logs for details')
       setStep('admin')
     }
   }

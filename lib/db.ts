@@ -16,6 +16,7 @@ export function getConfigDb(): Database.Database {
 
   _db = new Database(DB_PATH)
   _db.pragma('journal_mode = WAL')
+  _db.pragma('busy_timeout = 5000')
 
   _db.exec(`
     CREATE TABLE IF NOT EXISTS app_config (

@@ -120,8 +120,8 @@ export default function C3PAOProfilePage() {
         setPricingInfo(data.pricingInfo || '')
         setTypicalTimeline(data.typicalTimeline || '')
         setServicesOffered(data.servicesOffered || '')
-        setSelectedSpecialties(data.specialties ? JSON.parse(data.specialties) : [])
-        setAuthorizedLevels(data.authorizedLevels ? JSON.parse(data.authorizedLevels) : [])
+        try { setSelectedSpecialties(data.specialties ? JSON.parse(data.specialties) : []) } catch { /* corrupted data */ }
+        try { setAuthorizedLevels(data.authorizedLevels ? JSON.parse(data.authorizedLevels) : []) } catch { /* corrupted data */ }
       }
     } catch (error) {
       console.error('Error loading profile:', error)
