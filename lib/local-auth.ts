@@ -4,7 +4,7 @@ import { getConfigDb } from './db'
 const SCRYPT_KEYLEN = 64
 const SALT_LENGTH = 32
 
-interface LocalUser {
+export interface LocalUser {
   id: string
   email: string
   name: string
@@ -28,18 +28,104 @@ function verifyPassword(password: string, stored: string): boolean {
   return crypto.timingSafeEqual(expectedHash, actualHash)
 }
 
-export function createLocalAdmin(email: string, name: string, password: string): LocalUser {
+// ---------------------------------------------------------------------------
+// CRUD
+// ---------------------------------------------------------------------------
+
+export function createLocalUser(
+  email: string,
+  name: string,
+  password: string,
+  role: 'admin' | 'user' = 'user'
+): LocalUser {
   const db = getConfigDb()
   const id = `local-${crypto.randomUUID()}`
   const passwordHash = hashPassword(password)
 
   db.prepare(
     `INSERT INTO local_users (id, email, name, password_hash, role)
-     VALUES (?, ?, ?, ?, 'admin')`
-  ).run(id, email, name, passwordHash)
+     VALUES (?, ?, ?, ?, ?)`
+  ).run(id, email, name, passwordHash, role)
 
-  return { id, email, name, role: 'admin', created_at: new Date().toISOString() }
+  return { id, email, name, role, created_at: new Date().toISOString() }
 }
+
+/** Alias kept for setup wizard */
+export function createLocalAdmin(email: string, name: string, password: string): LocalUser {
+  return createLocalUser(email, name, password, 'admin')
+}
+
+export function listLocalUsers(): LocalUser[] {
+  const db = getConfigDb()
+  return db
+    .prepare('SELECT id, email, name, role, created_at FROM local_users ORDER BY created_at ASC')
+    .all() as LocalUser[]
+}
+
+export function getLocalUserById(id: string): LocalUser | null {
+  const db = getConfigDb()
+  const row = db
+    .prepare('SELECT id, email, name, role, created_at FROM local_users WHERE id = ?')
+    .get(id) as LocalUser | undefined
+  return row ?? null
+}
+
+export function updateLocalUser(
+  id: string,
+  updates: { name?: string; email?: string; role?: string }
+): boolean {
+  const db = getConfigDb()
+  const fields: string[] = []
+  const values: string[] = []
+
+  if (updates.name) {
+    fields.push('name = ?')
+    values.push(updates.name)
+  }
+  if (updates.email) {
+    fields.push('email = ?')
+    values.push(updates.email)
+  }
+  if (updates.role) {
+    fields.push('role = ?')
+    values.push(updates.role)
+  }
+
+  if (fields.length === 0) return false
+
+  values.push(id)
+  const result = db
+    .prepare(`UPDATE local_users SET ${fields.join(', ')} WHERE id = ?`)
+    .run(...values)
+  return result.changes > 0
+}
+
+export function resetLocalUserPassword(id: string, newPassword: string): boolean {
+  const db = getConfigDb()
+  const passwordHash = hashPassword(newPassword)
+  const result = db
+    .prepare('UPDATE local_users SET password_hash = ? WHERE id = ?')
+    .run(passwordHash, id)
+  return result.changes > 0
+}
+
+export function deleteLocalUser(id: string): boolean {
+  const db = getConfigDb()
+  const result = db.prepare('DELETE FROM local_users WHERE id = ?').run(id)
+  return result.changes > 0
+}
+
+export function countAdmins(): number {
+  const db = getConfigDb()
+  const row = db
+    .prepare("SELECT COUNT(*) as count FROM local_users WHERE role = 'admin'")
+    .get() as { count: number }
+  return row.count
+}
+
+// ---------------------------------------------------------------------------
+// Auth
+// ---------------------------------------------------------------------------
 
 export function authenticateLocalUser(
   email: string,
