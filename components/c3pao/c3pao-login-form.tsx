@@ -32,7 +32,7 @@ export default function C3PAOLoginForm() {
         return
       }
 
-      router.push('/')
+      router.push(result.isLocalAdmin ? '/admin' : '/')
     } catch {
       setError('An error occurred. Please try again.')
       setIsLoading(false)

@@ -9,6 +9,7 @@ export async function middleware(request: NextRequest) {
 
   const isPublicRoute = PUBLIC_ROUTES.some((route) => path.startsWith(route))
   const isSetupRoute = path.startsWith('/setup')
+  const isAdminRoute = path.startsWith('/admin')
 
   // Check if instance has been configured (env var OR cookie set during setup wizard)
   const isConfigured = !!process.env.INSTANCE_API_KEY ||
@@ -35,14 +36,24 @@ export async function middleware(request: NextRequest) {
   // Check session expiry
   const isValidSession = session && new Date(session.expires) > new Date()
 
-  // If on login page and already authenticated, redirect to dashboard
+  // If on login page and already authenticated, redirect appropriately
   if (isPublicRoute && isValidSession) {
-    return NextResponse.redirect(new URL('/', request.url))
+    return NextResponse.redirect(new URL(session.isLocalAdmin ? '/admin' : '/', request.url))
   }
 
   // If not on a public route and not authenticated, redirect to login
   if (!isPublicRoute && !isValidSession) {
     return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // Protect /admin routes — only local admin can access
+  if (isAdminRoute && isValidSession && !session.isLocalAdmin) {
+    return NextResponse.redirect(new URL('/', request.url))
+  }
+
+  // Prevent local admin from accessing assessment routes
+  if (!isAdminRoute && !isPublicRoute && isValidSession && session.isLocalAdmin) {
+    return NextResponse.redirect(new URL('/admin', request.url))
   }
 
   return NextResponse.next()

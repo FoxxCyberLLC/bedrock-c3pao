@@ -14,10 +14,8 @@ const nextConfig: NextConfig = {
     },
   },
 
-  // Expose env vars to edge runtime (middleware)
-  env: {
-    AUTH_SECRET: process.env.AUTH_SECRET,
-  },
+  // Prevent Next.js from bundling native modules
+  serverExternalPackages: ['better-sqlite3'],
 };
 
 export default nextConfig;

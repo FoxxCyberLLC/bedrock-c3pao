@@ -1,7 +1,4 @@
-import fs from 'fs'
-import path from 'path'
-
-const CONFIG_PATH = path.join(process.cwd(), 'data', 'instance.json')
+import { getConfig, isAppConfigured } from './config'
 
 export interface InstanceConfig {
   instanceApiKey: string
@@ -12,38 +9,18 @@ export interface InstanceConfig {
 }
 
 export function getInstanceConfig(): InstanceConfig | null {
-  // Env var takes precedence (pre-configured deployment)
-  if (process.env.INSTANCE_API_KEY) {
-    return {
-      instanceApiKey: process.env.INSTANCE_API_KEY,
-      c3paoId: '',
-      c3paoName: '',
-      activatedAt: '',
-      apiUrl: process.env.BEDROCK_API_URL || 'http://localhost:8080',
-    }
-  }
+  const key = process.env.INSTANCE_API_KEY
+  if (!key) return null
 
-  // Check config file (written by setup wizard)
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      const raw = fs.readFileSync(CONFIG_PATH, 'utf-8')
-      return JSON.parse(raw) as InstanceConfig
-    }
-  } catch {
-    // Config file corrupt or missing
+  return {
+    instanceApiKey: key,
+    c3paoId: process.env.C3PAO_ID || getConfig('C3PAO_ID') || '',
+    c3paoName: process.env.C3PAO_NAME || getConfig('C3PAO_NAME') || '',
+    activatedAt: process.env.ACTIVATED_AT || getConfig('ACTIVATED_AT') || '',
+    apiUrl: process.env.BEDROCK_API_URL || 'http://localhost:8080',
   }
-
-  return null
-}
-
-export function saveInstanceConfig(config: InstanceConfig): void {
-  const dir = path.dirname(CONFIG_PATH)
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
 }
 
 export function isInstanceConfigured(): boolean {
-  return getInstanceConfig() !== null
+  return !!process.env.INSTANCE_API_KEY || isAppConfigured()
 }

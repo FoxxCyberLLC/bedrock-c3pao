@@ -1,11 +1,10 @@
 'use server'
 
+import crypto from 'crypto'
 import { cookies } from 'next/headers'
-import { getInstanceConfig, saveInstanceConfig } from '@/lib/instance-config'
+import { setConfigBatch, getConfig, isAppConfigured } from '@/lib/config'
+import { createLocalAdmin } from '@/lib/local-auth'
 
-const API_URL = process.env.BEDROCK_API_URL || 'http://localhost:8080'
-
-// Matches Go API ActivateResponse shape (flat structure)
 interface ActivateResponse {
   instanceId: string
   c3paoId: string
@@ -24,7 +23,10 @@ interface ActivateResponse {
   } | null
 }
 
-export async function validateInstanceKey(apiKey: string): Promise<{
+export async function validateInstanceKey(
+  apiKey: string,
+  apiUrl: string
+): Promise<{
   success: boolean
   data?: ActivateResponse
   error?: string
@@ -33,8 +35,12 @@ export async function validateInstanceKey(apiKey: string): Promise<{
     return { success: false, error: 'Invalid API key format. Keys start with bri-' }
   }
 
+  if (!apiUrl) {
+    return { success: false, error: 'API URL is required' }
+  }
+
   try {
-    const response = await fetch(`${API_URL}/api/instance/activate`, {
+    const response = await fetch(`${apiUrl}/api/instance/activate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ apiKey }),
@@ -54,36 +60,55 @@ export async function validateInstanceKey(apiKey: string): Promise<{
   } catch {
     return {
       success: false,
-      error: 'Cannot reach the Bedrock API. Check your BEDROCK_API_URL configuration.',
+      error: 'Cannot reach the Bedrock API. Verify the API URL is correct and reachable.',
     }
   }
 }
 
-export async function completeSetup(
-  apiKey: string,
-  c3paoId: string,
+interface SetupParams {
+  apiKey: string
+  apiUrl: string
+  c3paoId: string
   c3paoName: string
+  adminName: string
+  adminEmail: string
+  adminPassword: string
+}
+
+export async function completeSetup(
+  params: SetupParams
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    saveInstanceConfig({
-      instanceApiKey: apiKey,
-      c3paoId,
-      c3paoName,
-      activatedAt: new Date().toISOString(),
-      apiUrl: API_URL,
+    const authSecret = crypto.randomBytes(32).toString('base64')
+
+    // Save all config to encrypted SQLite
+    setConfigBatch({
+      BEDROCK_API_URL: params.apiUrl,
+      AUTH_SECRET: authSecret,
+      INSTANCE_API_KEY: params.apiKey,
+      FORCE_HTTPS: 'true',
+      C3PAO_ID: params.c3paoId,
+      C3PAO_NAME: params.c3paoName,
+      ACTIVATED_AT: new Date().toISOString(),
     })
+
+    // Create local admin user
+    createLocalAdmin(params.adminEmail, params.adminName, params.adminPassword)
+
+    // Inject into process.env for immediate use (no restart needed)
+    process.env.BEDROCK_API_URL = params.apiUrl
+    process.env.AUTH_SECRET = authSecret
+    process.env.INSTANCE_API_KEY = params.apiKey
+    process.env.FORCE_HTTPS = 'true'
 
     // Set cookie so Edge middleware knows setup is done
     const cookieStore = await cookies()
     cookieStore.set('bedrock_instance_configured', 'true', {
       httpOnly: true,
-      maxAge: 60 * 60 * 24 * 365 * 10, // 10 years
+      maxAge: 60 * 60 * 24 * 365 * 10,
       path: '/',
       sameSite: 'lax',
     })
-
-    // Also set the INSTANCE_API_KEY in the process env for immediate use
-    process.env.INSTANCE_API_KEY = apiKey
 
     return { success: true }
   } catch (error) {
@@ -103,18 +128,17 @@ export async function getSetupStatus(): Promise<{
     apiUrl: string
   } | null
 }> {
-  const config = getInstanceConfig()
-  if (!config || !config.c3paoId) {
+  if (!isAppConfigured()) {
     return { configured: false, config: null }
   }
 
   return {
     configured: true,
     config: {
-      c3paoName: config.c3paoName,
-      c3paoId: config.c3paoId,
-      activatedAt: config.activatedAt,
-      apiUrl: config.apiUrl,
+      c3paoName: getConfig('C3PAO_NAME') || '',
+      c3paoId: getConfig('C3PAO_ID') || '',
+      activatedAt: getConfig('ACTIVATED_AT') || '',
+      apiUrl: getConfig('BEDROCK_API_URL') || '',
     },
   }
 }

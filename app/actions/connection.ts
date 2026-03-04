@@ -1,10 +1,9 @@
 'use server'
 
-// Connection settings are no longer needed — the C3PAO client connects
-// directly to the Go API via BEDROCK_API_URL environment variable.
+// Connection settings are configured during the setup wizard and stored in SQLite.
 
 export async function saveConnectionConfig(): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: 'Connection is configured via BEDROCK_API_URL environment variable' }
+  return { success: false, error: 'Connection is configured during setup. To reconfigure, delete data/config.db and restart.' }
 }
 
 export async function getConnectionStatus() {

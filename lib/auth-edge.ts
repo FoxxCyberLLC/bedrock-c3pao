@@ -33,6 +33,7 @@ export type C3PAOSessionPayload = {
   c3paoUser: SessionC3PAOUser
   apiToken: string
   expires: string
+  isLocalAdmin?: boolean
 }
 
 /**

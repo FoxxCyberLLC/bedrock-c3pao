@@ -9,12 +9,15 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 
-const secretKey = (() => {
+function getSecretKey(): string {
   const s = process.env.AUTH_SECRET
   if (!s) throw new Error('AUTH_SECRET environment variable is required')
   return s
-})()
-const key = new TextEncoder().encode(secretKey)
+}
+
+function getKey(): Uint8Array {
+  return new TextEncoder().encode(getSecretKey())
+}
 
 const COOKIE_NAME = 'bedrock_c3pao_session'
 const SESSION_DURATION_HOURS = 8
@@ -33,6 +36,7 @@ export type C3PAOSessionPayload = {
   c3paoUser: SessionC3PAOUser
   apiToken: string
   expires: string
+  isLocalAdmin?: boolean
 }
 
 /**
@@ -43,7 +47,7 @@ export async function encryptSession(payload: Record<string, unknown>): Promise<
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DURATION_HOURS}h`)
-    .sign(key)
+    .sign(getKey())
 }
 
 /**
@@ -51,7 +55,7 @@ export async function encryptSession(payload: Record<string, unknown>): Promise<
  */
 export async function decryptSession(input: string): Promise<C3PAOSessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(input, key, {
+    const { payload } = await jwtVerify(input, getKey(), {
       algorithms: ['HS256'],
     })
     return payload as unknown as C3PAOSessionPayload
@@ -73,17 +77,17 @@ export async function getSession(): Promise<C3PAOSessionPayload | null> {
 /**
  * Set session cookie after successful Go API authentication
  */
-export async function setSession(user: SessionC3PAOUser, apiToken: string): Promise<void> {
+export async function setSession(user: SessionC3PAOUser, apiToken: string, isLocalAdmin = false): Promise<void> {
   const expires = new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000)
 
   const session = await encryptSession({
     c3paoUser: user,
     apiToken,
     expires: expires.toISOString(),
+    isLocalAdmin,
   })
 
-  const isSecure = process.env.FORCE_HTTPS === 'true' ||
-    (process.env.NODE_ENV === 'production' && process.env.FORCE_HTTPS !== 'false')
+  const isSecure = process.env.FORCE_HTTPS === 'true' || process.env.NODE_ENV === 'production'
 
   const cookieStore = await cookies()
   cookieStore.set(COOKIE_NAME, session, {

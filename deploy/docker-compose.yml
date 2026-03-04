@@ -1,6 +1,6 @@
 services:
   c3pao:
-    build: .
+    image: ghcr.io/foxxdev-collab/bedrock-c3pao:latest
     ports:
       - "3001:3001"
     volumes:
