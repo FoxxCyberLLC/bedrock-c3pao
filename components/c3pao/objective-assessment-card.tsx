@@ -152,7 +152,7 @@ export function ObjectiveAssessmentCard({
         assessmentNotes: findings || undefined,
         version: assessorStatus?.version,
         // eMASS fields
-        artifactsReviewed: selectedArtifacts.length > 0 ? selectedArtifacts : undefined,
+        artifactsReviewed: selectedArtifacts.length > 0 ? JSON.stringify(selectedArtifacts) : undefined,
         interviewees: interviewees || undefined,
         examineDescription: examineDescription || undefined,
         testDescription: testDescription || undefined,
