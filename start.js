@@ -1,6 +1,8 @@
 /**
- * Bootstrap script — loads configuration from SQLite into process.env
- * before starting the Next.js server.
+ * Bootstrap script — loads configuration from SQLite into process.env,
+ * generates a self-signed TLS certificate if needed, starts the Next.js
+ * server on an internal HTTP port, and exposes an HTTPS reverse proxy
+ * on the external port.
  *
  * Usage: node start.js (replaces node server.js in Docker CMD)
  */
@@ -8,11 +10,20 @@
 const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
+const https = require('https')
+const http = require('http')
+const { execSync } = require('child_process')
 
 const DB_PATH = path.join(__dirname, 'data', 'config.db')
 const KEY_PATH = path.join(__dirname, 'data', '.encryption-key')
 const INSTANCE_JSON = path.join(__dirname, 'data', 'instance.json')
 const MIGRATED_JSON = path.join(__dirname, 'data', 'instance.json.migrated')
+const CERT_DIR = path.join(__dirname, 'data', 'certs')
+const TLS_CERT = path.join(CERT_DIR, 'cert.pem')
+const TLS_KEY = path.join(CERT_DIR, 'key.pem')
+
+const INTERNAL_PORT = 3000
+const EXTERNAL_PORT = parseInt(process.env.PORT || '3001', 10)
 
 /**
  * Decrypt AES-256-GCM packed value: "iv:authTag:ciphertext" (base64)
@@ -28,7 +39,98 @@ function decrypt(packed, keyBuf) {
   return decrypted
 }
 
-function bootstrap() {
+/**
+ * Generate a self-signed TLS certificate if one doesn't already exist.
+ * Users can mount their own cert.pem / key.pem into /app/data/certs/ to
+ * use a real certificate instead.
+ */
+function ensureCerts() {
+  if (fs.existsSync(TLS_CERT) && fs.existsSync(TLS_KEY)) {
+    console.log('[start] Using existing TLS certificates')
+    return
+  }
+
+  fs.mkdirSync(CERT_DIR, { recursive: true })
+
+  console.log('[start] Generating self-signed TLS certificate...')
+  execSync(
+    `openssl req -x509 -newkey rsa:2048 -nodes ` +
+    `-keyout "${TLS_KEY}" -out "${TLS_CERT}" ` +
+    `-days 3650 -subj "/CN=bedrock-c3pao/O=Bedrock" ` +
+    `-addext "subjectAltName=DNS:localhost,DNS:bedrock-c3pao,IP:127.0.0.1"`,
+    { stdio: 'pipe' }
+  )
+  console.log('[start] Self-signed TLS certificate generated (valid 10 years)')
+}
+
+/**
+ * Create an HTTPS reverse proxy that forwards to the internal Next.js
+ * HTTP server. Handles regular requests, streaming (SSE), and WebSocket
+ * upgrades.
+ */
+function startHttpsProxy() {
+  const cert = fs.readFileSync(TLS_CERT)
+  const key = fs.readFileSync(TLS_KEY)
+
+  const server = https.createServer({ key, cert }, (req, res) => {
+    const proxyReq = http.request({
+      hostname: '127.0.0.1',
+      port: INTERNAL_PORT,
+      path: req.url,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        'x-forwarded-proto': 'https',
+        'x-forwarded-for': req.socket.remoteAddress,
+      },
+    }, (proxyRes) => {
+      res.writeHead(proxyRes.statusCode, proxyRes.headers)
+      proxyRes.pipe(res)
+    })
+
+    proxyReq.on('error', () => {
+      if (!res.headersSent) {
+        res.writeHead(503)
+        res.end('Service starting...')
+      }
+    })
+
+    req.pipe(proxyReq)
+  })
+
+  // WebSocket upgrade support
+  server.on('upgrade', (req, socket, head) => {
+    const proxyReq = http.request({
+      hostname: '127.0.0.1',
+      port: INTERNAL_PORT,
+      path: req.url,
+      method: 'GET',
+      headers: {
+        ...req.headers,
+        'x-forwarded-proto': 'https',
+      },
+    })
+
+    proxyReq.on('upgrade', (proxyRes, proxySocket, proxyHead) => {
+      const headers = Object.entries(proxyRes.headers)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join('\r\n')
+      socket.write(`HTTP/1.1 101 Switching Protocols\r\n${headers}\r\n\r\n`)
+      if (proxyHead.length) socket.write(proxyHead)
+      proxySocket.pipe(socket)
+      socket.pipe(proxySocket)
+    })
+
+    proxyReq.on('error', () => socket.destroy())
+    proxyReq.end()
+  })
+
+  server.listen(EXTERNAL_PORT, '0.0.0.0', () => {
+    console.log(`[start] HTTPS listening on https://0.0.0.0:${EXTERNAL_PORT}`)
+  })
+}
+
+function loadConfig() {
   const dataDir = path.join(__dirname, 'data')
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true })
@@ -44,6 +146,7 @@ function bootstrap() {
 
   const db = new Database(DB_PATH)
   db.pragma('journal_mode = WAL')
+  db.pragma('busy_timeout = 5000')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_config (
@@ -112,9 +215,24 @@ function bootstrap() {
   } else {
     console.log('[start] No config found — setup wizard will be shown')
   }
+}
 
-  // Start Next.js
+function bootstrap() {
+  loadConfig()
+  ensureCerts()
+
+  // Container always serves HTTPS
+  process.env.FORCE_HTTPS = 'true'
+
+  // Next.js listens on internal HTTP-only port (not exposed)
+  process.env.PORT = String(INTERNAL_PORT)
+  process.env.HOSTNAME = '127.0.0.1'
+
+  // Start Next.js (internal HTTP)
   require('./server.js')
+
+  // Start HTTPS reverse proxy (exposed)
+  startHttpsProxy()
 }
 
 bootstrap()
