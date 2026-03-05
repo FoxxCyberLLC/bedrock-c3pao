@@ -569,7 +569,7 @@ export default function C3PAOProfilePage() {
                   Select the CMMC levels you are authorized to assess
                 </p>
                 <div className="flex gap-4">
-                  {['LEVEL_1', 'LEVEL_2'].map((level) => (
+                  {['LEVEL_2'].map((level) => (
                     <div
                       key={level}
                       onClick={() => toggleLevel(level)}

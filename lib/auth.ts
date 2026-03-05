@@ -94,7 +94,7 @@ export async function setSession(user: SessionC3PAOUser, apiToken: string, isLoc
     expires,
     httpOnly: true,
     secure: isSecure,
-    sameSite: isSecure ? 'strict' : 'lax',
+    sameSite: 'lax',
     path: '/',
   })
 }

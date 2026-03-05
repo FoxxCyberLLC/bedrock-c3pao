@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   Building2,
   KeyRound,
@@ -47,7 +46,7 @@ interface ActivationData {
 }
 
 export default function SetupPage() {
-  const router = useRouter()
+
   const [step, setStep] = useState<WizardStep>('welcome')
   const [apiUrl, setApiUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -130,7 +129,7 @@ export default function SetupPage() {
 
       if (result.success) {
         setStep('complete')
-        setTimeout(() => router.push('/login'), 2000)
+        setTimeout(() => { window.location.href = '/login' }, 2000)
       } else {
         setError(result.error || 'Failed to save configuration')
         setStep('admin')

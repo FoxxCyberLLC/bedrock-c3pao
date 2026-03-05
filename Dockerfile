@@ -18,7 +18,6 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-ENV NEXT_PRIVATE_WORKER_THREADS=true
 RUN npm run build
 
 # Stage 3: Production runner

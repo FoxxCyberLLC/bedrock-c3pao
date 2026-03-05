@@ -102,9 +102,11 @@ export async function completeSetup(
     process.env.FORCE_HTTPS = 'true'
 
     // Set cookie so Edge middleware knows setup is done
+    const isSecure = process.env.FORCE_HTTPS === 'true' || process.env.NODE_ENV === 'production'
     const cookieStore = await cookies()
     cookieStore.set('bedrock_instance_configured', 'true', {
       httpOnly: true,
+      secure: isSecure,
       maxAge: 60 * 60 * 24 * 365 * 10,
       path: '/',
       sameSite: 'lax',

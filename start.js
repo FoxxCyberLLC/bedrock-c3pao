@@ -81,6 +81,7 @@ function startHttpsProxy() {
       headers: {
         ...req.headers,
         'x-forwarded-proto': 'https',
+        'x-forwarded-host': req.headers.host,
         'x-forwarded-for': req.socket.remoteAddress,
       },
     }, (proxyRes) => {
