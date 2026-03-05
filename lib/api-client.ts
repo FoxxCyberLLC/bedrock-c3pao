@@ -931,3 +931,66 @@ export async function updateC3PAOUser(userId: string, body: {
 export async function deleteC3PAOUser(userId: string, token: string): Promise<unknown> {
   return apiRequest<unknown>(`/api/c3pao/users/${userId}`, { method: 'DELETE', token })
 }
+
+// ---- Instance-Scoped Management (Admin via X-Instance-Key) ----
+
+export interface InstanceOrgDetail {
+  id: string
+  name: string
+  email: string
+  phone: string | null
+  website: string | null
+  description: string | null
+  address1: string | null
+  city: string | null
+  state: string | null
+  zipCode: string | null
+  cageCode: string | null
+  cyberAbAccreditationId: string | null
+  authorizedLevels: string | null
+  status: string
+  pricingInfo: string | null
+  typicalTimeline: string | null
+  averageRating: number | null
+  totalReviews: number
+  maxUsers: number
+  userCount: number
+  engagementCount: number
+}
+
+export async function fetchInstanceOrg(): Promise<InstanceOrgDetail> {
+  return apiRequest<InstanceOrgDetail>('/api/instance/org')
+}
+
+export async function fetchInstanceUsers(): Promise<C3PAOUserItem[]> {
+  return apiRequest<C3PAOUserItem[]>('/api/instance/users')
+}
+
+export async function createInstanceUser(body: {
+  name: string
+  email: string
+  password: string
+  phone?: string
+  jobTitle?: string
+  ccaNumber?: string
+  ccpNumber?: string
+  isLeadAssessor: boolean
+}): Promise<C3PAOUserItem> {
+  return apiRequest<C3PAOUserItem>('/api/instance/users', { method: 'POST', body })
+}
+
+export async function updateInstanceUser(userId: string, body: {
+  name?: string
+  phone?: string
+  jobTitle?: string
+  ccaNumber?: string
+  ccpNumber?: string
+  isLeadAssessor?: boolean
+  status?: string
+}): Promise<unknown> {
+  return apiRequest<unknown>(`/api/instance/users/${userId}`, { method: 'PUT', body })
+}
+
+export async function deleteInstanceUser(userId: string): Promise<unknown> {
+  return apiRequest<unknown>(`/api/instance/users/${userId}`, { method: 'DELETE' })
+}

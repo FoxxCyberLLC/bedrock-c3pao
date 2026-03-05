@@ -69,7 +69,7 @@ interface LocalUser {
   created_at: string
 }
 
-export function AdminSettingsPanel({ userName }: { userName: string }) {
+export function AdminSettingsPanel({ userName, embedded = false }: { userName: string; embedded?: boolean }) {
   const router = useRouter()
   const [data, setData] = useState<AdminData | null>(null)
   const [users, setUsers] = useState<LocalUser[]>([])
@@ -206,26 +206,27 @@ export function AdminSettingsPanel({ userName }: { userName: string }) {
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-            <Shield className="h-5 w-5 text-primary" />
+    <div className={embedded ? 'space-y-6' : 'p-6 max-w-4xl mx-auto space-y-6'}>
+      {!embedded && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+              <Shield className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold">Instance Administration</h1>
+              <p className="text-sm text-muted-foreground">Signed in as {userName}</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold">Instance Administration</h1>
-            <p className="text-sm text-muted-foreground">Signed in as {userName}</p>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="outline" size="sm" onClick={handleLogout}>
+              <LogOut className="h-4 w-4 mr-2" />
+              Sign Out
+            </Button>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Button variant="outline" size="sm" onClick={handleLogout}>
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign Out
-          </Button>
-        </div>
-      </div>
+      )}
 
       {!data ? (
         <Card>

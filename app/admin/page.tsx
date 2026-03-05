@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { requireAuth } from '@/lib/auth'
-import { AdminSettingsPanel } from '@/components/c3pao/admin-settings-panel'
+import { AdminPanel } from '@/components/c3pao/admin-panel'
 
 export default async function AdminPage() {
   const session = await requireAuth()
@@ -10,7 +10,7 @@ export default async function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted to-background">
-      <AdminSettingsPanel userName={session.c3paoUser.name} />
+      <AdminPanel userName={session.c3paoUser.name} />
     </div>
   )
 }
