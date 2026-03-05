@@ -2,7 +2,6 @@
 
 import { useTransition } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   Building2,
@@ -68,13 +67,27 @@ export function C3PAONav({ user }: C3PAONavProps) {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-3">
-            <Image
-              src="/images/Designer-removebg-preview.png"
-              alt="Foxx Cyber"
-              width={40}
-              height={40}
+            <svg
+              width="40"
+              height="40"
+              viewBox="0 0 40 40"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
               className="w-10 h-10"
-            />
+              aria-label="Bedrock C3PAO"
+            >
+              <rect width="40" height="40" rx="8" className="fill-primary/10" />
+              <path
+                d="M8 30 L16 14 L20 20 L26 10 L32 30 Z"
+                className="fill-primary"
+              />
+              <path
+                d="M12 30 L18 18 L22 23 L28 12 L34 30"
+                className="stroke-primary/40"
+                strokeWidth="1.5"
+                fill="none"
+              />
+            </svg>
             <div className="flex flex-col">
               <span className="text-lg font-bold leading-tight">C3PAO Portal</span>
               <span className="text-xs text-muted-foreground leading-tight">{user.c3paoName}</span>
