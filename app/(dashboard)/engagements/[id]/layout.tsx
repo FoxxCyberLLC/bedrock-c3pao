@@ -3,8 +3,9 @@ import { requireAuth } from '@/lib/auth'
 import { checkEngagementStatus } from '@/app/actions/engagements'
 
 // Terminal statuses that permanently close a C3PAO's access to an engagement.
-// Once an assessment is COMPLETED or CANCELLED, all package data is off-limits.
-const TERMINAL_STATUSES = new Set(['COMPLETED', 'CANCELLED'])
+// COMPLETED is intentionally excluded — assessors can still view completed engagements
+// in read-only mode (enforced by isReadOnly flag in engagement-detail.tsx).
+const TERMINAL_STATUSES = new Set(['CANCELLED'])
 
 export default async function EngagementLayout({
   children,

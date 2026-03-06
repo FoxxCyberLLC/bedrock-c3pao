@@ -1,6 +1,7 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import type { CMMCStatus } from '@/lib/cmmc/status-determination'
 import {
   fetchProfile,
   updateProfile,
@@ -137,13 +138,30 @@ export async function addAssessorNotes(engagementId: string, content: string): P
 
 // ---- Assessment Result ----
 
-export async function recordAssessmentResult(engagementId: string, result: string | boolean, findings?: string): Promise<{ success: boolean; error?: string }> {
+/**
+ * Record the final CMMC assessment result and mark the engagement as COMPLETED.
+ *
+ * API compatibility: The backend accepts FINAL_LEVEL_2, CONDITIONAL_LEVEL_2, and NO_CMMC_STATUS
+ * as assessmentResult values. If the backend rejects these (400/422), update this function
+ * to map: FINAL_LEVEL_2 → PASSED, CONDITIONAL_LEVEL_2 → PASSED, NO_CMMC_STATUS → FAILED
+ * and encode the CMMC status in resultNotes as JSON.
+ */
+export async function recordAssessmentResult(
+  engagementId: string,
+  result: CMMCStatus,
+  findings?: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    const assessmentResult = typeof result === 'boolean' ? (result ? 'PASSED' : 'FAILED') : result
+    // End assessment mode defensively — may already be inactive (e.g., completing from PENDING_APPROVAL)
+    try {
+      await toggleAssessmentMode(engagementId, false, token)
+    } catch {
+      // May not be in assessment mode — swallow the error
+    }
     await apiUpdateEngagementStatus(engagementId, {
       status: 'COMPLETED',
-      assessmentResult,
+      assessmentResult: result,
       resultNotes: findings,
     }, token)
     return { success: true }
@@ -192,26 +210,17 @@ export async function stopAssessment(engagementId: string): Promise<{ success: b
   }
 }
 
-export async function failAssessment(engagementId: string, notes?: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const token = await getToken()
-    // End assessment mode first
-    try {
-      await toggleAssessmentMode(engagementId, false, token)
-    } catch {
-      // May not be in assessment mode
-    }
-    // Transition directly to COMPLETED with FAILED result
-    await apiUpdateEngagementStatus(engagementId, {
-      status: 'COMPLETED',
-      assessmentResult: 'FAILED',
-      resultNotes: notes,
-    }, token)
-    return { success: true }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to fail assessment' }
-  }
+/**
+ * Complete an assessment with No CMMC Status result.
+ * @deprecated Use recordAssessmentResult(id, 'NO_CMMC_STATUS', notes) instead.
+ * This function is kept as a backward-compatible alias until all callers are updated.
+ */
+export async function completeWithNoStatus(engagementId: string, notes?: string): Promise<{ success: boolean; error?: string }> {
+  return recordAssessmentResult(engagementId, 'NO_CMMC_STATUS', notes)
 }
+
+/** @deprecated Use completeWithNoStatus or recordAssessmentResult instead */
+export const failAssessment = completeWithNoStatus
 
 // ---- Submission / Approval ----
 

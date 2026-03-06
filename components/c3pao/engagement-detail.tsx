@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
@@ -28,8 +28,13 @@ import {
   ClipboardList,
   BarChart3,
   CheckSquare,
+  Lock,
+  Info,
+  Copy,
+  FileDown,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -50,7 +55,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { updateEngagementStatus, addAssessorNotes, recordAssessmentResult, startAssessment, endAssessmentMode, stopAssessment, failAssessment, submitAssessmentForApproval, rejectAssessmentSubmission } from '@/app/actions/c3pao-dashboard'
+import { updateEngagementStatus, addAssessorNotes, recordAssessmentResult, startAssessment, endAssessmentMode, stopAssessment, submitAssessmentForApproval, rejectAssessmentSubmission } from '@/app/actions/c3pao-dashboard'
+import { determineCMMCStatus, calculateExpirationDate, CMMCStatusConfig, normalizeLegacyStatus, type CMMCStatus } from '@/lib/cmmc/status-determination'
 import { toast } from 'sonner'
 import { AssessmentControlsTable } from './assessment-controls-table'
 import { POAMViewer } from './poam-viewer'
@@ -198,6 +204,16 @@ interface ExternalServiceProvider {
   fedRampLevel: string | null
 }
 
+/** Maps OSC package requirement status to CMMC objective status for auto-detection. */
+function mapRequirementStatus(status: string): 'MET' | 'NOT_MET' | 'NOT_APPLICABLE' | 'NOT_ASSESSED' {
+  switch (status) {
+    case 'COMPLIANT': return 'MET'
+    case 'NON_COMPLIANT': return 'NOT_MET'
+    case 'NOT_APPLICABLE': return 'NOT_APPLICABLE'
+    default: return 'NOT_ASSESSED'
+  }
+}
+
 interface EngagementDetailProps {
   engagement: {
     id: string
@@ -251,18 +267,17 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
   const [notes, setNotes] = useState(engagement.assessmentNotes || '')
   const [showResultDialog, setShowResultDialog] = useState(false)
   const [showStartAssessmentDialog, setShowStartAssessmentDialog] = useState(false)
-  const [assessmentPassed, setAssessmentPassed] = useState<string>('')
+  const [selectedStatus, setSelectedStatus] = useState<CMMCStatus | null>(null)
   const [findings, setFindings] = useState('')
   const [isExporting, setIsExporting] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [showStopDialog, setShowStopDialog] = useState(false)
-  const [showFailDialog, setShowFailDialog] = useState(false)
-  const [failNotes, setFailNotes] = useState('')
   const [submissionNotes, setSubmissionNotes] = useState('')
   const [rejectionReason, setRejectionReason] = useState('')
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const [showNewAssessmentDialog, setShowNewAssessmentDialog] = useState(false)
   const [team, setTeam] = useState<{
     id: string
     assessorId: string
@@ -420,28 +435,23 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
     }
   }
 
-  const handleRecordResult = async () => {
-    if (!assessmentPassed) {
-      toast.error('Please select a result')
+  const handleCompleteAssessment = async () => {
+    if (!selectedStatus) {
+      toast.error('Please select a status')
       return
     }
 
     setIsUpdating(true)
     try {
-      // Record the result
-      const result = await recordAssessmentResult(
-        engagement.id,
-        assessmentPassed === 'passed',
-        findings || undefined
-      )
+      const result = await recordAssessmentResult(engagement.id, selectedStatus, findings || undefined)
       if (result.success) {
-        // End assessment mode to unlock customer package
-        await endAssessmentMode(engagement.id)
-        toast.success('Assessment completed - Customer package unlocked')
+        // recordAssessmentResult already deactivates assessment mode defensively
+        toast.success('Assessment completed')
         setShowResultDialog(false)
+        setFindings('')
         router.refresh()
       } else {
-        toast.error(result.error || 'Failed to record result')
+        toast.error(result.error || 'Failed to complete assessment')
       }
     } catch {
       toast.error('An error occurred')
@@ -534,40 +544,136 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
     }
   }
 
-  // Handle fail assessment (end mode + mark COMPLETED/FAILED)
-  const handleFailAssessment = async () => {
-    setIsUpdating(true)
+  // Build reference baseline markdown for clipboard export
+  const buildBaselineMarkdown = () => {
+    const orgName = pkg?.organization?.name || 'Unknown Organization'
+    const pkgName = pkg?.name || 'Unknown Package'
+    const completionDate = safeDate(engagement.actualCompletionDate)
+    const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
+    const expirationDate = cmmcStatus && completionDate ? calculateExpirationDate(cmmcStatus, completionDate) : null
+    const statusLabel = cmmcStatus ? CMMCStatusConfig[cmmcStatus].label : (engagement.assessmentResult || 'Not recorded')
+
+    return [
+      `# CMMC Assessment Reference Baseline`,
+      ``,
+      `**Organization:** ${orgName}`,
+      `**Package:** ${pkgName}`,
+      `**Completed:** ${completionDate ? format(completionDate, 'PPP') : 'Unknown'}`,
+      `**Result:** ${statusLabel}`,
+      expirationDate ? `**Certificate Expires:** ${format(expirationDate, 'PPP')}` : null,
+      ``,
+      `## Control Summary`,
+      ``,
+      `| Status | Count |`,
+      `|--------|-------|`,
+      `| Met (Compliant) | ${controlStats.compliant} |`,
+      `| Not Met (Non-Compliant) | ${controlStats.nonCompliant} |`,
+      `| Not Assessed | ${controlStats.inProgress + controlStats.notStarted} |`,
+      `| Not Applicable | ${controlStats.notApplicable} |`,
+      `| **Total** | **${controlStats.total}** |`,
+      ``,
+      `**POA&Ms:** ${pkg?.poams.length || 0}`,
+      engagement.resultNotes ? `\n## Result Notes\n\n${engagement.resultNotes}` : null,
+      ``,
+      `---`,
+      `*Generated by Bedrock C3PAO on ${format(new Date(), 'PPP')}*`,
+    ].filter(Boolean).join('\n')
+  }
+
+  // Build reference baseline JSON for file download
+  const buildBaselineJSON = () => {
+    const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
+    const completionDate = safeDate(engagement.actualCompletionDate)
+    const expirationDate = cmmcStatus && completionDate ? calculateExpirationDate(cmmcStatus, completionDate) : null
+    return JSON.stringify({
+      schemaVersion: '1.0',
+      exportedAt: new Date().toISOString(),
+      assessment: {
+        organizationName: pkg?.organization?.name || 'Unknown',
+        packageName: pkg?.name || 'Unknown',
+        completionDate: completionDate?.toISOString() || null,
+        cmmcStatus: cmmcStatus || engagement.assessmentResult || null,
+        cmmcStatusLabel: cmmcStatus ? CMMCStatusConfig[cmmcStatus].label : null,
+        expirationDate: expirationDate?.toISOString() || null,
+      },
+      controlSummary: {
+        total: controlStats.total,
+        met: controlStats.compliant,
+        notMet: controlStats.nonCompliant,
+        notAssessed: controlStats.inProgress + controlStats.notStarted,
+        notApplicable: controlStats.notApplicable,
+      },
+      poamCount: pkg?.poams.length || 0,
+      resultNotes: engagement.resultNotes || null,
+    }, null, 2)
+  }
+
+  const handleCopyBaseline = async () => {
     try {
-      const result = await failAssessment(engagement.id, failNotes || undefined)
-      if (result.success) {
-        toast.success('Assessment marked as failed')
-        setShowFailDialog(false)
-        setFailNotes('')
-        router.refresh()
-      } else {
-        toast.error(result.error || 'Failed to fail assessment')
-      }
+      await navigator.clipboard.writeText(buildBaselineMarkdown())
+      toast.success('Baseline summary copied to clipboard')
     } catch {
-      toast.error('An error occurred')
-    } finally {
-      setIsUpdating(false)
+      toast.error('Failed to copy — try the Download option instead')
     }
+  }
+
+  const handleDownloadBaseline = () => {
+    const orgSlug = (pkg?.organization?.name || 'unknown').replace(/\s+/g, '-').toLowerCase()
+    const filename = `cmmc-baseline-${orgSlug}-${format(new Date(), 'yyyy-MM-dd')}.json`
+    const blob = new Blob([buildBaselineJSON()], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   // Check if current user is assigned to this engagement
   const isUserAssigned = team.some(t => t.assessorId === user.id && (t.role === 'LEAD' || t.role === 'ASSESSOR'))
 
-  // Calculate control stats
-  const controlStats = {
+  // COMPLETED engagements are view-only — all mutating actions are suppressed.
+  // The layout no longer redirects on COMPLETED, so this flag enforces read-only in the UI.
+  const isReadOnly = engagement.status === 'COMPLETED'
+
+  // Auto-detect CMMC status from control results and POA&M data.
+  // Re-computed when the package data changes (e.g., after page refresh).
+  const autoDetectedStatus = useMemo(() => {
+    if (!pkg) return null
+    const objectives = pkg.requirementStatuses.map(rs => ({
+      requirementId: rs.requirement.requirementId,
+      status: mapRequirementStatus(rs.status),
+    }))
+    const poamInputs = pkg.poams.map(p => ({
+      id: p.id,
+      scheduledCompletionDate: p.scheduledCompletionDate instanceof Date
+        ? p.scheduledCompletionDate.toISOString()
+        : String(p.scheduledCompletionDate || ''),
+    }))
+    return determineCMMCStatus(objectives, poamInputs)
+  }, [pkg])
+
+  // Seed selectedStatus from auto-detection when the dialog opens.
+  useEffect(() => {
+    if (showResultDialog && autoDetectedStatus) {
+      setSelectedStatus(autoDetectedStatus.suggestedStatus)
+    }
+  }, [showResultDialog, autoDetectedStatus])
+
+  // Calculate control stats (memoized to avoid 5× filter on every render)
+  const controlStats = useMemo(() => ({
     total: pkg?.requirementStatuses.length || 0,
     compliant: pkg?.requirementStatuses.filter(c => c.status === 'COMPLIANT').length || 0,
     nonCompliant: pkg?.requirementStatuses.filter(c => c.status === 'NON_COMPLIANT').length || 0,
     inProgress: pkg?.requirementStatuses.filter(c => c.status === 'IN_PROGRESS').length || 0,
     notStarted: pkg?.requirementStatuses.filter(c => c.status === 'NOT_STARTED').length || 0,
     notApplicable: pkg?.requirementStatuses.filter(c => c.status === 'NOT_APPLICABLE').length || 0,
-  }
+  }), [pkg])
 
   const assessedCount = controlStats.compliant + controlStats.nonCompliant + controlStats.notApplicable
+
+  // True when no controls have been assessed — disables the Confirm button in the completion dialog.
+  const isAllNotAssessed = controlStats.compliant === 0 && controlStats.nonCompliant === 0 && controlStats.notApplicable === 0
 
   return (
     <div className="space-y-6">
@@ -660,9 +766,8 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </DialogContent>
             </Dialog>
           )}
-          {/* Export to eMASS button - visible during IN_PROGRESS or PENDING_APPROVAL only.
-              COMPLETED engagements are locked out at the layout level before this renders. */}
-          {(engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL') && (
+          {/* Export to eMASS button - visible during active assessment and after completion */}
+          {(engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL' || engagement.status === 'COMPLETED') && (
             <Link href={`/engagements/${engagement.id}/emass-export`}>
               <Button variant="outline">
                 <Download className="h-4 w-4 mr-2" />
@@ -696,41 +801,152 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </DialogContent>
             </Dialog>
           )}
-          {/* Fail Assessment - mark as COMPLETED/FAILED directly from IN_PROGRESS */}
-          {engagement.status === 'IN_PROGRESS' && user.isLeadAssessor && (
-            <Dialog open={showFailDialog} onOpenChange={setShowFailDialog}>
+          {/* Complete Assessment — unified dialog for IN_PROGRESS and PENDING_APPROVAL (lead assessor only) */}
+          {(engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL') && user.isLeadAssessor && (
+            <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="text-red-600 border-red-300 hover:bg-red-50">
-                  <Ban className="h-4 w-4 mr-2" />
-                  Fail Assessment
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Complete Assessment
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                  <DialogTitle>Fail Assessment</DialogTitle>
+                  <DialogTitle>Complete Assessment</DialogTitle>
                   <DialogDescription>
-                    This will immediately end the assessment and mark it as FAILED. This action cannot be undone. The organization will need to request a new assessment.
+                    Review the auto-detected CMMC status and confirm the final outcome. The lead assessor retains full override authority per CAP v2.0.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
+                  {/* Zero-assessed warning */}
+                  {isAllNotAssessed && (
+                    <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                        <div>
+                          <p className="font-medium text-red-900 dark:text-red-100">No Objectives Assessed</p>
+                          <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                            All controls are still marked as Not Assessed. Complete the control assessment before finalizing the outcome.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Auto-detected status banner */}
+                  {autoDetectedStatus && selectedStatus && (
+                    <div className={`rounded-lg border p-4 ${CMMCStatusConfig[selectedStatus].bgClass} ${CMMCStatusConfig[selectedStatus].borderClass}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className={`font-semibold ${CMMCStatusConfig[selectedStatus].textClass}`}>
+                              {CMMCStatusConfig[selectedStatus].label}
+                            </span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full cursor-help ${
+                                    autoDetectedStatus.confidence === 'high'
+                                      ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-200'
+                                      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-200'
+                                  }`}>
+                                    <Info className="h-3 w-3" />
+                                    {autoDetectedStatus.confidence === 'high' ? 'High confidence' : 'Verify with lead'}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="text-sm">{autoDetectedStatus.reasoning}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <p className={`text-sm ${CMMCStatusConfig[selectedStatus].textClass}`}>
+                            {CMMCStatusConfig[selectedStatus].description}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Control stats summary */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="text-center p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                      <div className="text-2xl font-bold text-green-600">{controlStats.compliant}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Met</div>
+                    </div>
+                    <div className="text-center p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
+                      <div className="text-2xl font-bold text-red-600">{controlStats.nonCompliant}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Not Met</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <div className="text-2xl font-bold text-muted-foreground">{controlStats.inProgress + controlStats.notStarted}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Not Assessed</div>
+                    </div>
+                  </div>
+
+                  {/* Expiration date */}
+                  {selectedStatus && selectedStatus !== 'NO_CMMC_STATUS' && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Calendar className="h-4 w-4 shrink-0" />
+                      <span>
+                        {selectedStatus === 'FINAL_LEVEL_2'
+                          ? `Certificate valid for 3 years — expires ${format(calculateExpirationDate('FINAL_LEVEL_2', new Date())!, 'PPP')}`
+                          : `Conditional certificate expires in 180 days — ${format(calculateExpirationDate('CONDITIONAL_LEVEL_2', new Date())!, 'PPP')}`
+                        }
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Override dropdown */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Final Status (Lead Assessor Override)</label>
+                    <p className="text-xs text-muted-foreground">Auto-detected from control results and POA&Ms. Override only when regulatory criteria require it.</p>
+                    <Select value={selectedStatus || ''} onValueChange={(v) => setSelectedStatus(v as CMMCStatus)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FINAL_LEVEL_2">Final Level 2 — All requirements met (3-year certificate)</SelectItem>
+                        <SelectItem value="CONDITIONAL_LEVEL_2">Conditional Level 2 — Valid POA&M exists (180-day certificate)</SelectItem>
+                        <SelectItem value="NO_CMMC_STATUS">No CMMC Status — Requirements not met</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* CAP 3.15 warning for CERTIFICATION assessments */}
+                  {engagement.assessmentType !== 'MOCK' && (
+                    <div className="bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                      <p className="text-xs text-amber-700 dark:text-amber-300">
+                        <strong>CAP Section 3.15:</strong> Do not include remediation advice, mitigation guidance, or corrective action recommendations in result notes for certification assessments.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Result notes */}
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Result Notes (Optional)</label>
-                    {engagement.assessmentType !== 'MOCK' && (
-                      <p className="text-xs text-muted-foreground">Do not include remediation advice per CMMC CAP Section 3.15</p>
-                    )}
                     <Textarea
                       placeholder="Enter any notes about the assessment result..."
-                      value={failNotes}
-                      onChange={(e) => setFailNotes(e.target.value)}
+                      value={findings}
+                      onChange={(e) => setFindings(e.target.value)}
                       rows={3}
                     />
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowFailDialog(false)}>Cancel</Button>
-                  <Button variant="destructive" onClick={handleFailAssessment} disabled={isUpdating}>
+                  <Button variant="outline" onClick={() => setShowResultDialog(false)}>Cancel</Button>
+                  <Button
+                    onClick={handleCompleteAssessment}
+                    disabled={isUpdating || isAllNotAssessed || !selectedStatus}
+                    className={
+                      !selectedStatus ? '' :
+                      selectedStatus === 'FINAL_LEVEL_2' ? 'bg-green-600 hover:bg-green-700 text-white' :
+                      selectedStatus === 'CONDITIONAL_LEVEL_2' ? 'bg-amber-600 hover:bg-amber-700 text-white' :
+                      'bg-red-600 hover:bg-red-700 text-white'
+                    }
+                  >
                     {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Fail Assessment
+                    {selectedStatus ? `Confirm — ${CMMCStatusConfig[selectedStatus].label}` : 'Confirm'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -781,91 +997,41 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
               </DialogContent>
             </Dialog>
           )}
-          {/* Approve Assessment - shown when PENDING_APPROVAL and user is lead assessor */}
+          {/* Send Back — lead assessor can return PENDING_APPROVAL to the team */}
           {engagement.status === 'PENDING_APPROVAL' && user.isLeadAssessor && (
-            <>
-              <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
-                <DialogTrigger asChild>
-                  <Button>Approve &amp; Complete</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Approve Assessment</DialogTitle>
-                    <DialogDescription>
-                      Record the final result and complete this CMMC assessment
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Assessment Result</label>
-                      <Select value={assessmentPassed} onValueChange={setAssessmentPassed}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select result..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="passed">Passed — Certification Recommended</SelectItem>
-                          <SelectItem value="failed">Failed — Does Not Meet Requirements</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Result Notes (Optional)</label>
-                      {engagement.assessmentType !== 'MOCK' && (
-                        <p className="text-xs text-muted-foreground">Do not include remediation advice per CMMC CAP Section 3.15</p>
-                      )}
-                      <Textarea
-                        placeholder="Enter any notes about the assessment result..."
-                        value={findings}
-                        onChange={(e) => setFindings(e.target.value)}
-                        rows={4}
-                      />
-                    </div>
+            <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline">Send Back</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Send Back for More Work</DialogTitle>
+                  <DialogDescription>
+                    Return this assessment to the team for additional work
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Reason for Sending Back</label>
+                    <Textarea
+                      placeholder="Explain what needs to be addressed..."
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value)}
+                      rows={4}
+                    />
                   </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowResultDialog(false)}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleRecordResult} disabled={isUpdating}>
-                      {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Approve &amp; Complete
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-              <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline">Send Back</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Send Back for More Work</DialogTitle>
-                    <DialogDescription>
-                      Return this assessment to the team for additional work
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Reason for Sending Back</label>
-                      <Textarea
-                        placeholder="Explain what needs to be addressed..."
-                        value={rejectionReason}
-                        onChange={(e) => setRejectionReason(e.target.value)}
-                        rows={4}
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
-                      Cancel
-                    </Button>
-                    <Button variant="destructive" onClick={handleRejectSubmission} disabled={isUpdating}>
-                      {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                      Send Back
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowRejectDialog(false)}>
+                    Cancel
+                  </Button>
+                  <Button variant="destructive" onClick={handleRejectSubmission} disabled={isUpdating}>
+                    {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Send Back
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           )}
           {/* Cancel / Decline / Withdraw Engagement */}
           {['REQUESTED', 'INTRODUCED', 'ACKNOWLEDGED', 'PROPOSAL_SENT', 'PROPOSAL_ACCEPTED', 'ACCEPTED', 'IN_PROGRESS', 'PENDING_APPROVAL'].includes(engagement.status) && (
@@ -943,6 +1109,154 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
         />
       )}
 
+      {/* Read-Only Banner — shown for COMPLETED engagements */}
+      {isReadOnly && (() => {
+        const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
+        const buttonLabel = cmmcStatus === 'FINAL_LEVEL_2' ? 'View Assessment Summary' : 'Start New Assessment from Record'
+        return (
+          <Card className="bg-emerald-500/5 border-emerald-500/20">
+            <CardContent className="flex items-center justify-between gap-4 pt-6 flex-wrap">
+              <div className="flex items-center gap-4">
+                <Lock className="h-10 w-10 text-emerald-600 shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-lg">Assessment Complete — View Only</h3>
+                  <p className="text-sm text-muted-foreground">
+                    This engagement is complete and no further changes can be made. All assessment data is preserved for reference.
+                  </p>
+                </div>
+              </div>
+              <Button variant="outline" onClick={() => setShowNewAssessmentDialog(true)}>
+                <FileDown className="h-4 w-4 mr-2" />
+                {buttonLabel}
+              </Button>
+            </CardContent>
+          </Card>
+        )
+      })()}
+
+      {/* Start New Assessment / View Summary Dialog */}
+      {isReadOnly && (() => {
+        const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
+        const completionDate = safeDate(engagement.actualCompletionDate)
+        const expirationDate = cmmcStatus && completionDate ? calculateExpirationDate(cmmcStatus, completionDate) : null
+        const isConditional = cmmcStatus === 'CONDITIONAL_LEVEL_2'
+        const isNoStatus = cmmcStatus === 'NO_CMMC_STATUS'
+        const isFinal = cmmcStatus === 'FINAL_LEVEL_2'
+
+        return (
+          <Dialog open={showNewAssessmentDialog} onOpenChange={setShowNewAssessmentDialog}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>
+                  {isFinal ? 'Assessment Summary' : 'Start New Assessment from Record'}
+                </DialogTitle>
+                <DialogDescription>
+                  {isFinal
+                    ? 'Reference summary for this completed assessment.'
+                    : 'Export this assessment\'s findings as a reference baseline for the next engagement.'}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                {/* Guidance section — varies by result type */}
+                {isConditional && (
+                  <div className="bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium text-amber-900 dark:text-amber-100">POA&M Closeout — Not a Full Re-Assessment</p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                          The OSC has <strong>180 days</strong> to remediate and close out the existing POA&M
+                          {expirationDate ? ` (deadline: ${format(expirationDate, 'PPP')})` : ''}.
+                          A new full assessment is <strong>not required</strong> for POA&M closeout —
+                          any C3PAO (same or different) can perform the closeout against the existing record.
+                          The closeout outcome will be either <strong>Final Level 2</strong> or <strong>No CMMC Status</strong>;
+                          Conditional cannot be re-issued.
+                        </p>
+                        <p className="text-sm text-amber-700 dark:text-amber-300 mt-2">
+                          <strong>Primary action:</strong> Contact the OSC to initiate POA&M closeout procedures.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {isNoStatus && (
+                  <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <XCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium text-red-900 dark:text-red-100">Full Re-Assessment Required</p>
+                        <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                          All CMMC Level 2 requirements must be re-assessed in a new engagement. A new assessment must be initiated by the OSC through the platform. The reference baseline below shows exactly which controls were Not Met, which the OSC can use to scope their remediation work.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {isFinal && (
+                  <div className="bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium text-green-900 dark:text-green-100">Final Level 2 — Certified</p>
+                        <p className="text-sm text-green-700 dark:text-green-300 mt-1">
+                          This assessment resulted in Final Level 2 certification
+                          {expirationDate ? `, valid through ${format(expirationDate, 'PPP')}` : ''}.
+                          This summary can be used as a reference baseline for future assessments.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Assessment summary stats */}
+                <div>
+                  <p className="text-sm font-medium mb-3">Assessment Findings</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="text-center p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                      <div className="text-xl font-bold text-green-600">{controlStats.compliant}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Met</div>
+                    </div>
+                    <div className="text-center p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
+                      <div className="text-xl font-bold text-red-600">{controlStats.nonCompliant}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Not Met</div>
+                    </div>
+                    <div className="text-center p-3 bg-gray-50 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <div className="text-xl font-bold text-muted-foreground">{controlStats.inProgress + controlStats.notStarted}</div>
+                      <div className="text-xs text-muted-foreground mt-1">Not Assessed</div>
+                    </div>
+                    <div className="text-center p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+                      <div className="text-xl font-bold text-orange-600">{pkg?.poams.length || 0}</div>
+                      <div className="text-xs text-muted-foreground mt-1">POA&Ms</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Export note */}
+                <p className="text-xs text-muted-foreground">
+                  Export the reference baseline to share with the OSC or use in a future assessment. The JSON format is machine-readable and can be imported by other tools.
+                  {/* TODO: When the backend API supports direct engagement creation, replace these exports with a guided engagement pre-population flow. */}
+                </p>
+              </div>
+
+              <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button variant="outline" onClick={() => setShowNewAssessmentDialog(false)} className="sm:mr-auto">
+                  Close
+                </Button>
+                <Button variant="outline" onClick={handleCopyBaseline}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy as Markdown
+                </Button>
+                <Button onClick={handleDownloadBaseline}>
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Download as JSON
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )
+      })()}
+
       {/* Pending Approval Banner */}
       {engagement.status === 'PENDING_APPROVAL' && (
         <Card className="bg-orange-500/5 border-orange-500/20">
@@ -960,31 +1274,56 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
         </Card>
       )}
 
-      {/* Assessment Result Banner */}
-      {engagement.status === 'COMPLETED' && engagement.assessmentResult && (
-        <Card className={engagement.assessmentResult === 'PASSED' ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}>
-          <CardContent className="flex items-center gap-4 pt-6">
-            {engagement.assessmentResult === 'PASSED' ? (
-              <CheckCircle2 className="h-10 w-10 text-green-600 shrink-0" />
-            ) : (
-              <XCircle className="h-10 w-10 text-red-600 shrink-0" />
-            )}
-            <div>
-              <h3 className="font-semibold text-lg">
-                {engagement.assessmentResult === 'PASSED' ? 'Assessment Passed' : 'Assessment Failed'}
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                {engagement.assessmentResult === 'PASSED'
-                  ? 'This organization has been recommended for CMMC certification'
-                  : 'This organization did not meet CMMC requirements. A new assessment must be requested.'}
-              </p>
-              {engagement.resultNotes && (
-                <p className="text-sm mt-2">{engagement.resultNotes}</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Assessment Result Banner — shown for all COMPLETED engagements */}
+      {engagement.status === 'COMPLETED' && (() => {
+        const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
+        const completionDate = safeDate(engagement.actualCompletionDate) ?? new Date()
+        const expirationDate = cmmcStatus ? calculateExpirationDate(cmmcStatus, completionDate) : null
+
+        if (!cmmcStatus) {
+          // Legacy completed engagement with no recorded result
+          return (
+            <Card className="bg-gray-500/5 border-gray-500/20">
+              <CardContent className="flex items-center gap-4 pt-6">
+                <Info className="h-10 w-10 text-gray-400 shrink-0" />
+                <div>
+                  <h3 className="font-semibold text-lg">Result Not Recorded</h3>
+                  <p className="text-sm text-muted-foreground">No assessment result was recorded for this engagement.</p>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        }
+
+        const config = CMMCStatusConfig[cmmcStatus]
+        const Icon = cmmcStatus === 'FINAL_LEVEL_2' ? CheckCircle2 : cmmcStatus === 'CONDITIONAL_LEVEL_2' ? AlertTriangle : XCircle
+
+        return (
+          <Card className={`${config.bgClass} ${config.borderClass}`}>
+            <CardContent className="flex items-center gap-4 pt-6">
+              <Icon className={`h-10 w-10 ${
+                cmmcStatus === 'FINAL_LEVEL_2' ? 'text-green-600' :
+                cmmcStatus === 'CONDITIONAL_LEVEL_2' ? 'text-amber-600' : 'text-red-600'
+              } shrink-0`} />
+              <div>
+                <h3 className={`font-semibold text-lg ${config.textClass}`}>{config.label}</h3>
+                <p className={`text-sm ${config.textClass}`}>{config.description}</p>
+                {expirationDate && (
+                  <p className={`text-sm mt-1 ${config.textClass}`}>
+                    {cmmcStatus === 'FINAL_LEVEL_2'
+                      ? `Certificate valid through ${format(expirationDate, 'PPP')}`
+                      : `POA&M closeout deadline: ${format(expirationDate, 'PPP')}`
+                    }
+                  </p>
+                )}
+                {engagement.resultNotes && (
+                  <p className="text-sm mt-2 text-muted-foreground">{engagement.resultNotes}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )
+      })()}
 
       {/* Overview Stats */}
       <div className="grid gap-4 md:grid-cols-5">
@@ -1315,15 +1654,19 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
                 onChange={(e) => setNotes(e.target.value)}
                 rows={8}
                 className="resize-none"
+                readOnly={isReadOnly}
+                disabled={isReadOnly}
               />
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">
                   Notes are only visible to your C3PAO team
                 </p>
-                <Button onClick={handleSaveNotes} disabled={isUpdating}>
-                  {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Save Notes
-                </Button>
+                {!isReadOnly && (
+                  <Button onClick={handleSaveNotes} disabled={isUpdating}>
+                    {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    Save Notes
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

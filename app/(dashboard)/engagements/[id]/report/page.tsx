@@ -63,6 +63,7 @@ import {
   generateReportData,
 } from '@/app/actions/c3pao-assessment'
 import { getEngagementById } from '@/app/actions/c3pao-dashboard'
+import { normalizeLegacyStatus, CMMCStatusConfig } from '@/lib/cmmc/status-determination'
 
 type ReportStatus = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'DELIVERED'
 
@@ -333,6 +334,8 @@ export default function AssessmentReportPage() {
     )
   }
 
+  // COMPLETED remains editable for report finalization — the report is often polished
+  // after the assessment result is recorded but before the engagement is archived.
   const canEdit = engagement.status === 'IN_PROGRESS' || engagement.status === 'COMPLETED'
   const orgName = engagement.atoPackage.organization?.name || engagement.atoPackage.name
   const completionPct = getCompletionPercentage()
@@ -868,18 +871,17 @@ function ReportPreview({
             {engagement.actualCompletionDate && (
               <div><strong>Completion Date:</strong> {format(new Date(engagement.actualCompletionDate), 'MMMM d, yyyy')}</div>
             )}
-            {engagement.assessmentResult && (
-              <div>
-                <strong>Result:</strong>{' '}
-                <span className={
-                  engagement.assessmentResult === 'PASSED' ? 'text-green-600 font-semibold' :
-                  engagement.assessmentResult === 'CONDITIONAL' ? 'text-yellow-600 font-semibold' :
-                  'text-red-600 font-semibold'
-                }>
-                  {engagement.assessmentResult}
-                </span>
-              </div>
-            )}
+            {(() => {
+              const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
+              if (!cmmcStatus) return null
+              const config = CMMCStatusConfig[cmmcStatus]
+              return (
+                <div>
+                  <strong>Result:</strong>{' '}
+                  <span className={`font-semibold ${config.textClass}`}>{config.label}</span>
+                </div>
+              )
+            })()}
           </div>
         </div>
         <div>

@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { getC3PAOEngagements } from '@/app/actions/c3pao-dashboard'
+import { normalizeLegacyStatus, CMMCStatusConfig } from '@/lib/cmmc/status-determination'
 import { formatDistanceToNow } from 'date-fns'
 import { safeDate } from '@/lib/utils'
 
@@ -182,7 +183,9 @@ export default function C3PAOEngagementsPage() {
           ) : (
             <div className="space-y-4">
               {filteredEngagements.map((engagement) => {
-                const isTerminal = engagement.status === 'COMPLETED' || engagement.status === 'CANCELLED'
+                // CANCELLED is the only true terminal status — COMPLETED engagements are now viewable read-only.
+                const isCancelled = engagement.status === 'CANCELLED'
+                const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
                 const rowContent = (
                   <>
                     <div className="flex items-center gap-4">
@@ -209,25 +212,21 @@ export default function C3PAOEngagementsPage() {
                         {engagement.targetLevel.replace('_', ' ')}
                       </Badge>
                       {getStatusBadge(engagement.status)}
-                      {isTerminal && engagement.assessmentResult ? (
+                      {cmmcStatus ? (
                         <Badge
                           variant="outline"
-                          className={
-                            engagement.assessmentResult === 'PASSED'
-                              ? 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20'
-                              : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20'
-                          }
+                          className={`${CMMCStatusConfig[cmmcStatus].bgClass} ${CMMCStatusConfig[cmmcStatus].textClass} ${CMMCStatusConfig[cmmcStatus].borderClass}`}
                         >
-                          {engagement.assessmentResult}
+                          {CMMCStatusConfig[cmmcStatus].label}
                         </Badge>
-                      ) : !isTerminal ? (
+                      ) : (
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      ) : null}
+                      )}
                     </div>
                   </>
                 )
 
-                if (isTerminal) {
+                if (isCancelled) {
                   return (
                     <div
                       key={engagement.id}
