@@ -245,12 +245,12 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
     (ev.requirementIds || []).includes(c.requirementId)
   )
   return {
-    id: c.id,
+    id: c.requirementStatusId || c.id,
     status: c.status || 'NOT_STARTED',
     implementationNotes: c.implementationNotes,
     implementationType: c.implementationType,
     processOwner: c.processOwner,
-    assessmentNotes: null,
+    assessmentNotes: c.assessmentNotes || null,
     requirement: {
       id: c.id,
       requirementId: c.requirementId,
@@ -288,6 +288,7 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
           testDescription: o.testDescription,
           timeToAssessMinutes: o.timeToAssessMinutes,
           inheritedStatus: o.inheritedStatus,
+          assessorQuestionsForOSC: o.assessorQuestionsForOSC || null,
         }],
         // OSC self-assessment context (package-scoped)
         oscStatuses: [{

@@ -179,6 +179,8 @@ export interface ControlView {
   implementationNotes: string | null
   implementationType: string | null
   processOwner: string | null
+  requirementStatusId: string
+  assessmentNotes: string | null
 }
 
 export interface EvidenceView {
@@ -335,6 +337,14 @@ export async function fetchAssessments(token: string): Promise<EngagementSummary
 
 export async function fetchControls(engagementId: string, token: string): Promise<ControlView[]> {
   return apiRequest<ControlView[]>(`/api/c3pao/assessments/${engagementId}/controls`, { token })
+}
+
+export async function updateControlNotes(engagementId: string, requirementStatusId: string, assessmentNotes: string, token: string): Promise<void> {
+  await apiRequest<{ ok: boolean }>(`/api/c3pao/assessments/${engagementId}/controls/${requirementStatusId}/notes`, {
+    method: 'PATCH',
+    body: { assessmentNotes },
+    token,
+  })
 }
 
 export async function fetchEvidence(engagementId: string, token: string): Promise<EvidenceView[]> {

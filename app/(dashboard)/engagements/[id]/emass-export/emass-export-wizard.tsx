@@ -100,8 +100,12 @@ export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      // Trigger the download
-      const response = await fetch(`/api/engagements/${data.engagementId}/export`)
+      // POST with wizard editable fields merged into the exported JSON
+      const response = await fetch(`/api/engagements/${data.engagementId}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      })
       if (!response.ok) throw new Error('Export failed')
 
       const blob = await response.blob()
@@ -768,7 +772,7 @@ export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
                     className="gap-2"
                   >
                     <Download className="h-5 w-5" />
-                    {isExporting ? 'Generating...' : 'Download eMASS Workbook'}
+                    {isExporting ? 'Generating...' : 'Download Export JSON'}
                   </Button>
                 </div>
               </div>

@@ -42,6 +42,7 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { toast } from 'sonner'
 import { getEvidenceDownloadUrlForC3PAO } from '@/app/actions/c3pao-dashboard'
+import { FilePreviewDialog } from './file-preview-dialog'
 
 interface Evidence {
   id: string
@@ -115,6 +116,7 @@ const categoryLabels: Record<string, string> = {
 export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [previewEvidence, setPreviewEvidence] = useState<Evidence | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sortField, setSortField] = useState<SortField>('createdAt')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
@@ -323,20 +325,17 @@ export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) 
                         <Button
                           variant="ghost"
                           size="sm"
-                          disabled={downloadingId === ev.id}
-                          onClick={() => handleDownload(ev.id, ev.fileName)}
+                          onClick={() => setPreviewEvidence(ev)}
+                          title="Preview"
                         >
-                          {downloadingId === ev.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <ExternalLink className="h-4 w-4" />
-                          )}
+                          <ExternalLink className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           disabled={downloadingId === ev.id}
                           onClick={() => handleDownload(ev.id, ev.fileName)}
+                          title="Download"
                         >
                           {downloadingId === ev.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -384,15 +383,10 @@ export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) 
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={downloadingId === ev.id}
-                    onClick={() => handleDownload(ev.id, ev.fileName)}
+                    onClick={() => setPreviewEvidence(ev)}
                   >
-                    {downloadingId === ev.id ? (
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    ) : (
-                      <ExternalLink className="h-4 w-4 mr-1" />
-                    )}
-                    View
+                    <ExternalLink className="h-4 w-4 mr-1" />
+                    Preview
                   </Button>
                   <Button
                     variant="ghost"
@@ -429,6 +423,17 @@ export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) 
       <div className="text-xs text-muted-foreground text-center">
         Evidence files are read-only during assessment review
       </div>
+
+      {previewEvidence && (
+        <FilePreviewDialog
+          open={previewEvidence !== null}
+          onOpenChange={(open) => !open && setPreviewEvidence(null)}
+          engagementId={engagementId}
+          evidenceId={previewEvidence.id}
+          fileName={previewEvidence.fileName}
+          mimeType={previewEvidence.mimeType}
+        />
+      )}
     </div>
   )
 }

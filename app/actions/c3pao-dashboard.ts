@@ -14,6 +14,7 @@ import {
   updateTeamMemberRole,
   removeTeamMember,
   fetchEvidence,
+  fetchControls,
   fetchEvidenceDownloadURL,
   fetchSSP,
   fetchPOAMs,
@@ -412,16 +413,34 @@ export async function getPOAMForC3PAO(poamId: string, engagementId: string): Pro
 
 // ---- Evidence Detail ----
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getEvidenceDetailsForC3PAO(evidenceId: string, engagementId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+export async function getEvidenceDetailsForC3PAO(evidenceId: string, engagementId: string): Promise<{
+  success: boolean
+  data?: {
+    evidence: { id: string; fileName: string; mimeType: string | null; fileSize: number | null; description: string | null; expirationDate: string | null; requirementIds: string[] }
+    linkedControls: Array<{ id: string; controlId: string; title: string; familyCode: string; familyName: string }>
+  }
+  error?: string
+}> {
   try {
     const token = await getToken()
-    const evidence = await fetchEvidence(engagementId, token)
-    const item = evidence.find(e => e.id === evidenceId)
+    const [evidenceList, controls] = await Promise.all([
+      fetchEvidence(engagementId, token),
+      fetchControls(engagementId, token),
+    ])
+    const item = evidenceList.find(e => e.id === evidenceId)
     if (!item) {
       return { success: false, error: 'Evidence not found' }
     }
-    return { success: true, data: item }
+    const linkedControls = controls
+      .filter(c => item.requirementIds.includes(c.requirementId))
+      .map(c => ({
+        id: c.id,
+        controlId: c.requirementId,
+        title: c.title,
+        familyCode: c.familyCode,
+        familyName: c.familyName,
+      }))
+    return { success: true, data: { evidence: item, linkedControls } }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load evidence details' }
   }

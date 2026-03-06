@@ -77,6 +77,7 @@ interface AssessorStatusData {
   timeToAssessMinutes: number | null
   inheritedStatus: InheritedStatus | null
   dependentESPId: string | null
+  assessorQuestionsForOSC: string | null
 }
 
 interface ObjectiveAssessmentCardProps {
@@ -131,6 +132,7 @@ export function ObjectiveAssessmentCard({
     assessorStatus?.inheritedStatus || ''
   )
   const [dependentESPId, setDependentESPId] = useState(assessorStatus?.dependentESPId || '__none__')
+  const [assessorQuestions, setAssessorQuestions] = useState(assessorStatus?.assessorQuestionsForOSC || '')
 
   const statusConfig = statusOptions.find(s => s.value === status)
   const StatusIcon = statusConfig?.icon || Minus
@@ -150,7 +152,7 @@ export function ObjectiveAssessmentCard({
         objectiveId: objective.id,
         status,
         assessmentNotes: findings || undefined,
-        version: assessorStatus?.version,
+        version: assessorStatus?.version ?? 0,
         // eMASS fields
         artifactsReviewed: selectedArtifacts.length > 0 ? JSON.stringify(selectedArtifacts) : undefined,
         interviewees: interviewees || undefined,
@@ -159,6 +161,7 @@ export function ObjectiveAssessmentCard({
         timeToAssessMinutes: timeToAssess ? parseInt(timeToAssess, 10) : undefined,
         inheritedStatus: inheritedStatus || undefined,
         dependentESPId: dependentESPId && dependentESPId !== '__none__' ? dependentESPId : null,
+        assessorQuestionsForOSC: assessorQuestions || undefined,
       })
 
       if (result.success) {
@@ -226,6 +229,20 @@ export function ObjectiveAssessmentCard({
                 <p className="text-muted-foreground whitespace-pre-line">{objective.questionsForOSC}</p>
               </div>
             )}
+
+            {/* Assessor's Interview Questions (private, editable) */}
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1">
+                <MessageCircleQuestion className="h-3.5 w-3.5" />
+                My Questions for OSC Interview
+              </Label>
+              <Textarea
+                placeholder="Write your own interview questions here (private — not visible to OSC)..."
+                value={assessorQuestions}
+                onChange={(e) => setAssessorQuestions(e.target.value)}
+                rows={2}
+              />
+            </div>
 
             {/* Evidence Description (if available) */}
             {assessorStatus?.evidenceDescription && (

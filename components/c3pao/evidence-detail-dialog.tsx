@@ -30,6 +30,7 @@ import {
   getEvidenceDetailsForC3PAO,
   getEvidenceDownloadUrlForC3PAO,
 } from '@/app/actions/c3pao-dashboard'
+import { FilePreviewDialog } from './file-preview-dialog'
 
 interface Evidence {
   id: string
@@ -109,6 +110,7 @@ export function EvidenceDetailDialog({
   const [isLoading, setIsLoading] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
     if (open && evidence) {
@@ -189,6 +191,7 @@ export function EvidenceDetailDialog({
   const isExpiringSoon = expirationDate && !isExpired && new Date(expirationDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
@@ -208,15 +211,19 @@ export function EvidenceDetailDialog({
 
         <div className="space-y-4">
           <div className="flex gap-2">
-            <Button onClick={handleView} disabled={isDownloading} className="flex-1">
+            <Button onClick={() => setPreviewOpen(true)} className="flex-1">
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Preview
+            </Button>
+            <Button variant="outline" onClick={handleView} disabled={isDownloading} className="flex-1">
               {isDownloading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
                 <ExternalLink className="h-4 w-4 mr-2" />
               )}
-              View in Browser
+              Open in Tab
             </Button>
-            <Button variant="outline" onClick={handleDownload} disabled={isDownloading} className="flex-1">
+            <Button variant="outline" onClick={handleDownload} disabled={isDownloading}>
               {isDownloading ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : (
@@ -325,5 +332,17 @@ export function EvidenceDetailDialog({
         </div>
       </DialogContent>
     </Dialog>
+
+    {evidence && (
+      <FilePreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        engagementId={engagementId}
+        evidenceId={evidence.id}
+        fileName={evidence.fileName}
+        mimeType={evidence.mimeType}
+      />
+    )}
+    </>
   )
 }

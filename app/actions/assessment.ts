@@ -7,6 +7,7 @@ import {
   updateFinding,
   createNote,
   fetchNotes,
+  updateControlNotes,
   type FindingView,
   type NoteView,
 } from '@/lib/api-client'
@@ -95,7 +96,7 @@ export async function updateAssessorNotes(input: {
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await createNote(input.engagementId, input.assessmentNotes, token)
+    await updateControlNotes(input.engagementId, input.requirementStatusId, input.assessmentNotes, token)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to save notes' }
