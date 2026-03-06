@@ -9,6 +9,8 @@ import {
   fetchTeam,
   type ControlView,
   type ObjectiveView,
+  type EMassExportData,
+  type TeamMember,
 } from '@/lib/api-client'
 
 export interface EMASSWizardData {
@@ -51,6 +53,13 @@ export interface EMASSWizardData {
     isValid: boolean
     errors: string[]
     warnings: string[]
+  }
+  /** Raw data arrays for client-side export generation */
+  rawData: {
+    controls: ControlView[]
+    objectives: ObjectiveView[]
+    exportData: EMassExportData
+    team: TeamMember[]
   }
 }
 
@@ -165,6 +174,12 @@ export async function getEMASSExportData(
         isValid: errors.length === 0,
         errors,
         warnings,
+      },
+      rawData: {
+        controls,
+        objectives,
+        exportData,
+        team,
       },
     }
 

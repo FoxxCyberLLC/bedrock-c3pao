@@ -70,7 +70,8 @@ const STEPS: { id: WizardStep; label: string; icon: React.ReactNode }[] = [
 export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState<WizardStep>('assessment')
-  const [isExporting, setIsExporting] = useState(false)
+  const [isExportingXlsx, setIsExportingXlsx] = useState(false)
+  const [isExportingJson, setIsExportingJson] = useState(false)
 
   // Form state for editable fields
   const [formData, setFormData] = useState({
@@ -97,31 +98,63 @@ export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
     }
   }
 
-  const handleExport = async () => {
-    setIsExporting(true)
-    try {
-      // POST with wizard editable fields merged into the exported JSON
-      const response = await fetch(`/api/engagements/${data.engagementId}/export`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      })
-      if (!response.ok) throw new Error('Export failed')
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    a.remove()
+  }
 
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'cmmc_export.json'
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      a.remove()
+  const handleExportXlsx = async () => {
+    setIsExportingXlsx(true)
+    try {
+      const { buildEMASSWorkbook } = await import('@/lib/emass-workbook')
+      const buffer = await buildEMASSWorkbook({
+        controls: data.rawData.controls,
+        objectives: data.rawData.objectives,
+        exportData: data.rawData.exportData,
+        team: data.rawData.team,
+        ssp: data.ssp,
+        wizardFields: formData,
+      })
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      })
+      const safeOrg = (data.assessment.oscName || 'export').replace(/[^a-zA-Z0-9-_ ]/g, '')
+      triggerDownload(blob, `CMMC_L2_Assessment_${safeOrg}.xlsx`)
+      toast.success('Excel workbook downloaded')
     } catch (error) {
-      console.error('Export failed:', error)
-      toast.error('Export failed. Please try again.')
+      console.error('XLSX export failed:', error)
+      toast.error('Failed to generate Excel workbook.')
     } finally {
-      setIsExporting(false)
+      setIsExportingXlsx(false)
+    }
+  }
+
+  const handleExportJson = async () => {
+    setIsExportingJson(true)
+    try {
+      const enriched = {
+        ...data.rawData.exportData,
+        wizardFields: formData,
+        controls: [...data.rawData.controls].sort((a, b) => a.sortOrder - b.sortOrder),
+        objectives: data.rawData.objectives,
+        ssp: data.ssp,
+      }
+      const json = JSON.stringify(enriched, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const safeId = data.engagementId.replace(/[^a-zA-Z0-9-]/g, '')
+      triggerDownload(blob, `CMMC_Assessment_Export_${safeId}.json`)
+      toast.success('JSON export downloaded')
+    } catch (error) {
+      console.error('JSON export failed:', error)
+      toast.error('Failed to generate JSON export.')
+    } finally {
+      setIsExportingJson(false)
     }
   }
 
@@ -764,15 +797,25 @@ export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
                   </AlertDescription>
                 </Alert>
 
-                <div className="flex justify-center pt-4">
+                <div className="flex justify-center gap-4 pt-4">
                   <Button
                     size="lg"
-                    onClick={handleExport}
-                    disabled={!data.validation.isValid || isExporting}
+                    onClick={handleExportXlsx}
+                    disabled={!data.validation.isValid || isExportingXlsx || isExportingJson}
+                    className="gap-2"
+                  >
+                    <FileSpreadsheet className="h-5 w-5" />
+                    {isExportingXlsx ? 'Generating...' : 'Download Excel Workbook'}
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={handleExportJson}
+                    disabled={!data.validation.isValid || isExportingXlsx || isExportingJson}
                     className="gap-2"
                   >
                     <Download className="h-5 w-5" />
-                    {isExporting ? 'Generating...' : 'Download Export JSON'}
+                    {isExportingJson ? 'Generating...' : 'Download JSON'}
                   </Button>
                 </div>
               </div>
