@@ -1,0 +1,69 @@
+The CMMC Assessment Process (CAP) v2.0 — which implements 32 CFR Part 170 — defines the full process across **Preliminary Proceedings** and **four phases**. Here's how it flows:
+
+---
+
+## Preliminary Proceedings
+Before any assessment work begins, the C3PAO must:
+- Receive and confirm the assessment request from the OSC
+- Confirm the entity/entities to be assessed
+- Frame the assessment scope
+- Identify and manage **Conflicts of Interest (COI)** — critical for your platform's advisory vs. certification separation
+- Execute a contractual agreement with the OSC
+
+---
+
+## Phase 1 – Conduct the Pre-Assessment
+*(governed by 32 CFR §170.17)*
+
+- Review the OSC's **System Security Plan (SSP)**
+- Validate the **CMMC Assessment Scope**
+- Confirm availability of evidence (Body of Evidence / BoE)
+- **Determine readiness** — if the OSC isn't ready, there's an adverse determination process
+- Compose the Assessment Team
+- Complete and QA-review the **Pre-Assessment Form**
+- Upload the Pre-Assessment Form into **CMMC eMASS**
+
+---
+
+## Phase 2 – Assess Conformity to Security Requirements
+*(governed by 32 CFR §170.17 and NIST SP 800-171A)*
+
+- Convene an **In-Brief Meeting** with the Affirming Official and OSC POC
+- Assess each security requirement using **examine, interview, and test** methods
+- Apply **sampling values** for depth and coverage
+- Score using the **CMMC Level 2 Scoring Methodology** per 32 CFR §170.24
+- Address any **External Service Providers (ESPs)** and their Customer Responsibility Matrices
+- Address **Cloud Service Providers (CSPs)**
+- Conduct **Quality Assurance reviews** (by someone outside the Assessment Team)
+- Hold **Daily Checkpoint Meetings** with the OSC
+- Note: Assessors may re-evaluate NOT MET requirements for **10 business days** after active assessment concludes (32 CFR §170.17(c)(2))
+
+---
+
+## Phase 3 – Complete and Report Assessment Results
+
+- Compile results in the required format for eMASS upload (JSON per the CMMC eMASS data standard)
+- Lead CCA makes one of three determinations:
+  - All requirements **MET** → recommend **Final** Certificate
+  - Some NOT MET but a **valid POA&M exists** → recommend **Conditional** Certificate
+  - NOT MET and no valid POA&M attainable → recommend **No CMMC Status**
+- Conduct QA review of the Final Assessment Report
+- Convene **Out-Brief Meeting** with the OSC
+- Upload results to **CMMC eMASS**
+- Administer **appeals process** if the OSC disputes findings (timeline-bound)
+
+---
+
+## Phase 4 – Issue Certificate and Close Out POA&M
+
+- CMMC eMASS returns the **UID, CMMC Status, and Status Date**
+- QA individual generates the **Certificate of CMMC Status** (Final or Conditional) using Cyber AB-approved templates
+- Certificate signed by an **Authorized Certifying Official** on file with the Cyber AB
+- Certificate delivered to OSC and uploaded to both eMASS and the Cyber AB (`certificates@cyberab.org`)
+- If Conditional: OSC may engage a C3PAO (same or different) to **close out the POA&M** within 180 days
+  - POA&M closeout follows the same workflow as initial assessment
+  - Outcome is either **Final** or **No CMMC Status** — there is no re-issuing of Conditional
+
+---
+
+**Key implication for your C3PAO app:** your workflow needs to track state across all four phases, not just the assessment scoring. Pre-assessment form upload, the 10-day re-evaluation window, the three possible outcome recommendations, and the POA&M closeout as a distinct follow-on workflow are all discrete stages your data model should represent.

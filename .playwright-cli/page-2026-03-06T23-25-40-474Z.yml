@@ -1,0 +1,11 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e17]:
+    - generic [ref=e18]:
+      - img [ref=e20]
+      - generic [ref=e22]: Bedrock C3PAO Setup
+      - generic [ref=e23]: Configure this instance to connect with the Bedrock CMMC platform. You'll need the API URL, the instance key from your Bedrock administrator, and create a local admin account.
+    - button "Get Started" [ref=e25]:
+      - text: Get Started
+      - img
+  - region "Notifications alt+T"
+  - alert [ref=e26]
