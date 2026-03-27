@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Bedrock C3PAO — CMMC Assessment Portal
 
-## Getting Started
+Standalone assessment tool for C3PAO assessors conducting CMMC Level 2 assessments. Deployed as a Docker container inside government-approved VDI environments.
 
-First, run the development server:
+Copyright (c) 2025 Foxx Cyber LLC. All rights reserved.
+
+## Features
+
+- CMMC Level 2 control assessment with per-objective findings
+- STIG checklist (CKLB) import and mapping to CMMC objectives
+- Evidence viewer with file proxy from Go API / S3
+- POA&M management with SPRS scoring
+- SSP read-only viewer
+- Assessment report editor
+- eMASS workbook export (Excel)
+- Assessor team management and domain assignment
+- Workload dashboard
+- Offline-capable with local SQLite configuration
+- Self-signed TLS with HTTPS proxy
+
+## Quick Start
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open https://localhost:3001 (HTTPS, self-signed cert).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Docker
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+docker build -t bedrock-c3pao .
+docker run -p 3001:3001 -v c3pao-data:/app/data bedrock-c3pao
+```
 
-## Learn More
+## Environment Variables
 
-To learn more about Next.js, take a look at the following resources:
+```env
+BEDROCK_API_URL=http://go-api:8080
+INSTANCE_API_KEY=bri-xxxx
+AUTH_SECRET=<random-base64>
+C3PAO_ID=<uuid>
+C3PAO_NAME=<org name>
+FORCE_HTTPS=true
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Or configure via the setup wizard on first run (stored encrypted in SQLite).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Architecture
 
-## Deploy on Vercel
+All assessment data lives in the Go API backend (`bedrock-cmmc-api`). This app is a pure frontend/BFF client. Local SQLite stores only instance configuration and local admin users.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Tech Stack
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Next.js 16 | React 19 | TypeScript 5 | Tailwind CSS 4 | Shadcn/UI | better-sqlite3 | Vitest
+
+## License
+
+Proprietary — Foxx Cyber LLC. All rights reserved.
