@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { cookies } from 'next/headers'
 import { setConfigBatch, getConfig, isAppConfigured } from '@/lib/config'
 import { createLocalAdmin } from '@/lib/local-auth'
+import { validateApiUrl, isValidApiKey } from '@/lib/setup-validation'
 
 interface ActivateResponse {
   instanceId: string
@@ -31,12 +32,18 @@ export async function validateInstanceKey(
   data?: ActivateResponse
   error?: string
 }> {
-  if (!apiKey || !apiKey.startsWith('bri-')) {
-    return { success: false, error: 'Invalid API key format. Keys start with bri-' }
+  // Re-entry guard: reject if already configured
+  if (isAppConfigured()) {
+    return { success: false, error: 'Instance is already configured' }
   }
 
-  if (!apiUrl) {
-    return { success: false, error: 'API URL is required' }
+  if (!isValidApiKey(apiKey)) {
+    return { success: false, error: 'Invalid API key format. Keys must start with bri- followed by alphanumeric characters' }
+  }
+
+  const urlValidation = validateApiUrl(apiUrl)
+  if (!urlValidation.valid) {
+    return { success: false, error: urlValidation.error || 'Invalid API URL' }
   }
 
   try {
@@ -78,6 +85,21 @@ interface SetupParams {
 export async function completeSetup(
   params: SetupParams
 ): Promise<{ success: boolean; error?: string }> {
+  // Re-entry guard: reject if already configured
+  if (isAppConfigured()) {
+    return { success: false, error: 'Instance is already configured' }
+  }
+
+  // Re-validate inputs (defense in depth)
+  if (!isValidApiKey(params.apiKey)) {
+    return { success: false, error: 'Invalid API key format' }
+  }
+
+  const urlValidation = validateApiUrl(params.apiUrl)
+  if (!urlValidation.valid) {
+    return { success: false, error: urlValidation.error || 'Invalid API URL' }
+  }
+
   try {
     const authSecret = crypto.randomBytes(32).toString('base64')
 
@@ -107,7 +129,7 @@ export async function completeSetup(
     cookieStore.set('bedrock_instance_configured', 'true', {
       httpOnly: true,
       secure: isSecure,
-      maxAge: 60 * 60 * 24 * 365 * 10,
+      maxAge: 60 * 60 * 24 * 30, // 30 days — UX hint only, not a security gate
       path: '/',
       sameSite: 'lax',
     })

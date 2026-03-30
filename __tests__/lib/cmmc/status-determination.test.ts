@@ -61,10 +61,20 @@ describe('determineCMMCStatus', () => {
       expect(result.suggestedStatus).toBe('FINAL_LEVEL_2')
       expect(result.confidence).toBe('high')
     })
+
+    it('should return FINAL_LEVEL_2 with medium confidence when some objectives are NOT_ASSESSED (partial assessment)', () => {
+      const objectives: ObjectiveStatusEntry[] = [
+        { requirementId: '03.01.01', status: 'MET' },
+        { requirementId: '03.01.02', status: 'NOT_ASSESSED' },
+      ]
+      const result = determineCMMCStatus(objectives, [])
+      expect(result.suggestedStatus).toBe('FINAL_LEVEL_2')
+      expect(result.confidence).toBe('medium')
+    })
   })
 
   describe('poamAllowed: false guard', () => {
-    it('should return NO_CMMC_STATUS with high confidence when a NOT_MET requirement has poamAllowed: false', () => {
+    it('should return NO_CMMC_STATUS with high confidence when a NOT_MET requirement has poamAllowed: false (NIST format)', () => {
       const objectives: ObjectiveStatusEntry[] = [
         { requirementId: '03.01.01', status: 'NOT_MET' }, // poamAllowed: false
         { requirementId: '03.01.03', status: 'MET' },
@@ -74,7 +84,38 @@ describe('determineCMMCStatus', () => {
       const result = determineCMMCStatus(objectives, poams)
       expect(result.suggestedStatus).toBe('NO_CMMC_STATUS')
       expect(result.confidence).toBe('high')
-      expect(result.reasoning).toMatch(/03\.01\.01/i)
+    })
+
+    it('should return NO_CMMC_STATUS when 03.01.01 NOT_MET using CMMC format ID (H9)', () => {
+      const objectives: ObjectiveStatusEntry[] = [
+        { requirementId: 'AC.L2-3.1.1', status: 'NOT_MET' }, // CMMC format — same as 03.01.01
+        { requirementId: '03.01.03', status: 'MET' },
+      ]
+      const poams = [makePOAM(30)]
+      const result = determineCMMCStatus(objectives, poams)
+      expect(result.suggestedStatus).toBe('NO_CMMC_STATUS')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should return NO_CMMC_STATUS when 03.13.11 (FIPS encryption) is NOT_MET — poamAllowed must be false (H10)', () => {
+      const objectives: ObjectiveStatusEntry[] = [
+        { requirementId: '03.13.11', status: 'NOT_MET' },
+        { requirementId: '03.01.01', status: 'MET' },
+      ]
+      const poams = [makePOAM(30)]
+      const result = determineCMMCStatus(objectives, poams)
+      expect(result.suggestedStatus).toBe('NO_CMMC_STATUS')
+      expect(result.confidence).toBe('high')
+    })
+
+    it('should return NO_CMMC_STATUS when SC.L2-3.13.11 NOT_MET using CMMC format ID (H9 + H10)', () => {
+      const objectives: ObjectiveStatusEntry[] = [
+        { requirementId: 'SC.L2-3.13.11', status: 'NOT_MET' },
+      ]
+      const poams = [makePOAM(30)]
+      const result = determineCMMCStatus(objectives, poams)
+      expect(result.suggestedStatus).toBe('NO_CMMC_STATUS')
+      expect(result.confidence).toBe('high')
     })
   })
 

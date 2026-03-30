@@ -192,9 +192,9 @@ export const cmmcRequirementValues: Record<string, CMMCRequirementValue> = {
   '03.13.09': { value: 1, displayValue: '1', poamAllowed: true },   // SC.L2-3.13.9
   '03.13.10': { value: 1, displayValue: '1', poamAllowed: true },   // SC.L2-3.13.10
   '03.13.11': {                                                      // SC.L2-3.13.11
-    value: 5, // Use worst-case for scoring
+    value: 5, // Use worst-case for scoring (H10: conservative default — POA&M not allowed)
     displayValue: '3 or 5',
-    poamAllowed: true, // Conditional - Yes if value is 3, No if value is 5
+    poamAllowed: false, // Conservative: worst-case is value=5 (no encryption), which is POA&M-ineligible per CAP v2.0
     poamCondition: '3 if encryption is employed but not FIPS validated (POA&M allowed); 5 if encryption is not employed (POA&M not allowed)'
   },
   '03.13.12': { value: 1, displayValue: '1', poamAllowed: true },   // SC.L2-3.13.12
@@ -317,7 +317,7 @@ const cmmcToNistMap: Record<string, string> = {
  * Normalize requirement ID to NIST format (03.xx.xx)
  * Accepts both NIST format (03.01.01) and CMMC format (AC.L2-3.1.1)
  */
-function normalizeRequirementId(requirementId: string): string {
+export function normalizeRequirementId(requirementId: string): string {
   // If it's already in NIST format (starts with 03.)
   if (requirementId.startsWith('03.')) {
     return requirementId

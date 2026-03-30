@@ -7,7 +7,7 @@ import { fetchSTIGs } from '@/lib/api-client'
 export async function getSTIGTargets(engagementId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
   try {
     const session = await requireAuth()
-    if (!session) return { success: true, data: [] }
+    if (!session) return { success: false, error: 'Unauthorized' } // H14: don't mask auth failure
     const stigs = await fetchSTIGs(engagementId, session.apiToken)
     return { success: true, data: stigs.targets || [] }
   } catch (error) {
@@ -19,10 +19,7 @@ export async function getSTIGTargets(engagementId: string): Promise<{ success: b
 export async function getSTIGStatistics(engagementId: string): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const session = await requireAuth()
-    if (!session) return {
-      success: true,
-      data: { totalTargets: 0, totalChecklists: 0, totalRules: 0, byStatus: { OPEN: 0, NOT_A_FINDING: 0, NOT_APPLICABLE: 0, NOT_REVIEWED: 0 }, bySeverity: { HIGH: 0, MEDIUM: 0, LOW: 0 }, compliancePercentage: 0, recentImports: [] }
-    }
+    if (!session) return { success: false, error: 'Unauthorized' } // H14: don't mask auth failure
     const stigs = await fetchSTIGs(engagementId, session.apiToken)
     // Ensure the returned data conforms to STIGStatistics shape
     const statistics = stigs.statistics || {}

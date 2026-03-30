@@ -2,9 +2,10 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 
-const KEY_PATH = path.join(process.cwd(), 'data', '.encryption-key')
+// Allow test override via environment variable
+const KEY_PATH = process.env.ENCRYPTION_KEY_PATH || path.join(process.cwd(), 'data', '.encryption-key')
 const ALGORITHM = 'aes-256-gcm'
-const IV_LENGTH = 16
+const IV_LENGTH = 12 // NIST SP 800-38D recommended for AES-GCM
 
 let _cachedKey: Buffer | null = null
 
@@ -17,7 +18,24 @@ export function getEncryptionKey(): Buffer {
   }
 
   if (fs.existsSync(KEY_PATH)) {
-    _cachedKey = Buffer.from(fs.readFileSync(KEY_PATH, 'utf-8').trim(), 'hex')
+    const keyHex = fs.readFileSync(KEY_PATH, 'utf-8').trim()
+    const keyBytes = Buffer.from(keyHex, 'hex')
+
+    // Validate key length — must be exactly 32 bytes (256-bit)
+    if (keyBytes.length !== 32) {
+      throw new Error('Encryption key must be exactly 32 bytes (256-bit). Key file may be corrupt.')
+    }
+
+    // Validate file permissions — reject if group/other can read or write
+    const stats = fs.statSync(KEY_PATH)
+    if ((stats.mode & 0o077) !== 0) {
+      throw new Error(
+        `Encryption key file has insecure permissions (${(stats.mode & 0o777).toString(8)}). ` +
+        'Key file must be readable only by owner (chmod 0600).'
+      )
+    }
+
+    _cachedKey = keyBytes
     return _cachedKey
   }
 
@@ -26,11 +44,6 @@ export function getEncryptionKey(): Buffer {
   fs.writeFileSync(KEY_PATH, key.toString('hex'), { mode: 0o600 })
   _cachedKey = key
   return key
-}
-
-/** Returns the encryption key as a hex string for display to admin */
-export function getEncryptionKeyHex(): string {
-  return getEncryptionKey().toString('hex')
 }
 
 /** Encrypt plaintext → "iv:authTag:ciphertext" (all base64) */

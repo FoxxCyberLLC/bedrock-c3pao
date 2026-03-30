@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs'
 import type { ControlView, ObjectiveView, EMassExportData, EMassExportFinding, TeamMember } from '@/lib/api-client'
 import { getCmmcDisplayId, getRequirementValue } from '@/lib/cmmc/requirement-values'
 import { format } from 'date-fns'
@@ -14,6 +15,19 @@ export interface EMASSWorkbookInput {
     hashValue: string
     hashedDataList: string
   }
+}
+
+/**
+ * Sanitize a string value before writing to an Excel cell.
+ * Strips leading formula-injection trigger characters (OWASP: CSV/Excel Injection).
+ * ExcelJS stores strings as shared strings (t="s"), but defense-in-depth ensures
+ * older or misconfigured Excel clients cannot evaluate injected formulas.
+ */
+function sanitizeForExcel(value: string | null | undefined): string {
+  const str = value ?? ''
+  // OWASP: prefix with single quote to prevent formula evaluation in Excel
+  if (/^[=+\-@\t\r]/.test(str)) return "'" + str
+  return str
 }
 
 function fmtDate(date: string | null | undefined): string {
@@ -40,7 +54,7 @@ function findFinding(reqId: string, findings: EMassExportFinding[]): EMassExport
 }
 
 export async function buildEMASSWorkbook(input: EMASSWorkbookInput): Promise<ArrayBuffer> {
-  const XLSX = await import('xlsx')
+  const workbook = new ExcelJS.Workbook()
 
   const leadAssessor = input.team.find((m) => m.role === 'LEAD')
   const qaAssessor = input.team.find((m) => m.role === 'QA' || m.role === 'ASSESSOR')
@@ -51,114 +65,135 @@ export async function buildEMASSWorkbook(input: EMASSWorkbookInput): Promise<Arr
   const assessedObjs = input.objectives.filter((o) => o.status !== 'NOT_ASSESSED')
 
   // ── Sheet 1: Assessment Results ──
-  const sheet1Data: (string | number | null)[][] = [
-    ['CMMC Level 2 Assessment Results', null],
-    ['Template Version', '3.8'],
-    [],
-    ['Assessment Information', null],
-    ['OSC Name', input.exportData.organization],
-    ['System Name', input.exportData.systemName ?? ''],
-    ['C3PAO Name', input.exportData.assessorOrganization],
-    ['CMMC Level', input.exportData.cmmcLevel],
-    ['Assessment Start Date', fmtDate(input.exportData.assessmentStartDate)],
-    ['Assessment End Date', fmtDate(input.exportData.assessmentEndDate)],
-    [],
-    ['Assessor Information', null],
-    ['Lead Assessor CPN', leadAssessor?.jobTitle ?? ''],
-    ['QA Assessor CPN', qaAssessor?.jobTitle ?? ''],
-    [],
-    ['Assessment Summary', null],
-    ['Total Requirements', input.controls.length],
-    ['Requirements Met', metCount],
-    ['Requirements Not Met', notMetCount],
-    ['Requirements in POA&M', poamCount],
-    ['Total Objectives', input.objectives.length],
-    ['Objectives Assessed', assessedObjs.length],
-    [],
-    ['Hash Information', null],
-    ['Hash Algorithm', 'SHA-256'],
-    ['Hash Value', input.wizardFields.hashValue],
-    ['Hashed Data List', input.wizardFields.hashedDataList],
-    ['Hash Date', fmtDate(new Date().toISOString())],
-    [],
-    ['Standards Acceptance', input.wizardFields.standardsAcceptance || 'None'],
-    [],
-    ['C3PAO Executive Summary', null],
-    [input.wizardFields.executiveSummary, null],
-  ]
-  const ws1 = XLSX.utils.aoa_to_sheet(sheet1Data)
-  ws1['!cols'] = [{ wch: 28 }, { wch: 60 }]
+  const ws1 = workbook.addWorksheet('Assessment Results')
+  ws1.columns = [{ width: 28 }, { width: 60 }]
+  ws1.addRow(['CMMC Level 2 Assessment Results'])
+  ws1.addRow(['Template Version', '3.8'])
+  ws1.addRow([])
+  ws1.addRow(['Assessment Information'])
+  ws1.addRow(['OSC Name', sanitizeForExcel(input.exportData.organization)])
+  ws1.addRow(['System Name', sanitizeForExcel(input.exportData.systemName)])
+  ws1.addRow(['C3PAO Name', sanitizeForExcel(input.exportData.assessorOrganization)])
+  ws1.addRow(['CMMC Level', input.exportData.cmmcLevel])
+  ws1.addRow(['Assessment Start Date', fmtDate(input.exportData.assessmentStartDate)])
+  ws1.addRow(['Assessment End Date', fmtDate(input.exportData.assessmentEndDate)])
+  ws1.addRow([])
+  ws1.addRow(['Assessor Information'])
+  ws1.addRow(['Lead Assessor CPN', sanitizeForExcel(leadAssessor?.jobTitle)])
+  ws1.addRow(['QA Assessor CPN', sanitizeForExcel(qaAssessor?.jobTitle)])
+  ws1.addRow([])
+  ws1.addRow(['Assessment Summary'])
+  ws1.addRow(['Total Requirements', input.controls.length])
+  ws1.addRow(['Requirements Met', metCount])
+  ws1.addRow(['Requirements Not Met', notMetCount])
+  ws1.addRow(['Requirements in POA&M', poamCount])
+  ws1.addRow(['Total Objectives', input.objectives.length])
+  ws1.addRow(['Objectives Assessed', assessedObjs.length])
+  ws1.addRow([])
+  ws1.addRow(['Hash Information'])
+  ws1.addRow(['Hash Algorithm', 'SHA-256'])
+  ws1.addRow(['Hash Value', sanitizeForExcel(input.wizardFields.hashValue)])
+  ws1.addRow(['Hashed Data List', sanitizeForExcel(input.wizardFields.hashedDataList)])
+  ws1.addRow(['Hash Date', fmtDate(new Date().toISOString())])
+  ws1.addRow([])
+  ws1.addRow(['Standards Acceptance', sanitizeForExcel(input.wizardFields.standardsAcceptance) || 'None'])
+  ws1.addRow([])
+  ws1.addRow(['C3PAO Executive Summary'])
+  ws1.addRow([sanitizeForExcel(input.wizardFields.executiveSummary)])
 
   // ── Sheet 2: Requirements ──
-  const reqRows = input.controls
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((c) => {
-      const cmmcId = getCmmcDisplayId(c.requirementId, c.familyCode)
-      const rv = getRequirementValue(c.requirementId)
-      const status = mapStatus(c.status)
-      const inPoam = c.status === 'IN_POAM' ? 'Yes' : 'No'
-      const pointsToSubtract = c.status === 'NOT_MET' ? rv.value : 0
-
-      return {
-        'Requirement Number': cmmcId,
-        'Requirement Description': c.basicRequirement,
-        'Level': c.cmmcLevel || 'Level 2',
-        'Requirement Value': rv.displayValue,
-        'POA&M Allowed': rv.poamAllowed ? 'Yes' : 'No',
-        'Requirement Status': status,
-        'Requirement in POA&M': inPoam,
-        'Points to Subtract': pointsToSubtract,
-        'Implementation Notes': c.implementationNotes ?? '',
-        'Assessment Notes': c.assessmentNotes ?? '',
-      }
-    })
-  const ws2 = XLSX.utils.json_to_sheet(reqRows)
-  ws2['!cols'] = [
-    { wch: 18 }, { wch: 55 }, { wch: 10 }, { wch: 8 }, { wch: 12 },
-    { wch: 15 }, { wch: 14 }, { wch: 10 }, { wch: 30 }, { wch: 30 },
+  const ws2 = workbook.addWorksheet('Requirements')
+  ws2.columns = [
+    { header: 'Requirement Number', key: 'requirementNumber', width: 18 },
+    { header: 'Requirement Description', key: 'description', width: 55 },
+    { header: 'Level', key: 'level', width: 10 },
+    { header: 'Requirement Value', key: 'requirementValue', width: 8 },
+    { header: 'POA&M Allowed', key: 'poamAllowed', width: 12 },
+    { header: 'Requirement Status', key: 'requirementStatus', width: 15 },
+    { header: 'Requirement in POA&M', key: 'inPoam', width: 14 },
+    { header: 'Points to Subtract', key: 'pointsToSubtract', width: 10 },
+    { header: 'Implementation Notes', key: 'implementationNotes', width: 30 },
+    { header: 'Assessment Notes', key: 'assessmentNotes', width: 30 },
   ]
+  for (const c of input.controls.slice().sort((a, b) => a.sortOrder - b.sortOrder)) {
+    const cmmcId = getCmmcDisplayId(c.requirementId, c.familyCode)
+    const rv = getRequirementValue(c.requirementId)
+    const status = mapStatus(c.status)
+    ws2.addRow({
+      requirementNumber: cmmcId,
+      description: sanitizeForExcel(c.basicRequirement),
+      level: c.cmmcLevel || 'Level 2',
+      requirementValue: rv.displayValue,
+      poamAllowed: rv.poamAllowed ? 'Yes' : 'No',
+      requirementStatus: status,
+      inPoam: c.status === 'IN_POAM' ? 'Yes' : 'No',
+      pointsToSubtract: c.status === 'NOT_MET' ? rv.value : 0,
+      implementationNotes: sanitizeForExcel(c.implementationNotes),
+      assessmentNotes: sanitizeForExcel(c.assessmentNotes),
+    })
+  }
 
   // ── Sheet 3: Objectives ──
-  const objRows = input.objectives
-    .sort((a, b) => a.objectiveReference.localeCompare(b.objectiveReference))
-    .map((o) => {
-      const cmmcReqId = getCmmcDisplayId(o.requirementId, o.familyCode)
-      const finding = findFinding(o.requirementId, input.exportData.findings)
-
-      return {
-        'Requirement Number': cmmcReqId,
-        'Objective Reference': o.objectiveReference,
-        'Description': o.description,
-        'Artifacts Reviewed': o.artifactsReviewed ?? '',
-        'Interviews': o.interviewees ?? '',
-        'Examine': o.examineDescription ?? '',
-        'Test': o.testDescription ?? '',
-        'Overall Comments': o.assessmentNotes ?? '',
-        'Time to Assess (min)': o.timeToAssessMinutes ?? '',
-        'Inherited Status': o.inheritedStatus ?? '',
-        'Score': mapStatus(o.status),
-        'Date Assessed': fmtDate(o.assessedAt),
-        'Assessed By': o.assessedBy ?? '',
-        'Findings': finding?.finding ?? '',
-      }
-    })
-  const ws3 = XLSX.utils.json_to_sheet(objRows)
-  ws3['!cols'] = [
-    { wch: 18 }, { wch: 22 }, { wch: 50 }, { wch: 30 }, { wch: 25 },
-    { wch: 25 }, { wch: 25 }, { wch: 30 }, { wch: 10 }, { wch: 12 },
-    { wch: 12 }, { wch: 14 }, { wch: 18 }, { wch: 30 },
+  const ws3 = workbook.addWorksheet('Objectives')
+  ws3.columns = [
+    { header: 'Requirement Number', key: 'requirementNumber', width: 18 },
+    { header: 'Objective Reference', key: 'objectiveReference', width: 22 },
+    { header: 'Description', key: 'description', width: 50 },
+    { header: 'Artifacts Reviewed', key: 'artifactsReviewed', width: 30 },
+    { header: 'Interviews', key: 'interviews', width: 25 },
+    { header: 'Examine', key: 'examine', width: 25 },
+    { header: 'Test', key: 'test', width: 25 },
+    { header: 'Overall Comments', key: 'overallComments', width: 30 },
+    { header: 'Time to Assess (min)', key: 'timeToAssess', width: 10 },
+    { header: 'Inherited Status', key: 'inheritedStatus', width: 12 },
+    { header: 'Score', key: 'score', width: 12 },
+    { header: 'Date Assessed', key: 'dateAssessed', width: 14 },
+    { header: 'Assessed By', key: 'assessedBy', width: 18 },
+    { header: 'Findings', key: 'findings', width: 30 },
   ]
+  for (const o of input.objectives.slice().sort((a, b) => a.objectiveReference.localeCompare(b.objectiveReference))) {
+    const cmmcReqId = getCmmcDisplayId(o.requirementId, o.familyCode)
+    const finding = findFinding(o.requirementId, input.exportData.findings)
+    ws3.addRow({
+      requirementNumber: cmmcReqId,
+      objectiveReference: o.objectiveReference,
+      description: sanitizeForExcel(o.description),
+      artifactsReviewed: sanitizeForExcel(o.artifactsReviewed),
+      interviews: sanitizeForExcel(o.interviewees),
+      examine: sanitizeForExcel(o.examineDescription),
+      test: sanitizeForExcel(o.testDescription),
+      overallComments: sanitizeForExcel(o.assessmentNotes),
+      timeToAssess: o.timeToAssessMinutes ?? '',
+      inheritedStatus: o.inheritedStatus ?? '',
+      score: mapStatus(o.status),
+      dateAssessed: fmtDate(o.assessedAt),
+      assessedBy: sanitizeForExcel(o.assessedBy),
+      findings: sanitizeForExcel(finding?.finding),
+    })
+  }
 
   // ── Sheet 4: OSC SSPs ──
-  const sspRows = [{
-    'SSP Name': input.ssp.name ?? '',
-    'SSP Version': input.ssp.version,
-    'SSP Date': fmtDate(input.ssp.date),
-  }]
-  const ws4 = XLSX.utils.json_to_sheet(sspRows)
-  ws4['!cols'] = [{ wch: 40 }, { wch: 15 }, { wch: 15 }]
+  const ws4 = workbook.addWorksheet('OSC SSPs')
+  ws4.columns = [
+    { header: 'SSP Name', key: 'sspName', width: 40 },
+    { header: 'SSP Version', key: 'sspVersion', width: 15 },
+    { header: 'SSP Date', key: 'sspDate', width: 15 },
+  ]
+  ws4.addRow({
+    sspName: sanitizeForExcel(input.ssp.name),
+    sspVersion: sanitizeForExcel(input.ssp.version),
+    sspDate: fmtDate(input.ssp.date),
+  })
 
   // ── Sheet 5: Summary ──
+  const ws5 = workbook.addWorksheet('Summary')
+  ws5.columns = [
+    { header: 'Requirement', key: 'requirement', width: 18 },
+    { header: 'Status', key: 'status', width: 15 },
+    { header: 'Objectives Met', key: 'objectivesMet', width: 14 },
+    { header: 'Objectives Not Met', key: 'objectivesNotMet', width: 16 },
+    { header: 'Total Objectives', key: 'totalObjectives', width: 15 },
+  ]
   const reqMap = new Map<string, { cmmcId: string; status: string; met: number; notMet: number; total: number }>()
   for (const c of input.controls) {
     const cmmcId = getCmmcDisplayId(c.requirementId, c.familyCode)
@@ -172,25 +207,19 @@ export async function buildEMASSWorkbook(input: EMASSWorkbookInput): Promise<Arr
       else if (o.status === 'NOT_MET') entry.notMet++
     }
   }
-  const summaryRows = Array.from(reqMap.values())
-    .sort((a, b) => a.cmmcId.localeCompare(b.cmmcId))
-    .map((r) => ({
-      'Requirement': r.cmmcId,
-      'Status': r.status,
-      'Objectives Met': r.met,
-      'Objectives Not Met': r.notMet,
-      'Total Objectives': r.total,
-    }))
-  const ws5 = XLSX.utils.json_to_sheet(summaryRows)
-  ws5['!cols'] = [{ wch: 18 }, { wch: 15 }, { wch: 14 }, { wch: 16 }, { wch: 15 }]
+  for (const r of Array.from(reqMap.values()).sort((a, b) => a.cmmcId.localeCompare(b.cmmcId))) {
+    ws5.addRow({
+      requirement: r.cmmcId,
+      status: r.status,
+      objectivesMet: r.met,
+      objectivesNotMet: r.notMet,
+      totalObjectives: r.total,
+    })
+  }
 
-  // ── Assemble workbook ──
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws1, 'Assessment Results')
-  XLSX.utils.book_append_sheet(wb, ws2, 'Requirements')
-  XLSX.utils.book_append_sheet(wb, ws3, 'Objectives')
-  XLSX.utils.book_append_sheet(wb, ws4, 'OSC SSPs')
-  XLSX.utils.book_append_sheet(wb, ws5, 'Summary')
-
-  return XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+  // ── Export ──
+  // ExcelJS's type declares Buffer extends ArrayBuffer, but at runtime it returns
+  // a Node.js Buffer (Uint8Array subclass). Copy into a fresh standalone ArrayBuffer.
+  const raw = await workbook.xlsx.writeBuffer()
+  return new Uint8Array(raw as unknown as Uint8Array).buffer
 }

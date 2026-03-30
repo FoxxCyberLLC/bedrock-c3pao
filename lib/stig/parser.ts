@@ -68,10 +68,17 @@ export type CKLBTargetData = z.infer<typeof CKLBTargetDataSchema>;
 // PARSER FUNCTIONS
 // ============================================
 
+// H12: Maximum CKLB file size — prevents DoS via unbounded JSON.parse
+const MAX_CKLB_SIZE_BYTES = 10 * 1024 * 1024 // 10 MB
+
 /**
  * Parse a CKLB JSON file content
  */
 export function parseCKLBFile(jsonContent: string): CKLBFile {
+  // H12: Guard against DoS via enormous JSON strings
+  if (Buffer.byteLength(jsonContent, 'utf8') > MAX_CKLB_SIZE_BYTES) {
+    throw new RangeError(`CKLB input exceeds size limit (${MAX_CKLB_SIZE_BYTES} bytes)`)
+  }
   const parsed = JSON.parse(jsonContent);
   return CKLBFileSchema.parse(parsed);
 }
@@ -161,6 +168,9 @@ export function validateCKLBFile(jsonContent: string): {
 
     return { valid: true, data };
   } catch (error) {
+    if (error instanceof RangeError) {
+      return { valid: false, error: error.message };
+    }
     if (error instanceof z.ZodError) {
       return {
         valid: false,

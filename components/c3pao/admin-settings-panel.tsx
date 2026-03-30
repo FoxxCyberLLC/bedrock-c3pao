@@ -5,14 +5,9 @@ import { useRouter } from 'next/navigation'
 import {
   Shield,
   Server,
-  Key,
   Building2,
   Users,
   LogOut,
-  Eye,
-  EyeOff,
-  Copy,
-  Check,
   Lock,
   Plus,
   Trash2,
@@ -56,7 +51,6 @@ interface AdminData {
   c3paoId: string
   activatedAt: string
   forceHttps: string
-  encryptionKey: string
   adminEmail: string
   adminName: string
 }
@@ -73,9 +67,6 @@ export function AdminSettingsPanel({ userName, embedded = false }: { userName: s
   const router = useRouter()
   const [data, setData] = useState<AdminData | null>(null)
   const [users, setUsers] = useState<LocalUser[]>([])
-  const [showKey, setShowKey] = useState(false)
-  const [copied, setCopied] = useState(false)
-
   // Dialog state
   const [dialogMode, setDialogMode] = useState<
     'closed' | 'create' | 'edit' | 'reset-password' | 'delete'
@@ -191,13 +182,6 @@ export function AdminSettingsPanel({ userName, embedded = false }: { userName: s
     }
     setDialogMode('closed')
     loadUsers()
-  }
-
-  async function handleCopyKey() {
-    if (!data) return
-    await navigator.clipboard.writeText(data.encryptionKey)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
   }
 
   async function handleLogout() {
@@ -349,53 +333,6 @@ export function AdminSettingsPanel({ userName, embedded = false }: { userName: s
             </CardContent>
           </Card>
 
-          {/* Encryption Key */}
-          <Card className="border-amber-500/30">
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Key className="h-5 w-5 text-amber-600" />
-                <CardTitle>Database Encryption Key</CardTitle>
-              </div>
-              <CardDescription>
-                This key encrypts sensitive values in the local database. Store it securely — it is
-                required to recover data if the instance is rebuilt.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs font-mono break-all select-all">
-                    {showKey
-                      ? data.encryptionKey
-                      : '••••••••••••••••••••••••••••••••••••••••••••••••'}
-                  </code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0"
-                    onClick={() => setShowKey(!showKey)}
-                  >
-                    {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0"
-                    onClick={handleCopyKey}
-                  >
-                    {copied ? (
-                      <Check className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-                <p className="text-xs text-amber-600 font-medium">
-                  Do not share this key. It provides access to all encrypted configuration data.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
         </>
       )}
 

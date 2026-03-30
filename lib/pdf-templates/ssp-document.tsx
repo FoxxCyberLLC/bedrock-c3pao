@@ -13,6 +13,33 @@ import {
 import { styles, getStatusStyle } from './styles';
 import { SSP } from '@/lib/prisma-types';
 
+// H13: Safe JSON parse helpers — prevent PDF crash on malformed DB fields
+
+/** Parse POA&M summary JSON, returning null on any parse error instead of crashing. */
+export function parsePoamSummary(json: string | null | undefined): {
+  totalPOAMs: number
+  openPOAMs: number
+  overdue: number
+  items: Array<{ id: string; controlId: string; weakness: string; dueDate: string; status: string }>
+} | null {
+  if (!json) return null
+  try {
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
+/** Parse control statements JSON, returning {} on any parse error instead of crashing. */
+export function parseControlStatements(json: string | null | undefined): Record<string, any> {
+  if (!json) return {}
+  try {
+    return JSON.parse(json)
+  } catch {
+    return {}
+  }
+}
+
 // Component props
 interface SSPDocumentProps {
   ssp: SSP & {
@@ -565,7 +592,7 @@ const SDLCPage: React.FC<{ ssp: SSPDocumentProps['ssp'] }> = ({ ssp }) => (
 
 // POA&M Summary Page
 const POAMSummaryPage: React.FC<{ ssp: SSPDocumentProps['ssp'] }> = ({ ssp }) => {
-  const poamSummary = ssp.poamSummary ? JSON.parse(ssp.poamSummary) : null;
+  const poamSummary = parsePoamSummary(ssp.poamSummary);
 
   return (
     <Page size="A4" style={styles.page}>
@@ -737,7 +764,7 @@ const SecurityRequirementsHeader: React.FC<{ ssp: SSPDocumentProps['ssp'] }> = (
 // Main SSP Document
 export const SSPDocument: React.FC<SSPDocumentProps> = ({ ssp }) => {
   // Parse control statements if available
-  const controlStatements = ssp.controlStatements ? JSON.parse(ssp.controlStatements) : {};
+  const controlStatements = parseControlStatements(ssp.controlStatements);
 
   // Group controls by family
   const controlFamilies: Record<string, { name: string; controls: typeof controlStatements[string][] }> = {};

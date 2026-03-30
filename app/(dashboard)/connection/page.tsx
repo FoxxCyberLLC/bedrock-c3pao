@@ -22,7 +22,6 @@ import { getConnectionStatus, testConnection } from '@/app/actions/connection'
 import { getSetupStatus } from '@/app/actions/setup'
 
 interface ConnectionData {
-  apiUrl: string
   connected: boolean
   apiVersion: string | null
   timestamp: string
@@ -198,7 +197,7 @@ export default function ConnectionPage() {
                 <Server className="h-3.5 w-3.5" />
                 API URL
               </span>
-              <span className="text-sm font-mono">{data?.apiUrl || 'Not configured'}</span>
+              <span className="text-sm font-mono">{instanceInfo?.apiUrl || 'Not configured'}</span>
             </div>
             {data?.apiVersion && (
               <div className="flex items-center justify-between">

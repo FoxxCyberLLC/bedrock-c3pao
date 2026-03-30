@@ -11,7 +11,7 @@
  */
 
 import { addDays, addYears, isAfter, parseISO } from 'date-fns'
-import { cmmcRequirementValues } from './requirement-values'
+import { getRequirementValue } from './requirement-values'
 
 /** The three possible CMMC Level 2 assessment outcomes */
 export type CMMCStatus = 'FINAL_LEVEL_2' | 'CONDITIONAL_LEVEL_2' | 'NO_CMMC_STATUS'
@@ -126,18 +126,22 @@ export function determineCMMCStatus(
   // 2. All MET (or NOT_APPLICABLE filtered out above)
   const hasNotMet = assessable.some((o) => o.status === 'NOT_MET')
   if (!hasNotMet) {
+    // Partial assessment: if some objectives were NOT_ASSESSED, confidence is medium
+    const hasNotAssessed = assessable.some((o) => o.status === 'NOT_ASSESSED')
     return {
       suggestedStatus: 'FINAL_LEVEL_2',
-      reasoning: 'All assessed objectives are MET. Recommended for Final Level 2 certification.',
-      confidence: 'high',
+      reasoning: hasNotAssessed
+        ? 'All assessed objectives are MET, but some have not been assessed yet. Confidence is reduced until assessment is complete.'
+        : 'All assessed objectives are MET. Recommended for Final Level 2 certification.',
+      confidence: hasNotAssessed ? 'medium' : 'high',
     }
   }
 
-  // 3. Check for POA&M-ineligible NOT_MET requirements
+  // 3. Check for POA&M-ineligible NOT_MET requirements (H9: normalize CMMC-format IDs via getRequirementValue)
   const notMetEntries = assessable.filter((o) => o.status === 'NOT_MET')
   const ineligibleNotMet = notMetEntries.filter((o) => {
-    const reqValue = cmmcRequirementValues[o.requirementId]
-    return reqValue && reqValue.poamAllowed === false
+    const reqValue = getRequirementValue(o.requirementId)
+    return reqValue.poamAllowed === false
   })
 
   if (ineligibleNotMet.length > 0) {

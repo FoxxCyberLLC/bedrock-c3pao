@@ -53,7 +53,7 @@ export function FilePreviewDialog({
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isDownloading, setIsDownloading] = useState(false)
-  const [xlsxHtml, setXlsxHtml] = useState<string | null>(null)
+  const [xlsxData, setXlsxData] = useState<{ sheetName: string; rows: (string | null)[][] } | null>(null)
 
   const previewType = getPreviewType(mimeType, fileName)
   const proxyUrl = `/api/evidence/${engagementId}/${evidenceId}/proxy`
@@ -62,7 +62,7 @@ export function FilePreviewDialog({
     if (!open) {
       setError(null)
       setIsLoading(false)
-      setXlsxHtml(null)
+      setXlsxData(null)
       return
     }
     if (open && previewType === 'xlsx') {
@@ -75,17 +75,14 @@ export function FilePreviewDialog({
     setIsLoading(true)
     setError(null)
     try {
-      const res = await fetch(proxyUrl)
+      const previewUrl = `/api/evidence/${engagementId}/${evidenceId}/preview`
+      const res = await fetch(previewUrl)
       if (!res.ok) {
-        throw new Error(`Failed to fetch file (${res.status})`)
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body?.error ?? `Failed to load preview (${res.status})`)
       }
-      const buffer = await res.arrayBuffer()
-      const XLSX = await import('xlsx')
-      const workbook = XLSX.read(buffer, { type: 'array' })
-      const sheetName = workbook.SheetNames[0]
-      const worksheet = workbook.Sheets[sheetName]
-      const html = XLSX.utils.sheet_to_html(worksheet, { id: 'xlsx-table' })
-      setXlsxHtml(html)
+      const data = await res.json()
+      setXlsxData(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load spreadsheet preview.')
     } finally {
@@ -222,12 +219,26 @@ export function FilePreviewDialog({
                   </Button>
                 </div>
               )}
-              {!isLoading && !error && xlsxHtml && (
-                <div
-                  className="p-4 text-sm [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1 [&_th]:bg-muted [&_th]:font-medium"
-                  // eslint-disable-next-line react/no-danger
-                  dangerouslySetInnerHTML={{ __html: xlsxHtml }}
-                />
+              {!isLoading && !error && xlsxData && (
+                <table className="w-full border-collapse text-sm">
+                  <tbody>
+                    {xlsxData.rows.map((row, ri) => {
+                      const Tag = ri === 0 ? 'th' : 'td'
+                      return (
+                        <tr key={ri} className={ri === 0 ? 'bg-muted' : undefined}>
+                          {row.map((cell, ci) => (
+                            <Tag
+                              key={ci}
+                              className="border border-border px-2 py-1 font-medium whitespace-nowrap"
+                            >
+                              {cell ?? ''}
+                            </Tag>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               )}
             </div>
           )}

@@ -4,6 +4,18 @@ import { fetchEvidenceDownloadURL } from '@/lib/api-client'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
 
+// H3: Only forward Content-Types safe for browser rendering.
+// Everything else becomes application/octet-stream (forces download).
+const ALLOWED_CONTENT_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+])
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ engagementId: string; evidenceId: string }> },
@@ -40,7 +52,7 @@ export async function GET(
     return NextResponse.json({ error: message }, { status: 502 })
   }
 
-  // Step 3: Enforce file size limit before streaming
+  // Step 3: Enforce file size limit using Content-Length when available (H4)
   const contentLength = upstream.headers.get('content-length')
   if (contentLength && parseInt(contentLength, 10) > MAX_FILE_SIZE_BYTES) {
     return NextResponse.json(
@@ -49,18 +61,37 @@ export async function GET(
     )
   }
 
-  // Step 4: Forward Content-Type (critical for PDF rendering in iframe)
-  const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+  // Step 4: Sanitize Content-Type — strip charset params, allowlist safe types (H3)
+  const rawType = upstream.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? ''
+  const contentType = ALLOWED_CONTENT_TYPES.has(rawType) ? rawType : 'application/octet-stream'
 
-  // Step 5: Stream the file bytes — avoid buffering entire file into memory
+  // Step 5: Stream the file bytes with size guard for missing Content-Length (H4)
   if (!upstream.body) {
     return NextResponse.json({ error: 'No response body from upstream' }, { status: 502 })
   }
 
-  return new NextResponse(upstream.body, {
+  let bytesReceived = 0
+  const sizeGuard = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      bytesReceived += chunk.byteLength
+      if (bytesReceived > MAX_FILE_SIZE_BYTES) {
+        controller.error(new Error('File exceeds the 25MB streaming limit'))
+      } else {
+        controller.enqueue(chunk)
+      }
+    },
+  })
+
+  // H3: Prevent MIME-sniffing and force download for non-display types
+  const DISPLAYABLE_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'])
+  const disposition = DISPLAYABLE_TYPES.has(contentType) ? 'inline' : 'attachment'
+
+  return new NextResponse(upstream.body.pipeThrough(sizeGuard), {
     status: 200,
     headers: {
       'Content-Type': contentType,
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Disposition': disposition,
       'Cache-Control': 'private, max-age=300',
       ...(contentLength ? { 'Content-Length': contentLength } : {}),
     },

@@ -2,7 +2,6 @@
 
 import { requireAuth } from '@/lib/auth'
 import { getAllConfig } from '@/lib/config'
-import { getEncryptionKeyHex } from '@/lib/crypto'
 import {
   getLocalAdmin,
   listLocalUsers,
@@ -44,7 +43,6 @@ export async function getAdminSettings() {
       c3paoId: config.C3PAO_ID || '',
       activatedAt: config.ACTIVATED_AT || '',
       forceHttps: config.FORCE_HTTPS || 'true',
-      encryptionKey: getEncryptionKeyHex(),
       adminEmail: admin?.email || '',
       adminName: admin?.name || '',
     },

@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { Bell, Check, CheckCheck, Trash2, X, ExternalLink } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { cn } from '@/lib/utils'
+import { isSafeRedirectUrl } from '@/lib/safe-redirect'
 import {
   getNotifications,
   getUnreadNotificationCount,
@@ -237,6 +239,7 @@ function NotificationItem({
   onMarkRead: (id: string) => void
   onClose: () => void
 }) {
+  const router = useRouter()
   const dotColor =
     notificationTypeColors[notification.type] || notificationTypeColors.GENERAL_UPDATE
 
@@ -244,9 +247,9 @@ function NotificationItem({
     if (!notification.isRead) {
       onMarkRead(notification.id)
     }
-    if (notification.linkUrl) {
+    if (notification.linkUrl && isSafeRedirectUrl(notification.linkUrl)) {
       onClose()
-      window.location.href = notification.linkUrl
+      router.push(notification.linkUrl)
     }
   }
 

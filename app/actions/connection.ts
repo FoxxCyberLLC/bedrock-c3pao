@@ -1,5 +1,7 @@
 'use server'
 
+import { requireAuth } from '@/lib/auth'
+
 // Connection settings are configured during the setup wizard and stored in SQLite.
 
 export async function saveConnectionConfig(): Promise<{ success: boolean; error?: string }> {
@@ -7,6 +9,9 @@ export async function saveConnectionConfig(): Promise<{ success: boolean; error?
 }
 
 export async function getConnectionStatus() {
+  const session = await requireAuth()
+  if (!session) return { success: false, error: 'Unauthorized' }
+
   const apiUrl = process.env.BEDROCK_API_URL || 'http://localhost:8080'
 
   try {
@@ -16,7 +21,6 @@ export async function getConnectionStatus() {
     return {
       success: true,
       data: {
-        apiUrl,
         connected: response.ok,
         apiVersion: data?.version || 'unknown',
         timestamp: new Date().toISOString(),
@@ -26,7 +30,6 @@ export async function getConnectionStatus() {
     return {
       success: true,
       data: {
-        apiUrl,
         connected: false,
         apiVersion: null,
         timestamp: new Date().toISOString(),

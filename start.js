@@ -54,13 +54,14 @@ function ensureCerts() {
 
   console.log('[start] Generating self-signed TLS certificate...')
   execSync(
-    `openssl req -x509 -newkey rsa:2048 -nodes ` +
+    `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes ` +
     `-keyout "${TLS_KEY}" -out "${TLS_CERT}" ` +
-    `-days 3650 -subj "/CN=bedrock-c3pao/O=Bedrock" ` +
+    `-days 825 -subj "/CN=bedrock-c3pao/O=Bedrock" ` +
     `-addext "subjectAltName=DNS:localhost,DNS:bedrock-c3pao,IP:127.0.0.1"`,
     { stdio: 'pipe' }
   )
-  console.log('[start] Self-signed TLS certificate generated (valid 10 years)')
+  fs.chmodSync(TLS_KEY, 0o600)
+  console.log('[start] Self-signed TLS certificate generated (ECDSA P-384, valid ~2.25 years)')
 }
 
 /**

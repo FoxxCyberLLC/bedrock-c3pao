@@ -3,6 +3,9 @@ import { getConfigDb } from './db'
 
 const SCRYPT_KEYLEN = 64
 const SALT_LENGTH = 32
+const SCRYPT_N_CURRENT = 65536  // OWASP-compliant (N=2^16, r=8, p=1)
+const SCRYPT_N_LEGACY = 16384   // Default N used before hardening — kept for migration
+const SCRYPT_MAXMEM = 134217728 // 128MB — needed for N=65536 (requires 64MB)
 
 export interface LocalUser {
   id: string
@@ -12,20 +15,58 @@ export interface LocalUser {
   created_at: string
 }
 
-/** Hash password with scrypt + random salt → "salt:hash" (hex) */
+/**
+ * Hash password with scrypt + random salt.
+ * Format: "v2:<saltHex>:<hashHex>" — uses SCRYPT_N_CURRENT (N=65536).
+ */
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(SALT_LENGTH)
-  const hash = crypto.scryptSync(password, salt, SCRYPT_KEYLEN)
-  return `${salt.toString('hex')}:${hash.toString('hex')}`
+  const hash = crypto.scryptSync(password, salt, SCRYPT_KEYLEN, {
+    N: SCRYPT_N_CURRENT,
+    maxmem: SCRYPT_MAXMEM,
+  })
+  return `v2:${salt.toString('hex')}:${hash.toString('hex')}`
 }
 
-/** Verify password against "salt:hash" */
+/**
+ * Verify password against a stored hash.
+ * Supports both legacy format ("saltHex:hashHex", N=16384) and
+ * current format ("v2:saltHex:hashHex", N=65536).
+ */
 function verifyPassword(password: string, stored: string): boolean {
-  const [saltHex, hashHex] = stored.split(':')
-  const salt = Buffer.from(saltHex, 'hex')
-  const expectedHash = Buffer.from(hashHex, 'hex')
-  const actualHash = crypto.scryptSync(password, salt, SCRYPT_KEYLEN)
-  return crypto.timingSafeEqual(expectedHash, actualHash)
+  let N: number
+  let saltHex: string
+  let hashHex: string
+
+  if (stored.startsWith('v2:')) {
+    const rest = stored.slice(3)
+    const colon = rest.indexOf(':')
+    if (colon <= 0) return false
+    saltHex = rest.slice(0, colon)
+    hashHex = rest.slice(colon + 1)
+    if (saltHex.length !== 64 || hashHex.length !== 128) return false
+    N = SCRYPT_N_CURRENT
+  } else {
+    // Legacy format: "saltHex:hashHex" with default N=16384
+    const colon = stored.indexOf(':')
+    if (colon <= 0) return false
+    saltHex = stored.slice(0, colon)
+    hashHex = stored.slice(colon + 1)
+    if (saltHex.length !== 64 || hashHex.length !== 128) return false
+    N = SCRYPT_N_LEGACY
+  }
+
+  try {
+    const salt = Buffer.from(saltHex, 'hex')
+    const expectedHash = Buffer.from(hashHex, 'hex')
+    const actualHash = crypto.scryptSync(password, salt, SCRYPT_KEYLEN, {
+      N,
+      maxmem: SCRYPT_MAXMEM,
+    })
+    return crypto.timingSafeEqual(expectedHash, actualHash)
+  } catch {
+    return false
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +179,12 @@ export function authenticateLocalUser(
 
   if (!row) return null
   if (!verifyPassword(password, row.password_hash)) return null
+
+  // Transparent migration: re-hash legacy hashes to current cost params on login
+  if (!row.password_hash.startsWith('v2:')) {
+    const upgraded = hashPassword(password)
+    db.prepare('UPDATE local_users SET password_hash = ? WHERE id = ?').run(upgraded, row.id)
+  }
 
   return { id: row.id, email: row.email, name: row.name, role: row.role, created_at: row.created_at }
 }

@@ -22,7 +22,8 @@ export async function GET() {
     status: 'healthy',
     timestamp: new Date().toISOString(),
     api: {
-      url: apiUrl,
+      // Note: api.url intentionally omitted — this endpoint is unauthenticated
+      // and internal API URL is sensitive configuration
       status: apiStatus,
     },
   })
