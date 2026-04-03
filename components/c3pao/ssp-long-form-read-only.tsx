@@ -1,26 +1,17 @@
 'use client'
 
-import Image from 'next/image'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { SSPTableOfContents } from '@/components/ssp/SSPTableOfContents'
 import { SSPControlFamilyReadOnly } from './ssp-control-family-read-only'
+import { ReadOnlyField, ReadOnlyTextArea, ContactCard, DiagramDisplay } from './tabs/ssp-helpers'
 import { format } from 'date-fns'
 import {
-  User,
-  Phone,
-  Mail,
   Shield,
   FileText,
   Download,
-  ZoomIn,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogTrigger,
-} from '@/components/ui/dialog'
 
 interface ObjectiveStatus {
   id: string
@@ -94,97 +85,6 @@ interface SSPLongFormReadOnlyProps {
   ssp: SSPData
   families?: Family[]
   atoPackage?: ATOPackage
-}
-
-function ReadOnlyField({ label, value, className }: { label: string; value: unknown; className?: string }) {
-  if (!value || (typeof value === 'string' && !value.trim())) return null
-  return (
-    <div className={`space-y-1 ${className || ''}`}>
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
-      <p className="text-sm whitespace-pre-wrap">{String(value)}</p>
-    </div>
-  )
-}
-
-function ReadOnlyTextArea({ label, value }: { label: string; value: unknown }) {
-  if (!value || (typeof value === 'string' && !value.trim())) return null
-  return (
-    <div className="space-y-1">
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
-      <div className="text-sm whitespace-pre-wrap bg-muted/30 rounded-lg p-3 border">
-        {String(value)}
-      </div>
-    </div>
-  )
-}
-
-function ContactCard({ title, name, email, phone }: { title: string; name: string | null; email?: string | null; phone?: string | null }) {
-  if (!name) return null
-  return (
-    <div className="space-y-1.5 p-3 rounded-lg border bg-muted/30">
-      <div className="text-xs font-medium text-muted-foreground">{title}</div>
-      <div className="flex items-center gap-1.5 text-sm">
-        <User className="h-3.5 w-3.5 text-muted-foreground" />
-        {name}
-      </div>
-      {phone && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Phone className="h-3 w-3" />
-          {phone}
-        </div>
-      )}
-      {email && (
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <Mail className="h-3 w-3" />
-          {email}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function DiagramDisplay({ label, url, fileName }: { label: string; url: string | null | undefined; fileName?: string | null }) {
-  if (!url) return null
-  return (
-    <div className="space-y-2">
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
-      <div className="border rounded-lg overflow-hidden bg-muted/30">
-        <Dialog>
-          <DialogTrigger asChild>
-            <button
-              type="button"
-              className="relative w-full aspect-video cursor-zoom-in group"
-            >
-              <Image
-                src={url}
-                alt={label}
-                fill
-                className="object-contain"
-                sizes="(max-width: 768px) 100vw, 800px"
-              />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
-                <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </button>
-          </DialogTrigger>
-          <DialogContent className="max-w-[90vw] max-h-[90vh] p-0">
-            <div className="relative w-full h-[80vh]">
-              <Image
-                src={url}
-                alt={label}
-                fill
-                className="object-contain"
-                sizes="90vw"
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-      {fileName && (
-        <p className="text-xs text-muted-foreground">{fileName}</p>
-      )}
-    </div>
-  )
 }
 
 export function SSPLongFormReadOnly({ ssp, families = [], atoPackage }: SSPLongFormReadOnlyProps) {

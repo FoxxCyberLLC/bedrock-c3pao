@@ -202,18 +202,170 @@ export interface SSPView {
   atoPackageId: string
   version: string
   status: string
+
+  // System info
   systemName: string | null
+  systemAbbreviation: string | null
+  systemCategory: string | null
+  systemPurpose: string | null
   systemDescription: string | null
+  systemArchitecture: string | null
   systemBoundary: string | null
   systemEnvironment: string | null
-  systemArchitecture: string | null
+
+  // Network/data flow
+  networkDiagram: string | null
+  networkDiagramUrl: string | null
+  networkDiagramFileName: string | null
+  dataFlow: string | null
+  dataFlowDiagramUrl: string | null
+  dataFlowDiagramFileName: string | null
+
+  // Personnel
+  systemOwner: string | null
+  systemOwnerPhone: string | null
+  systemOwnerEmail: string | null
+  securityOfficer: string | null
+  securityOfficerPhone: string | null
+  securityOfficerEmail: string | null
+  authorizingOfficial: string | null
+  authorizingOfficialPhone: string | null
+  authorizingOfficialEmail: string | null
+  preparedByName: string | null
+  preparedByEmail: string | null
+  preparedByPhone: string | null
+  preparedByTitle: string | null
+  preparedByDepartment: string | null
+  distributionList: string | null
+
+  // Approval
+  approvedBy: string | null
+  approvedAt: string | null
+  expirationDate: string | null
+  revisionDate: string | null
+
+  // Operating model
+  operatingModelPublicCloud: boolean
+  operatingModelPrivateCloud: boolean
+  operatingModelDataCenter: boolean
+  operatingModelHybrid: boolean
+  operatingModelHybridExplain: string | null
+  operatingModelDispersed: boolean
+  operatingModelAirGapped: boolean
+  operatingModelOther: boolean
+  operatingModelOtherExplain: string | null
+
+  // CUI scope
+  cuiEndUserWorkstations: boolean
+  cuiMobileDevices: boolean
+  cuiServers: boolean
+  cuiIndustrialControlSystems: boolean
+  cuiInternalApplications: boolean
+  cuiSaas: boolean
+  cuiPaas: boolean
+  cuiIaas: boolean
+  cuiOther: boolean
+  cuiOtherExplain: string | null
+  cuiOverview: string | null
+
+  // Policies and plans
   controlStatements: string | null
   securityPolicies: string | null
   incidentResponse: string | null
   contingencyPlan: string | null
+  configurationMgmt: string | null
+  maintenanceProcedures: string | null
+  trainingProgram: string | null
+  poamSummary: string | null
+  deficienciesSummary: string | null
+
+  // JSON fields
+  revisionHistory: string | null
+  keyStakeholders: string | null
+  rolesPrivileges: string | null
+  additionalRoles: string | null
+  acronyms: string | null
+  references: string | null
+  changeLog: string | null
+  interconnections: string | null
+  assetInventorySummary: string | null
+  supplyChainProviders: string | null
+
+  // Other
+  contractNumber: string | null
+  contractsContainingCUI: string | null
+  documentationRepository: string | null
+  dataProtectionNotes: string | null
+  interconnectivityOverview: string | null
+  identificationAuthOverview: string | null
+  supplyChainOverview: string | null
+  maintenanceSupportPlan: string | null
+  commonControlProvider: string | null
+  additionalInfo: string | null
+  userCount: number | null
+  adminCount: number | null
+
+  // SDLC
+  operationalPhase: string | null
+  sdlcMilestones: string | null
+  sdlcInitiatePlanned: string | null
+  sdlcInitiateReached: string | null
+  sdlcDevelopPlanned: string | null
+  sdlcDevelopReached: string | null
+  sdlcImplementPlanned: string | null
+  sdlcImplementReached: string | null
+  sdlcOperatePlanned: string | null
+  sdlcOperateReached: string | null
+  sdlcDisposePlanned: string | null
+  sdlcDisposeReached: string | null
+
+  // Regulatory
+  statutoryRequirements: string | null
+  regulatoryRequirements: string | null
+  contractualRequirements: string | null
+
+  // PDF (presigned URL only)
+  pdfUrl: string | null
+
+  // Imported
+  importedFileUrl: string | null
+  importedFileName: string | null
+  importedAt: string | null
+
+  // Timestamps
   generatedAt: string | null
+  generatedBy: string | null
   lastModified: string
   createdAt: string
+}
+
+export interface AssetView {
+  id: string
+  name: string
+  assetType: string
+  assetCategory: string
+  description: string | null
+  ipAddress: string | null
+  macAddress: string | null
+  hostname: string | null
+  processesFCI: boolean
+  processesCUI: boolean
+  manufacturer: string | null
+  model: string | null
+  serialNumber: string | null
+  softwareVersion: string | null
+  operatingSystem: string | null
+  location: string | null
+  facility: string | null
+  owner: string | null
+  department: string | null
+  isManaged: boolean
+  patchLevel: string | null
+  lastPatchDate: string | null
+  vulnerabilityScore: number | null
+  atoPackageId: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface POAMView {
@@ -363,6 +515,10 @@ export async function fetchEvidenceDownloadURL(engagementId: string, evidenceId:
 
 export async function fetchSSP(engagementId: string, token: string): Promise<SSPView> {
   return apiRequest<SSPView>(`/api/c3pao/assessments/${engagementId}/ssp`, { token })
+}
+
+export async function fetchAssets(engagementId: string, token: string): Promise<AssetView[]> {
+  return apiRequest<AssetView[]>(`/api/c3pao/assessments/${engagementId}/assets`, { token })
 }
 
 export async function fetchPOAMs(engagementId: string, token: string): Promise<POAMView[]> {

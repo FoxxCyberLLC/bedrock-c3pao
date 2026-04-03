@@ -18,6 +18,8 @@ import {
   fetchControls,
   fetchEvidenceDownloadURL,
   fetchSSP,
+  fetchAssets,
+  fetchStats,
   fetchPOAMs,
   createNote,
   fetchNotes,
@@ -400,6 +402,30 @@ export async function getSSPLongFormDataForC3PAO(engagementId: string): Promise<
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load SSP data' }
+  }
+}
+
+// ---- Assets (read-only) ----
+
+export async function getAssetsForC3PAO(engagementId: string): Promise<{ success: boolean; data?: import('@/lib/api-client').AssetView[]; error?: string }> {
+  try {
+    const token = await getToken()
+    const data = await fetchAssets(engagementId, token)
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to load assets' }
+  }
+}
+
+// ---- Stats (assessor objectives) ----
+
+export async function getStatsForC3PAO(engagementId: string): Promise<{ success: boolean; data?: import('@/lib/api-client').StatsResponse; error?: string }> {
+  try {
+    const token = await getToken()
+    const data = await fetchStats(engagementId, token)
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to load stats' }
   }
 }
 

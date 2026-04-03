@@ -24,7 +24,6 @@ import {
   Download,
   FileJson,
   StopCircle,
-  Ban,
   ClipboardList,
   BarChart3,
   CheckSquare,
@@ -32,6 +31,7 @@ import {
   Info,
   Copy,
   FileDown,
+  FolderOpen,
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
@@ -55,13 +55,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { updateEngagementStatus, addAssessorNotes, recordAssessmentResult, startAssessment, endAssessmentMode, stopAssessment, submitAssessmentForApproval, rejectAssessmentSubmission } from '@/app/actions/c3pao-dashboard'
+import { updateEngagementStatus, addAssessorNotes, recordAssessmentResult, startAssessment, stopAssessment, submitAssessmentForApproval, rejectAssessmentSubmission, getSSPLongFormDataForC3PAO, getAssetsForC3PAO, getStatsForC3PAO } from '@/app/actions/c3pao-dashboard'
+import type { SSPView, AssetView, StatsResponse } from '@/lib/api-client'
+import { OverviewTab } from './tabs/overview-tab'
+import { SystemProfileTab } from './tabs/system-profile-tab'
+import { NetworkTab } from './tabs/network-tab'
+import { PersonnelTab } from './tabs/personnel-tab'
+import { PoliciesTab } from './tabs/policies-tab'
+import { AssetsTab } from './tabs/assets-tab'
+import { PackageStatsSection } from './tabs/package-stats-section'
 import { determineCMMCStatus, calculateExpirationDate, CMMCStatusConfig, normalizeLegacyStatus, type CMMCStatus } from '@/lib/cmmc/status-determination'
 import { toast } from 'sonner'
 import { AssessmentControlsTable } from './assessment-controls-table'
 import { POAMViewer } from './poam-viewer'
 import { EvidenceViewer } from './evidence-viewer'
-import { DocumentsViewer } from './documents-viewer'
 import { AssessmentModeIndicator } from './assessment-mode-indicator'
 import { EngagementTeamCard } from './engagement-team-card'
 import { ConflictDialog } from './conflict-dialog'
@@ -295,6 +302,13 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
     lastModifiedBy: string
   }>({ open: false, lastModifiedBy: '' })
 
+  // SSP and assets data for read-only OSC views
+  const [sspData, setSspData] = useState<SSPView | null>(null)
+  const [sspLoading, setSspLoading] = useState(true)
+  const [assetsData, setAssetsData] = useState<AssetView[]>([])
+  const [assetsLoading, setAssetsLoading] = useState(true)
+  const [assessorStats, setAssessorStats] = useState<StatsResponse | null>(null)
+
   const pkg = engagement.atoPackage
 
   // Handle export to eMASS format
@@ -351,6 +365,36 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
 
   useEffect(() => {
     loadTeam()
+  }, [engagement.id])
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadSSP() {
+      setSspLoading(true)
+      const result = await getSSPLongFormDataForC3PAO(engagement.id)
+      if (!cancelled) {
+        setSspData(result.success && result.data ? result.data as SSPView : null)
+        setSspLoading(false)
+      }
+    }
+    async function loadAssets() {
+      setAssetsLoading(true)
+      const result = await getAssetsForC3PAO(engagement.id)
+      if (!cancelled) {
+        setAssetsData(result.success && result.data ? result.data : [])
+        setAssetsLoading(false)
+      }
+    }
+    async function loadStats() {
+      const result = await getStatsForC3PAO(engagement.id)
+      if (!cancelled && result.success && result.data) {
+        setAssessorStats(result.data)
+      }
+    }
+    loadSSP()
+    loadAssets()
+    loadStats()
+    return () => { cancelled = true }
   }, [engagement.id])
 
   const getStatusBadge = (status: string) => {
@@ -669,8 +713,6 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
     notStarted: pkg?.requirementStatuses.filter(c => c.status === 'NOT_STARTED').length || 0,
     notApplicable: pkg?.requirementStatuses.filter(c => c.status === 'NOT_APPLICABLE').length || 0,
   }), [pkg])
-
-  const assessedCount = controlStats.compliant + controlStats.nonCompliant + controlStats.notApplicable
 
   // True when no controls have been assessed — disables the Confirm button in the completion dialog.
   const isAllNotAssessed = controlStats.compliant === 0 && controlStats.nonCompliant === 0 && controlStats.notApplicable === 0
@@ -1325,65 +1367,73 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
         )
       })()}
 
-      {/* Overview Stats */}
-      <div className="grid gap-4 md:grid-cols-5">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Controls</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{controlStats.total}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              {assessedCount} assessed ({controlStats.total > 0 ? Math.round((assessedCount / controlStats.total) * 100) : 0}%)
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Met</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{controlStats.compliant}</div>
-            <div className="text-xs text-muted-foreground mt-1">Controls compliant</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Not Met</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">{controlStats.nonCompliant}</div>
-            <div className="text-xs text-muted-foreground mt-1">Gaps identified</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Evidence</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{pkg?.evidence.length || 0}</div>
-            <div className="text-xs text-muted-foreground mt-1">Files uploaded</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">POA&Ms</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{pkg?.poams.length || 0}</div>
-            <div className="text-xs text-muted-foreground mt-1">Remediation items</div>
-          </CardContent>
-        </Card>
-      </div>
+      {/* Package Stats */}
+      <PackageStatsSection
+        controlStats={assessorStats ? {
+          total: assessorStats.totals.total,
+          compliant: assessorStats.totals.met,
+          nonCompliant: assessorStats.totals.notMet,
+          inProgress: 0,
+          notStarted: assessorStats.totals.notAssessed,
+          notApplicable: assessorStats.totals.notApplicable,
+        } : controlStats}
+        evidenceCount={pkg?.evidence.length || 0}
+        assetCount={assetsData.length}
+      />
 
       {/* Tabs */}
-      <Tabs defaultValue="controls" className="space-y-4">
+      <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="flex w-full flex-wrap h-auto gap-1">
+          {/* Package / SSP tabs */}
+          <TabsTrigger value="overview" className="gap-2">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="system-profile" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            <span className="hidden sm:inline">System Profile</span>
+          </TabsTrigger>
+          <TabsTrigger value="network" className="gap-2">
+            <Shield className="h-4 w-4" />
+            <span className="hidden sm:inline">Network</span>
+          </TabsTrigger>
+          <TabsTrigger value="personnel" className="gap-2">
+            <Users className="h-4 w-4" />
+            <span className="hidden sm:inline">Personnel</span>
+          </TabsTrigger>
           <TabsTrigger value="controls" className="gap-2">
             <Shield className="h-4 w-4" />
             <span className="hidden sm:inline">Controls</span>
             <Badge variant="secondary" className="ml-1">{controlStats.total}</Badge>
           </TabsTrigger>
+          <TabsTrigger value="policies" className="gap-2">
+            <Lock className="h-4 w-4" />
+            <span className="hidden sm:inline">Policies</span>
+          </TabsTrigger>
+          <TabsTrigger value="evidence" className="gap-2">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Evidence</span>
+            <Badge variant="secondary" className="ml-1">{pkg?.evidence.length || 0}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="assets" className="gap-2">
+            <FolderOpen className="h-4 w-4" />
+            <span className="hidden sm:inline">Assets</span>
+            <Badge variant="secondary" className="ml-1">{assetsData.length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="poams" className="gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            <span className="hidden sm:inline">POA&Ms</span>
+            <Badge variant="secondary" className="ml-1">{pkg?.poams.length || 0}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="stigs" className="gap-2">
+            <FileJson className="h-4 w-4" />
+            <span className="hidden sm:inline">STIGs</span>
+          </TabsTrigger>
+          <TabsTrigger value="full-ssp" className="gap-2">
+            <FileSignature className="h-4 w-4" />
+            <span className="hidden sm:inline">Full SSP</span>
+          </TabsTrigger>
+          {/* Assessment tabs */}
           <TabsTrigger value="planning" className="gap-2">
             <ClipboardList className="h-4 w-4" />
             <span className="hidden sm:inline">Planning</span>
@@ -1396,39 +1446,40 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
             <CheckSquare className="h-4 w-4" />
             <span className="hidden sm:inline">Review</span>
           </TabsTrigger>
-          <TabsTrigger value="documents" className="gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Docs</span>
-            {pkg?.ssp && <Badge variant="secondary" className="ml-1">SSP</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="evidence" className="gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Evidence</span>
-            <Badge variant="secondary" className="ml-1">{pkg?.evidence.length || 0}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="stigs" className="gap-2">
-            <FileJson className="h-4 w-4" />
-            <span className="hidden sm:inline">STIGs</span>
-          </TabsTrigger>
-          <TabsTrigger value="poams" className="gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            <span className="hidden sm:inline">POA&Ms</span>
-            <Badge variant="secondary" className="ml-1">{pkg?.poams.length || 0}</Badge>
-          </TabsTrigger>
           <TabsTrigger value="team" className="gap-2">
             <Users className="h-4 w-4" />
             <span className="hidden sm:inline">Team</span>
             <Badge variant="secondary" className="ml-1">{team.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="details" className="gap-2">
-            <Eye className="h-4 w-4" />
-            <span className="hidden sm:inline">Details</span>
-          </TabsTrigger>
           <TabsTrigger value="notes" className="gap-2">
             <MessageSquare className="h-4 w-4" />
             <span className="hidden sm:inline">Notes</span>
           </TabsTrigger>
+          <TabsTrigger value="details" className="gap-2">
+            <Eye className="h-4 w-4" />
+            <span className="hidden sm:inline">Details</span>
+          </TabsTrigger>
         </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview">
+          <OverviewTab ssp={sspData} sspLoading={sspLoading} engagementName={pkg?.name} />
+        </TabsContent>
+
+        {/* System Profile Tab */}
+        <TabsContent value="system-profile">
+          <SystemProfileTab ssp={sspData} sspLoading={sspLoading} />
+        </TabsContent>
+
+        {/* Network Tab */}
+        <TabsContent value="network">
+          <NetworkTab ssp={sspData} sspLoading={sspLoading} />
+        </TabsContent>
+
+        {/* Personnel Tab */}
+        <TabsContent value="personnel">
+          <PersonnelTab ssp={sspData} sspLoading={sspLoading} />
+        </TabsContent>
 
         {/* Controls Tab */}
         <TabsContent value="controls">
@@ -1452,6 +1503,11 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           )}
         </TabsContent>
 
+        {/* Policies Tab */}
+        <TabsContent value="policies">
+          <PoliciesTab ssp={sspData} sspLoading={sspLoading} />
+        </TabsContent>
+
         {/* Planning Tab */}
         <TabsContent value="planning">
           <AssessmentPlanningBoard
@@ -1470,15 +1526,6 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           <FindingsReviewQueue
             engagementId={engagement.id}
             isLeadAssessor={user.isLeadAssessor}
-          />
-        </TabsContent>
-
-        {/* Documents Tab */}
-        <TabsContent value="documents">
-          <DocumentsViewer
-            ssp={pkg?.ssp as SSP | null}
-            assets={(pkg?.assets || []) as Asset[]}
-            externalServiceProviders={(pkg?.externalServiceProviders || []) as ExternalServiceProvider[]}
           />
         </TabsContent>
 
@@ -1525,9 +1572,32 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           )}
         </TabsContent>
 
+        {/* Assets Tab */}
+        <TabsContent value="assets">
+          <AssetsTab assets={assetsData} assetsLoading={assetsLoading} ssp={sspData} />
+        </TabsContent>
+
         {/* POA&Ms Tab */}
         <TabsContent value="poams">
           <POAMViewer poams={(pkg?.poams || []) as POAM[]} />
+        </TabsContent>
+
+        {/* Full SSP Tab */}
+        <TabsContent value="full-ssp">
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <FileSignature className="h-12 w-12 text-muted-foreground/50 mb-4" />
+              <p className="text-lg font-medium">Full System Security Plan</p>
+              <p className="text-sm text-muted-foreground mt-1 mb-4">
+                View the complete SSP document as formatted by the OSC.
+              </p>
+              <Button asChild>
+                <Link href={`/engagements/${engagement.id}/ssp`}>
+                  Open Full SSP
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Team Tab */}
