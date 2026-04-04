@@ -132,13 +132,15 @@ async function loadConfig() {
     return
   }
 
+  // Strip sslmode from URL and configure SSL separately
+  const connStr = databaseUrl.replace(/[?&]sslmode=[^&]*/g, '')
   const pool = new Pool({
-    connectionString: databaseUrl,
+    connectionString: connStr,
     max: 1,
     connectionTimeoutMillis: 15000,
     ssl: databaseUrl.includes('sslmode=')
       ? { rejectUnauthorized: false }
-      : false,
+      : undefined,
   })
 
   try {
