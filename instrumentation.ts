@@ -1,5 +1,6 @@
 export async function register() {
-  if (process.env.DATABASE_URL) {
+  // Only run in Node.js runtime (not Edge) — pg requires Node.js crypto module
+  if (process.env.NEXT_RUNTIME === 'nodejs' && process.env.DATABASE_URL) {
     const { ensureSchema } = await import('./lib/db')
     try {
       await ensureSchema()
