@@ -33,7 +33,7 @@ export async function validateInstanceKey(
   error?: string
 }> {
   // Re-entry guard: reject if already configured
-  if (isAppConfigured()) {
+  if (await isAppConfigured()) {
     return { success: false, error: 'Instance is already configured' }
   }
 
@@ -86,7 +86,7 @@ export async function completeSetup(
   params: SetupParams
 ): Promise<{ success: boolean; error?: string }> {
   // Re-entry guard: reject if already configured
-  if (isAppConfigured()) {
+  if (await isAppConfigured()) {
     return { success: false, error: 'Instance is already configured' }
   }
 
@@ -103,8 +103,8 @@ export async function completeSetup(
   try {
     const authSecret = crypto.randomBytes(32).toString('base64')
 
-    // Save all config to encrypted SQLite
-    setConfigBatch({
+    // Save all config to Postgres
+    await setConfigBatch({
       BEDROCK_API_URL: params.apiUrl,
       AUTH_SECRET: authSecret,
       INSTANCE_API_KEY: params.apiKey,
@@ -115,7 +115,7 @@ export async function completeSetup(
     })
 
     // Create local admin user
-    createLocalAdmin(params.adminEmail, params.adminName, params.adminPassword)
+    await createLocalAdmin(params.adminEmail, params.adminName, params.adminPassword)
 
     // Inject into process.env for immediate use (no restart needed)
     process.env.BEDROCK_API_URL = params.apiUrl
@@ -152,17 +152,17 @@ export async function getSetupStatus(): Promise<{
     apiUrl: string
   } | null
 }> {
-  if (!isAppConfigured()) {
+  if (!(await isAppConfigured())) {
     return { configured: false, config: null }
   }
 
   return {
     configured: true,
     config: {
-      c3paoName: getConfig('C3PAO_NAME') || '',
-      c3paoId: getConfig('C3PAO_ID') || '',
-      activatedAt: getConfig('ACTIVATED_AT') || '',
-      apiUrl: getConfig('BEDROCK_API_URL') || '',
+      c3paoName: (await getConfig('C3PAO_NAME')) || '',
+      c3paoId: (await getConfig('C3PAO_ID')) || '',
+      activatedAt: (await getConfig('ACTIVATED_AT')) || '',
+      apiUrl: (await getConfig('BEDROCK_API_URL')) || '',
     },
   }
 }

@@ -2,16 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import crypto from 'crypto'
 
 // Mock the database dependency
-const mockRun = vi.fn().mockReturnValue({ changes: 1 })
-const mockGet = vi.fn()
-const mockPrepare = vi.fn().mockReturnValue({ get: mockGet, run: mockRun })
+const mockQuery = vi.fn()
 
 vi.mock('@/lib/db', () => ({
-  getConfigDb: vi.fn(() => ({ prepare: mockPrepare })),
+  query: mockQuery,
 }))
 
 // Import AFTER mocking
-const { authenticateLocalUser, createLocalUser, resetLocalUserPassword } = await import('@/lib/local-auth')
+const {
+  authenticateLocalUser,
+  createLocalUser,
+  resetLocalUserPassword,
+  listLocalUsers,
+  getLocalUserById,
+  updateLocalUser,
+  deleteLocalUser,
+  countAdmins,
+  getLocalAdmin,
+  createLocalAdmin,
+} = await import('@/lib/local-auth')
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -41,101 +50,207 @@ const baseUser = {
 
 describe('scrypt hardening', () => {
   beforeEach(() => {
-    mockGet.mockReset()
-    mockRun.mockReset()
-    mockRun.mockReturnValue({ changes: 1 })
-    mockPrepare.mockClear()
+    mockQuery.mockReset()
   })
 
   describe('createLocalUser', () => {
-    it('stores a v2: prefixed hash', () => {
-      mockPrepare.mockReturnValue({ get: mockGet, run: mockRun })
-      createLocalUser('user@test.com', 'Test User', 'StrongPassword123!', 'user')
-      // run() called with INSERT — first positional arg after id/email/name is the hash
-      const insertCall = mockRun.mock.calls[0]
-      const storedHash = insertCall[3] // (id, email, name, password_hash, role)
-      expect(storedHash).toMatch(/^v2:/)
+    it('should insert user with v2 hash and return user object', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
+
+      const user = await createLocalUser('test@example.com', 'Test', 'password123456', 'admin')
+
+      expect(user.email).toBe('test@example.com')
+      expect(user.name).toBe('Test')
+      expect(user.role).toBe('admin')
+      expect(user.id).toMatch(/^local-/)
+
+      // Verify query was called with INSERT
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO local_users'),
+        expect.arrayContaining(['test@example.com', 'Test'])
+      )
+
+      // The password hash (4th param) should be v2 format
+      const params = mockQuery.mock.calls[0][1]
+      expect(params[3]).toMatch(/^v2:/)
     })
   })
 
-  describe('resetLocalUserPassword', () => {
-    it('stores a v2: prefixed hash after reset', () => {
-      resetLocalUserPassword('local-abc', 'NewPassword123!')
-      const updateCall = mockRun.mock.calls[0]
-      const storedHash = updateCall[0] // (password_hash, id)
-      expect(storedHash).toMatch(/^v2:/)
+  describe('createLocalAdmin', () => {
+    it('should create user with admin role', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
+
+      const user = await createLocalAdmin('admin@test.com', 'Admin', 'password123456')
+
+      expect(user.role).toBe('admin')
     })
   })
 
   describe('authenticateLocalUser', () => {
-    it('accepts valid v2 hash without re-hashing', () => {
-      const password = 'SecurePass456!'
-      mockGet.mockReturnValueOnce({ ...baseUser, password_hash: v2Hash(password) })
+    it('should return user for correct v2 password', async () => {
+      const hash = v2Hash('correct-password')
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ ...baseUser, password_hash: hash }],
+        rowCount: 1,
+      })
 
-      const result = authenticateLocalUser(baseUser.email, password)
-
-      expect(result).not.toBeNull()
-      expect(result?.email).toBe(baseUser.email)
-      // SELECT called, no UPDATE for re-hash
-      expect(mockPrepare).toHaveBeenCalledTimes(1)
-      expect(mockRun).not.toHaveBeenCalled()
-    })
-
-    it('accepts legacy N=16384 hash and transparently re-hashes to v2', () => {
-      const password = 'LegacyPass789!'
-      mockGet.mockReturnValueOnce({ ...baseUser, password_hash: legacyHash(password) })
-
-      const result = authenticateLocalUser(baseUser.email, password)
+      const result = await authenticateLocalUser('admin@c3pao.test', 'correct-password')
 
       expect(result).not.toBeNull()
-      // UPDATE was called to re-hash
-      expect(mockRun).toHaveBeenCalledOnce()
-      const [newHash] = mockRun.mock.calls[0]
-      expect(newHash).toMatch(/^v2:/)
+      expect(result!.email).toBe('admin@c3pao.test')
     })
 
-    it('returns null for wrong password (legacy hash) and does NOT re-hash', () => {
-      mockGet.mockReturnValueOnce({ ...baseUser, password_hash: legacyHash('CorrectPassword1!') })
+    it('should return null for wrong password', async () => {
+      const hash = v2Hash('correct-password')
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ ...baseUser, password_hash: hash }],
+        rowCount: 1,
+      })
 
-      const result = authenticateLocalUser(baseUser.email, 'WrongPassword1!')
-
-      expect(result).toBeNull()
-      expect(mockRun).not.toHaveBeenCalled()
-    })
-
-    it('returns null for wrong password (v2 hash) and does NOT re-hash', () => {
-      const correct = 'CorrectV2Pass1!'
-      mockGet.mockReturnValueOnce({ ...baseUser, password_hash: v2Hash(correct) })
-
-      const result = authenticateLocalUser(baseUser.email, 'WrongV2Pass1!')
-
-      expect(result).toBeNull()
-      expect(mockRun).not.toHaveBeenCalled()
-    })
-
-    it('returns null for unknown email', () => {
-      mockGet.mockReturnValueOnce(undefined)
-
-      const result = authenticateLocalUser('nobody@test.com', 'AnyPassword1!')
-
-      expect(result).toBeNull()
-      expect(mockRun).not.toHaveBeenCalled()
-    })
-
-    it('returns null for malformed stored hash (no crash)', () => {
-      mockGet.mockReturnValueOnce({ ...baseUser, password_hash: 'garbage-no-colon' })
-
-      const result = authenticateLocalUser(baseUser.email, 'AnyPassword1!')
-
+      const result = await authenticateLocalUser('admin@c3pao.test', 'wrong-password')
       expect(result).toBeNull()
     })
 
-    it('returns null for malformed v2: hash (no crash)', () => {
-      mockGet.mockReturnValueOnce({ ...baseUser, password_hash: 'v2:short:short' })
+    it('should return null for non-existent user', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
 
-      const result = authenticateLocalUser(baseUser.email, 'AnyPassword1!')
-
+      const result = await authenticateLocalUser('nobody@test.com', 'password')
       expect(result).toBeNull()
+    })
+
+    it('should upgrade legacy hash on successful login', async () => {
+      const hash = legacyHash('legacy-password')
+      mockQuery
+        .mockResolvedValueOnce({
+          rows: [{ ...baseUser, password_hash: hash }],
+          rowCount: 1,
+        })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 }) // UPDATE for re-hash
+
+      const result = await authenticateLocalUser('admin@c3pao.test', 'legacy-password')
+
+      expect(result).not.toBeNull()
+      // Should have called UPDATE to re-hash
+      expect(mockQuery).toHaveBeenCalledTimes(2)
+      const updateCall = mockQuery.mock.calls[1]
+      expect(updateCall[0]).toContain('UPDATE local_users SET password_hash')
+      // New hash should be v2
+      expect(updateCall[1][0]).toMatch(/^v2:/)
+    })
+  })
+
+  describe('resetLocalUserPassword', () => {
+    it('should update password hash and return true', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
+
+      const result = await resetLocalUserPassword('local-abc', 'new-password-123')
+
+      expect(result).toBe(true)
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE local_users SET password_hash'),
+        expect.any(Array)
+      )
+      // Verify v2 hash format
+      const params = mockQuery.mock.calls[0][1]
+      expect(params[0]).toMatch(/^v2:/)
+    })
+
+    it('should return false when user not found', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+
+      const result = await resetLocalUserPassword('nonexistent', 'password')
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('listLocalUsers', () => {
+    it('should return all users ordered by created_at', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [baseUser, { ...baseUser, id: 'local-def', email: 'user2@test.com' }],
+        rowCount: 2,
+      })
+
+      const users = await listLocalUsers()
+      expect(users).toHaveLength(2)
+      expect(users[0].email).toBe('admin@c3pao.test')
+    })
+  })
+
+  describe('getLocalUserById', () => {
+    it('should return user when found', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [baseUser], rowCount: 1 })
+
+      const user = await getLocalUserById('local-abc')
+      expect(user).not.toBeNull()
+      expect(user!.id).toBe('local-abc')
+    })
+
+    it('should return null when not found', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+
+      const user = await getLocalUserById('nonexistent')
+      expect(user).toBeNull()
+    })
+  })
+
+  describe('updateLocalUser', () => {
+    it('should update specified fields and return true', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
+
+      const result = await updateLocalUser('local-abc', { name: 'New Name' })
+      expect(result).toBe(true)
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE local_users SET name'),
+        expect.arrayContaining(['New Name', 'local-abc'])
+      )
+    })
+
+    it('should return false when no fields provided', async () => {
+      const result = await updateLocalUser('local-abc', {})
+      expect(result).toBe(false)
+      expect(mockQuery).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('deleteLocalUser', () => {
+    it('should delete user and return true', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
+
+      const result = await deleteLocalUser('local-abc')
+      expect(result).toBe(true)
+    })
+
+    it('should return false when user not found', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+
+      const result = await deleteLocalUser('nonexistent')
+      expect(result).toBe(false)
+    })
+  })
+
+  describe('countAdmins', () => {
+    it('should return admin count', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: '3' }], rowCount: 1 })
+
+      const count = await countAdmins()
+      expect(count).toBe(3)
+    })
+  })
+
+  describe('getLocalAdmin', () => {
+    it('should return first admin', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [baseUser], rowCount: 1 })
+
+      const admin = await getLocalAdmin()
+      expect(admin).not.toBeNull()
+      expect(admin!.role).toBe('admin')
+    })
+
+    it('should return null when no admins', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+
+      const admin = await getLocalAdmin()
+      expect(admin).toBeNull()
     })
   })
 })

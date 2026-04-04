@@ -8,7 +8,7 @@ const APP_VERSION = process.env.npm_package_version || '0.1.0'
  */
 export async function sendHeartbeat(): Promise<void> {
   try {
-    const config = getInstanceConfig()
+    const config = await getInstanceConfig()
     if (!config?.instanceApiKey) return
 
     const apiUrl = config.apiUrl || process.env.BEDROCK_API_URL || 'http://localhost:8080'

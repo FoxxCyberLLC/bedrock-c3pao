@@ -1,11 +1,11 @@
 import crypto from 'crypto'
-import { getConfigDb } from './db'
+import { query } from './db'
 
 const SCRYPT_KEYLEN = 64
 const SALT_LENGTH = 32
-const SCRYPT_N_CURRENT = 65536  // OWASP-compliant (N=2^16, r=8, p=1)
-const SCRYPT_N_LEGACY = 16384   // Default N used before hardening — kept for migration
-const SCRYPT_MAXMEM = 134217728 // 128MB — needed for N=65536 (requires 64MB)
+const SCRYPT_N_CURRENT = 65536
+const SCRYPT_N_LEGACY = 16384
+const SCRYPT_MAXMEM = 134217728
 
 export interface LocalUser {
   id: string
@@ -47,7 +47,6 @@ function verifyPassword(password: string, stored: string): boolean {
     if (saltHex.length !== 64 || hashHex.length !== 128) return false
     N = SCRYPT_N_CURRENT
   } else {
-    // Legacy format: "saltHex:hashHex" with default N=16384
     const colon = stored.indexOf(':')
     if (colon <= 0) return false
     saltHex = stored.slice(0, colon)
@@ -73,109 +72,107 @@ function verifyPassword(password: string, stored: string): boolean {
 // CRUD
 // ---------------------------------------------------------------------------
 
-export function createLocalUser(
+export async function createLocalUser(
   email: string,
   name: string,
   password: string,
   role: 'admin' | 'user' = 'user'
-): LocalUser {
-  const db = getConfigDb()
+): Promise<LocalUser> {
   const id = `local-${crypto.randomUUID()}`
   const passwordHash = hashPassword(password)
 
-  db.prepare(
+  await query(
     `INSERT INTO local_users (id, email, name, password_hash, role)
-     VALUES (?, ?, ?, ?, ?)`
-  ).run(id, email, name, passwordHash, role)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [id, email, name, passwordHash, role]
+  )
 
   return { id, email, name, role, created_at: new Date().toISOString() }
 }
 
 /** Alias kept for setup wizard */
-export function createLocalAdmin(email: string, name: string, password: string): LocalUser {
+export async function createLocalAdmin(email: string, name: string, password: string): Promise<LocalUser> {
   return createLocalUser(email, name, password, 'admin')
 }
 
-export function listLocalUsers(): LocalUser[] {
-  const db = getConfigDb()
-  return db
-    .prepare('SELECT id, email, name, role, created_at FROM local_users ORDER BY created_at ASC')
-    .all() as LocalUser[]
+export async function listLocalUsers(): Promise<LocalUser[]> {
+  const result = await query('SELECT id, email, name, role, created_at FROM local_users ORDER BY created_at ASC')
+  return result.rows as LocalUser[]
 }
 
-export function getLocalUserById(id: string): LocalUser | null {
-  const db = getConfigDb()
-  const row = db
-    .prepare('SELECT id, email, name, role, created_at FROM local_users WHERE id = ?')
-    .get(id) as LocalUser | undefined
-  return row ?? null
+export async function getLocalUserById(id: string): Promise<LocalUser | null> {
+  const result = await query(
+    'SELECT id, email, name, role, created_at FROM local_users WHERE id = $1',
+    [id]
+  )
+  return (result.rows[0] as LocalUser) ?? null
 }
 
-export function updateLocalUser(
+export async function updateLocalUser(
   id: string,
   updates: { name?: string; email?: string; role?: string }
-): boolean {
-  const db = getConfigDb()
+): Promise<boolean> {
   const fields: string[] = []
-  const values: string[] = []
+  const values: unknown[] = []
+  let paramIndex = 1
 
   if (updates.name) {
-    fields.push('name = ?')
+    fields.push(`name = $${paramIndex++}`)
     values.push(updates.name)
   }
   if (updates.email) {
-    fields.push('email = ?')
+    fields.push(`email = $${paramIndex++}`)
     values.push(updates.email)
   }
   if (updates.role) {
-    fields.push('role = ?')
+    fields.push(`role = $${paramIndex++}`)
     values.push(updates.role)
   }
 
   if (fields.length === 0) return false
 
   values.push(id)
-  const result = db
-    .prepare(`UPDATE local_users SET ${fields.join(', ')} WHERE id = ?`)
-    .run(...values)
-  return result.changes > 0
+  const result = await query(
+    `UPDATE local_users SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+    values
+  )
+  return (result.rowCount ?? 0) > 0
 }
 
-export function resetLocalUserPassword(id: string, newPassword: string): boolean {
-  const db = getConfigDb()
+export async function resetLocalUserPassword(id: string, newPassword: string): Promise<boolean> {
   const passwordHash = hashPassword(newPassword)
-  const result = db
-    .prepare('UPDATE local_users SET password_hash = ? WHERE id = ?')
-    .run(passwordHash, id)
-  return result.changes > 0
+  const result = await query(
+    'UPDATE local_users SET password_hash = $1 WHERE id = $2',
+    [passwordHash, id]
+  )
+  return (result.rowCount ?? 0) > 0
 }
 
-export function deleteLocalUser(id: string): boolean {
-  const db = getConfigDb()
-  const result = db.prepare('DELETE FROM local_users WHERE id = ?').run(id)
-  return result.changes > 0
+export async function deleteLocalUser(id: string): Promise<boolean> {
+  const result = await query('DELETE FROM local_users WHERE id = $1', [id])
+  return (result.rowCount ?? 0) > 0
 }
 
-export function countAdmins(): number {
-  const db = getConfigDb()
-  const row = db
-    .prepare("SELECT COUNT(*) as count FROM local_users WHERE role = 'admin'")
-    .get() as { count: number }
-  return row.count
+export async function countAdmins(): Promise<number> {
+  const result = await query(
+    "SELECT COUNT(*) as count FROM local_users WHERE role = 'admin'"
+  )
+  return parseInt(result.rows[0]?.count, 10)
 }
 
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
-export function authenticateLocalUser(
+export async function authenticateLocalUser(
   email: string,
   password: string
-): LocalUser | null {
-  const db = getConfigDb()
-  const row = db
-    .prepare('SELECT id, email, name, password_hash, role, created_at FROM local_users WHERE email = ?')
-    .get(email) as (LocalUser & { password_hash: string }) | undefined
+): Promise<LocalUser | null> {
+  const result = await query(
+    'SELECT id, email, name, password_hash, role, created_at FROM local_users WHERE email = $1',
+    [email]
+  )
+  const row = result.rows[0] as (LocalUser & { password_hash: string }) | undefined
 
   if (!row) return null
   if (!verifyPassword(password, row.password_hash)) return null
@@ -183,16 +180,15 @@ export function authenticateLocalUser(
   // Transparent migration: re-hash legacy hashes to current cost params on login
   if (!row.password_hash.startsWith('v2:')) {
     const upgraded = hashPassword(password)
-    db.prepare('UPDATE local_users SET password_hash = ? WHERE id = ?').run(upgraded, row.id)
+    await query('UPDATE local_users SET password_hash = $1 WHERE id = $2', [upgraded, row.id])
   }
 
   return { id: row.id, email: row.email, name: row.name, role: row.role, created_at: row.created_at }
 }
 
-export function getLocalAdmin(): LocalUser | null {
-  const db = getConfigDb()
-  const row = db
-    .prepare("SELECT id, email, name, role, created_at FROM local_users WHERE role = 'admin' LIMIT 1")
-    .get() as LocalUser | undefined
-  return row ?? null
+export async function getLocalAdmin(): Promise<LocalUser | null> {
+  const result = await query(
+    "SELECT id, email, name, role, created_at FROM local_users WHERE role = 'admin' LIMIT 1"
+  )
+  return (result.rows[0] as LocalUser) ?? null
 }

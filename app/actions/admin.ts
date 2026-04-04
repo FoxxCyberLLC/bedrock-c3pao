@@ -10,6 +10,7 @@ import {
   resetLocalUserPassword,
   deleteLocalUser,
   countAdmins,
+  getLocalUserById,
   type LocalUser,
 } from '@/lib/local-auth'
 
@@ -32,8 +33,8 @@ export async function getAdminSettings() {
     return { success: false as const, error: 'Unauthorized' }
   }
 
-  const config = getAllConfig()
-  const admin = getLocalAdmin()
+  const config = await getAllConfig()
+  const admin = await getLocalAdmin()
 
   return {
     success: true as const,
@@ -60,7 +61,7 @@ export async function getUsers(): Promise<{
 }> {
   try {
     await requireAdmin()
-    return { success: true, data: listLocalUsers() }
+    return { success: true, data: await listLocalUsers() }
   } catch {
     return { success: false, error: 'Unauthorized' }
   }
@@ -82,11 +83,12 @@ export async function createUser(params: {
       return { success: false, error: 'Password must be at least 12 characters' }
     }
 
-    const user = createLocalUser(params.email, params.name, params.password, params.role)
+    const user = await createLocalUser(params.email, params.name, params.password, params.role)
     return { success: true, data: user }
-  } catch (error) {
+  } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Failed to create user'
-    if (msg.includes('UNIQUE constraint')) {
+    const code = (error as { code?: string })?.code
+    if (code === '23505' || msg.includes('unique constraint')) {
       return { success: false, error: 'A user with this email already exists' }
     }
     return { success: false, error: msg }
@@ -103,7 +105,7 @@ export async function editUser(params: {
     await requireAdmin()
 
     if (params.role && params.role !== 'admin') {
-      const admins = countAdmins()
+      const admins = await countAdmins()
       const currentUser = (await requireAuth())!
       // Prevent demoting the last admin or yourself
       if (admins <= 1 && params.id === currentUser.c3paoUser.id) {
@@ -111,12 +113,13 @@ export async function editUser(params: {
       }
     }
 
-    const updated = updateLocalUser(params.id, params)
+    const updated = await updateLocalUser(params.id, params)
     if (!updated) return { success: false, error: 'User not found' }
     return { success: true }
-  } catch (error) {
+  } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Failed to update user'
-    if (msg.includes('UNIQUE constraint')) {
+    const code = (error as { code?: string })?.code
+    if (code === '23505' || msg.includes('unique constraint')) {
       return { success: false, error: 'A user with this email already exists' }
     }
     return { success: false, error: msg }
@@ -134,7 +137,7 @@ export async function resetPassword(params: {
       return { success: false, error: 'Password must be at least 12 characters' }
     }
 
-    const updated = resetLocalUserPassword(params.id, params.newPassword)
+    const updated = await resetLocalUserPassword(params.id, params.newPassword)
     if (!updated) return { success: false, error: 'User not found' }
     return { success: true }
   } catch (error) {
@@ -154,17 +157,15 @@ export async function removeUser(params: {
     }
 
     // Prevent deleting the last admin
-    const admins = countAdmins()
+    const admins = await countAdmins()
     if (admins <= 1) {
-      // Check if we're deleting an admin
-      const { getLocalUserById } = await import('@/lib/local-auth')
-      const user = getLocalUserById(params.id)
+      const user = await getLocalUserById(params.id)
       if (user?.role === 'admin') {
         return { success: false, error: 'Cannot delete the last admin account' }
       }
     }
 
-    const deleted = deleteLocalUser(params.id)
+    const deleted = await deleteLocalUser(params.id)
     if (!deleted) return { success: false, error: 'User not found' }
     return { success: true }
   } catch (error) {

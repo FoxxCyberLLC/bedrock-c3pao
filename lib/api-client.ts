@@ -47,7 +47,7 @@ async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Pr
   if (!instanceKey) {
     try {
       const { getInstanceConfig } = await import('./instance-config')
-      const config = getInstanceConfig()
+      const config = await getInstanceConfig()
       if (config?.instanceApiKey) {
         instanceKey = config.instanceApiKey
       }

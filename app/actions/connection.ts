@@ -2,10 +2,10 @@
 
 import { requireAuth } from '@/lib/auth'
 
-// Connection settings are configured during the setup wizard and stored in SQLite.
+// Connection settings are configured during the setup wizard and stored in PostgreSQL.
 
 export async function saveConnectionConfig(): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: 'Connection is configured during setup. To reconfigure, delete data/config.db and restart.' }
+  return { success: false, error: 'Connection is configured during setup. To reconfigure, clear the app_config table and restart.' }
 }
 
 export async function getConnectionStatus() {

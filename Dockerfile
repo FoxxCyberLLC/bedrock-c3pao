@@ -1,12 +1,12 @@
 # =============================================================================
 # Bedrock C3PAO - Standalone Assessment Client
 # Connects to Bedrock CMMC API (Go backend) for all data
+# Uses PostgreSQL for local config and admin users
 # =============================================================================
 
 # Stage 1: Install dependencies
 FROM node:20-alpine AS deps
 WORKDIR /app
-RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
@@ -27,7 +27,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# OpenSSL for self-signed cert generation at startup
+# OpenSSL for self-signed cert generation at startup (Docker mode via start.js)
 RUN apk add --no-cache openssl
 
 # Create non-root user
@@ -42,12 +42,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Copy bootstrap script
 COPY --from=builder --chown=nextjs:nodejs /app/start.js ./
 
-# Copy better-sqlite3 native module and dependencies
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/better-sqlite3 ./node_modules/better-sqlite3
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/bindings ./node_modules/bindings
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules/file-uri-to-path ./node_modules/file-uri-to-path
-
-# Create data directory for SQLite config before dropping to non-root
+# Create data directory for TLS certs (Docker mode)
 RUN mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
 USER nextjs

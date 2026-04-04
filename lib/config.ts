@@ -1,67 +1,52 @@
-import { getConfigDb } from './db'
-import { encrypt, decrypt } from './crypto'
+import { query, getClient } from './db'
 
-/** Keys whose values are encrypted at rest in SQLite */
-const SENSITIVE_KEYS = new Set(['AUTH_SECRET', 'INSTANCE_API_KEY'])
-
-export function getConfig(key: string): string | null {
-  const db = getConfigDb()
-  const row = db.prepare('SELECT value, encrypted FROM app_config WHERE key = ?').get(key) as
-    | { value: string; encrypted: number }
-    | undefined
-  if (!row) return null
-  return row.encrypted ? decrypt(row.value) : row.value
+export async function getConfig(key: string): Promise<string | null> {
+  const result = await query('SELECT value FROM app_config WHERE key = $1', [key])
+  return result.rows[0]?.value ?? null
 }
 
-export function getAllConfig(): Record<string, string> {
-  const db = getConfigDb()
-  const rows = db.prepare('SELECT key, value, encrypted FROM app_config').all() as {
-    key: string
-    value: string
-    encrypted: number
-  }[]
+export async function getAllConfig(): Promise<Record<string, string>> {
+  const result = await query('SELECT key, value FROM app_config')
   const config: Record<string, string> = {}
-  for (const row of rows) {
-    config[row.key] = row.encrypted ? decrypt(row.value) : row.value
+  for (const row of result.rows) {
+    config[row.key] = row.value
   }
   return config
 }
 
-export function setConfig(key: string, value: string): void {
-  const db = getConfigDb()
-  const isSensitive = SENSITIVE_KEYS.has(key)
-  const storedValue = isSensitive ? encrypt(value) : value
-  db.prepare(
-    `INSERT INTO app_config (key, value, encrypted, updated_at)
-     VALUES (?, ?, ?, datetime('now'))
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, encrypted = excluded.encrypted, updated_at = datetime('now')`
-  ).run(key, storedValue, isSensitive ? 1 : 0)
-}
-
-export function setConfigBatch(entries: Record<string, string>): void {
-  const db = getConfigDb()
-  const stmt = db.prepare(
-    `INSERT INTO app_config (key, value, encrypted, updated_at)
-     VALUES (?, ?, ?, datetime('now'))
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, encrypted = excluded.encrypted, updated_at = datetime('now')`
+export async function setConfig(key: string, value: string): Promise<void> {
+  await query(
+    `INSERT INTO app_config (key, value, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+    [key, value]
   )
-  const tx = db.transaction(() => {
+}
+
+export async function setConfigBatch(entries: Record<string, string>): Promise<void> {
+  const client = await getClient()
+  try {
+    await client.query('BEGIN')
     for (const [key, value] of Object.entries(entries)) {
-      const isSensitive = SENSITIVE_KEYS.has(key)
-      const storedValue = isSensitive ? encrypt(value) : value
-      stmt.run(key, storedValue, isSensitive ? 1 : 0)
+      await client.query(
+        `INSERT INTO app_config (key, value, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+        [key, value]
+      )
     }
-  })
-  tx()
-}
-
-export function isAppConfigured(): boolean {
-  return getConfig('INSTANCE_API_KEY') !== null && getConfig('BEDROCK_API_URL') !== null
-}
-
-export function injectConfigToEnv(): void {
-  const config = getAllConfig()
-  for (const [key, value] of Object.entries(config)) {
-    if (value) process.env[key] = value
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
   }
+}
+
+export async function isAppConfigured(): Promise<boolean> {
+  const result = await query(
+    `SELECT COUNT(*) as count FROM app_config WHERE key IN ('INSTANCE_API_KEY', 'BEDROCK_API_URL')`
+  )
+  return parseInt(result.rows[0]?.count, 10) === 2
 }

@@ -14,9 +14,6 @@ const nextConfig: NextConfig = {
     },
   },
 
-  // Prevent Next.js from bundling native modules
-  serverExternalPackages: ['better-sqlite3'],
-
   // H5: HTTP security headers
   async headers() {
     return [

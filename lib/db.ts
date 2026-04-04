@@ -1,40 +1,57 @@
-import Database from 'better-sqlite3'
-import path from 'path'
-import fs from 'fs'
+import { Pool, type QueryResult } from 'pg'
 
-const DB_PATH = path.join(process.cwd(), 'data', 'config.db')
+let _pool: Pool | null = null
+let _schemaPromise: Promise<void> | null = null
 
-let _db: Database.Database | null = null
+export function getPool(): Pool {
+  if (_pool) return _pool
 
-export function getConfigDb(): Database.Database {
-  if (_db) return _db
+  _pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 3,
+    connectionTimeoutMillis: 15000,
+    idleTimeoutMillis: 30000,
+  })
 
-  const dir = path.dirname(DB_PATH)
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
+  _pool.on('error', (err) => {
+    console.error('[db] Pool error:', err.message)
+  })
 
-  _db = new Database(DB_PATH)
-  _db.pragma('journal_mode = WAL')
-  _db.pragma('busy_timeout = 5000')
+  return _pool
+}
 
-  _db.exec(`
-    CREATE TABLE IF NOT EXISTS app_config (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      encrypted INTEGER DEFAULT 0,
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
+export async function query(text: string, params?: unknown[]): Promise<QueryResult> {
+  const pool = getPool()
+  return pool.query(text, params)
+}
 
-    CREATE TABLE IF NOT EXISTS local_users (
-      id TEXT PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT NOT NULL,
-      password_hash TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'admin',
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-  `)
+export async function getClient() {
+  const pool = getPool()
+  return pool.connect()
+}
 
-  return _db
+export async function ensureSchema(): Promise<void> {
+  if (_schemaPromise) return _schemaPromise
+
+  _schemaPromise = (async () => {
+    const pool = getPool()
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS app_config (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS local_users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'admin',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `)
+  })()
+
+  return _schemaPromise
 }

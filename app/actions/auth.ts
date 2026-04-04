@@ -15,7 +15,7 @@ export async function login(formData: FormData) {
 
   // Try local admin auth first
   try {
-    const localUser = authenticateLocalUser(email, password)
+    const localUser = await authenticateLocalUser(email, password)
     if (localUser) {
       const user: SessionC3PAOUser = {
         id: localUser.id,
