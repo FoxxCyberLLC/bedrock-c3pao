@@ -11,6 +11,9 @@ export function getPool(): Pool {
     max: 3,
     connectionTimeoutMillis: 15000,
     idleTimeoutMillis: 30000,
+    ssl: process.env.DATABASE_URL?.includes('sslmode=')
+      ? { rejectUnauthorized: false }
+      : false,
   })
 
   _pool.on('error', (err) => {

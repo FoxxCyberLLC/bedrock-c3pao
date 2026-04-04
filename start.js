@@ -136,6 +136,9 @@ async function loadConfig() {
     connectionString: databaseUrl,
     max: 1,
     connectionTimeoutMillis: 15000,
+    ssl: databaseUrl.includes('sslmode=')
+      ? { rejectUnauthorized: false }
+      : false,
   })
 
   try {
