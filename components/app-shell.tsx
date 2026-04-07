@@ -22,6 +22,7 @@
 import { AppSidebar } from '@/components/app-sidebar'
 import { AppHeader } from '@/components/app-header'
 import { CommandMenu } from '@/components/command-menu'
+import { NotificationsBell } from '@/components/notifications-bell'
 import { ShellErrorBoundary } from '@/components/shell-error-boundary'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useCommandMenu } from '@/hooks/use-command-menu'
@@ -33,12 +34,10 @@ interface AppShellProps {
     c3paoName: string
     isLeadAssessor: boolean
   }
-  /** Optional server-rendered notifications bell slot (Task 3 fills this). */
-  notificationsSlot?: React.ReactNode
   children: React.ReactNode
 }
 
-export function AppShell({ user, notificationsSlot, children }: AppShellProps) {
+export function AppShell({ user, children }: AppShellProps) {
   const commandMenu = useCommandMenu()
 
   return (
@@ -49,7 +48,7 @@ export function AppShell({ user, notificationsSlot, children }: AppShellProps) {
           <AppHeader
             user={user}
             onOpenCommandMenu={commandMenu.toggle}
-            notificationsSlot={notificationsSlot}
+            notificationsSlot={<NotificationsBell />}
           />
           <main className="flex-1 p-4 md:p-6">{children}</main>
         </SidebarInset>
