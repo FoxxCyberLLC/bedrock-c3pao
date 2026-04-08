@@ -9,7 +9,7 @@ import { addDays, isWithinInterval, isAfter, subDays } from 'date-fns'
 import type { PortfolioListItem } from '@/lib/api-client'
 import {
   deriveRisk,
-  derivePhaseFromStatus,
+  resolvePhase,
   type Phase,
 } from '@/lib/portfolio/derive-risk'
 
@@ -188,7 +188,7 @@ function getGroupKeyAndLabel(
 ): [string, string] {
   switch (groupKey) {
     case 'phase': {
-      const phase = derivePhaseFromStatus(item.status, item.assessmentResult)
+      const phase = resolvePhase(item)
       if (!phase) return ['UNASSIGNED', 'Cancelled']
       return [phase, PHASE_LABELS[phase]]
     }

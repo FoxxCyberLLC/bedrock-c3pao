@@ -1074,6 +1074,8 @@ export interface PortfolioListItem {
   packageName: string
   organizationName: string
   status: string
+  /** Task 8 currentPhase column. Null for rows created before the backfill. */
+  currentPhase: string | null
   leadAssessorId: string | null
   leadAssessorName: string | null
   scheduledStartDate: string | null
@@ -1082,6 +1084,11 @@ export interface PortfolioListItem {
   objectivesTotal: number
   objectivesAssessed: number
   assessmentResult: string | null
+  /** Task 8 cert + POA&M metadata. Null for not-yet-issued certificates. */
+  certStatus: string | null
+  certExpiresAt: string | null
+  poamCloseoutDue: string | null
+  reevalWindowOpenUntil: string | null
   createdAt: string
   updatedAt: string
 }
@@ -1098,6 +1105,82 @@ export async function fetchPortfolioList(
   return apiRequest<PortfolioListItem[]>('/api/c3pao/assessments/portfolio-list', {
     token,
   })
+}
+
+// ---- CAP v2.0 phase tracking + lifecycle (Task 8) ----
+
+/** Canonical CAP v2.0 lifecycle phases. */
+export type EngagementPhaseName = 'PRE_ASSESS' | 'ASSESS' | 'REPORT' | 'CLOSE_OUT'
+
+/**
+ * Full lifecycle metadata for an engagement. Returned by
+ * GET /api/c3pao/assessments/:id/phase.
+ *
+ * ⚠️ Keep in sync with the Go `EngagementPhase` struct in
+ * bedrock-cmmc-api/internal/c3pao/phase_service.go.
+ */
+export interface EngagementPhase {
+  currentPhase?: EngagementPhaseName | null
+  phaseEnteredAt?: string | null
+  contractExecutedAt?: string | null
+  preAssessFormQaStatus?: string | null
+  preAssessFormUploadedAt?: string | null
+  inBriefDate?: string | null
+  outBriefDate?: string | null
+  reportQaStatus?: string | null
+  appealsWindowOpenUntil?: string | null
+  reevalWindowOpenUntil?: string | null
+  certUid?: string | null
+  certStatus?: string | null
+  certStatusDate?: string | null
+  certIssuedAt?: string | null
+  certExpiresAt?: string | null
+  poamCloseoutDue?: string | null
+  certSignedById?: string | null
+  certSignedByName?: string | null
+}
+
+/** Single timeline entry from GET /api/c3pao/assessments/:id/lifecycle. */
+export interface LifecycleEvent {
+  type: string
+  date: string
+  label: string
+  actor?: string | null
+}
+
+export async function fetchEngagementPhase(
+  engagementId: string,
+  token: string,
+): Promise<EngagementPhase> {
+  return apiRequest<EngagementPhase>(
+    `/api/c3pao/assessments/${engagementId}/phase`,
+    { token },
+  )
+}
+
+export async function updateEngagementPhase(
+  engagementId: string,
+  phase: EngagementPhaseName,
+  token: string,
+): Promise<EngagementPhase> {
+  return apiRequest<EngagementPhase>(
+    `/api/c3pao/assessments/${engagementId}/phase`,
+    {
+      method: 'PUT',
+      body: { phase },
+      token,
+    },
+  )
+}
+
+export async function fetchEngagementLifecycle(
+  engagementId: string,
+  token: string,
+): Promise<LifecycleEvent[]> {
+  return apiRequest<LifecycleEvent[]>(
+    `/api/c3pao/assessments/${engagementId}/lifecycle`,
+    { token },
+  )
 }
 
 // ---- Org-level C3PAO User Management ----

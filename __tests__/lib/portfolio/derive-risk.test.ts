@@ -3,6 +3,7 @@ import {
   deriveRisk,
   computeProgressPercent,
   derivePhaseFromStatus,
+  resolvePhase,
   filterMyAssigned,
   type Phase,
   type Risk,
@@ -15,6 +16,7 @@ function mkItem(overrides: Partial<PortfolioListItem> = {}): PortfolioListItem {
     packageName: 'Acme SSP',
     organizationName: 'Acme Defense',
     status: 'IN_PROGRESS',
+    currentPhase: null,
     leadAssessorId: null,
     leadAssessorName: null,
     scheduledStartDate: null,
@@ -23,6 +25,10 @@ function mkItem(overrides: Partial<PortfolioListItem> = {}): PortfolioListItem {
     objectivesTotal: 100,
     objectivesAssessed: 0,
     assessmentResult: null,
+    certStatus: null,
+    certExpiresAt: null,
+    poamCloseoutDue: null,
+    reevalWindowOpenUntil: null,
     createdAt: '2026-03-01T00:00:00Z',
     updatedAt: '2026-04-01T00:00:00Z',
     ...overrides,
@@ -145,6 +151,40 @@ describe('derivePhaseFromStatus', () => {
 
   it('returns null for CANCELLED', () => {
     expect(derivePhaseFromStatus('CANCELLED', null)).toBeNull()
+  })
+})
+
+describe('resolvePhase', () => {
+  it('prefers the Task 8 currentPhase column when set', () => {
+    const item = mkItem({
+      status: 'IN_PROGRESS',
+      currentPhase: 'REPORT', // server moved this engagement to REPORT explicitly
+    })
+    expect(resolvePhase(item)).toBe<Phase>('REPORT')
+  })
+
+  it('falls back to derivePhaseFromStatus when currentPhase is null', () => {
+    const item = mkItem({
+      status: 'IN_PROGRESS',
+      currentPhase: null,
+    })
+    expect(resolvePhase(item)).toBe<Phase>('ASSESS')
+  })
+
+  it('ignores an unknown string in currentPhase and falls back', () => {
+    const item = mkItem({
+      status: 'COMPLETED',
+      assessmentResult: 'CONDITIONAL_LEVEL_2',
+      // defensive: pretend the API sent something weird
+      currentPhase: 'UNKNOWN_PHASE',
+    })
+    expect(resolvePhase(item)).toBe<Phase>('CLOSE_OUT')
+  })
+
+  it('returns null for a CANCELLED engagement with no currentPhase', () => {
+    expect(
+      resolvePhase(mkItem({ status: 'CANCELLED', currentPhase: null })),
+    ).toBeNull()
   })
 })
 

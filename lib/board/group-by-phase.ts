@@ -10,7 +10,7 @@
 import type { PortfolioListItem } from '@/lib/api-client'
 import {
   deriveRisk,
-  derivePhaseFromStatus,
+  resolvePhase,
   type Phase,
 } from '@/lib/portfolio/derive-risk'
 
@@ -66,7 +66,7 @@ export function groupByPhase(items: readonly PortfolioListItem[]): GroupedByPhas
   }
 
   for (const item of items) {
-    const phase = derivePhaseFromStatus(item.status, item.assessmentResult)
+    const phase = resolvePhase(item)
     if (phase === null) continue
     // Terminal success — hide from the board. Conditional still shows
     // in CLOSE_OUT so leads can track POA&M closeout deadlines.

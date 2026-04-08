@@ -65,10 +65,14 @@ export function computeProgressPercent(item: PortfolioListItem): number {
 
 /**
  * Derive the CAP v2.0 lifecycle phase from the engagement's workflow status
- * and its assessment result. This is a STOP-GAP — Task 8 replaces this with
- * a real `currentPhase` column on `AssessmentEngagement`.
+ * and its assessment result.
  *
  * Returns null for CANCELLED engagements (no phase).
+ *
+ * Prefer `resolvePhase()` below when you have a `PortfolioListItem` — it
+ * uses the real Task 8 `currentPhase` column when present and falls back
+ * to this status-based derivation for rows that haven't been touched by
+ * the backfill.
  */
 export function derivePhaseFromStatus(
   status: string,
@@ -93,6 +97,32 @@ export function derivePhaseFromStatus(
     default:
       return null
   }
+}
+
+/**
+ * Resolve the engagement's phase using Task 8's `currentPhase` column
+ * when present, otherwise fall back to the legacy status mapping.
+ *
+ * Used by the kanban board, engagements list, and pre-assessment
+ * workspace so every surface sees a consistent phase regardless of
+ * whether the row was migrated yet.
+ */
+export function resolvePhase(
+  item: PortfolioListItem,
+): Phase | null {
+  if (item.currentPhase) {
+    // The DB stores one of the valid Phase values when set.
+    const phase = item.currentPhase as Phase
+    if (
+      phase === 'PRE_ASSESS' ||
+      phase === 'ASSESS' ||
+      phase === 'REPORT' ||
+      phase === 'CLOSE_OUT'
+    ) {
+      return phase
+    }
+  }
+  return derivePhaseFromStatus(item.status, item.assessmentResult)
 }
 
 /**

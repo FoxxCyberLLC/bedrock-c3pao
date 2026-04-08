@@ -11,7 +11,7 @@ import { safeDate } from '@/lib/utils'
 import {
   computeProgressPercent,
   deriveRisk,
-  derivePhaseFromStatus,
+  resolvePhase,
   type Risk,
 } from '@/lib/portfolio/derive-risk'
 import { getPhaseColor } from '@/lib/design/phase-colors'
@@ -42,7 +42,7 @@ export function EngagementListRow({
   selected,
   onToggleSelect,
 }: EngagementListRowProps) {
-  const phase = derivePhaseFromStatus(item.status, item.assessmentResult)
+  const phase = resolvePhase(item)
   const phaseColor = getPhaseColor(phase)
   const risk = deriveRisk(item)
   const progressPct = computeProgressPercent(item)
