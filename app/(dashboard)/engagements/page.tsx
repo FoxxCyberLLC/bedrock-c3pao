@@ -1,256 +1,77 @@
-'use client'
-
-import { useState, useEffect } from 'react'
+import { AlertTriangle, FolderKanban } from 'lucide-react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import {
-  Building2,
-  Search,
-  Filter,
-  ChevronRight,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  Calendar,
-} from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { getC3PAOEngagements } from '@/app/actions/c3pao-dashboard'
-import { normalizeLegacyStatus, CMMCStatusConfig } from '@/lib/cmmc/status-determination'
-import { formatDistanceToNow } from 'date-fns'
-import { safeDate } from '@/lib/utils'
+import { redirect } from 'next/navigation'
 
-interface Engagement {
-  id: string
-  status: string
-  targetLevel: string
-  customerNotes: string | null
-  createdAt: string
-  updatedAt: string
-  packageName: string
-  organizationName: string
-  assessmentType?: string
-  assessmentResult?: string | null
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { EngagementsList } from '@/components/c3pao/engagements/engagements-list'
+import { getPortfolioList } from '@/app/actions/c3pao-portfolio'
+import { getC3PAOTeam } from '@/app/actions/c3pao-dashboard'
+import { requireAuth } from '@/lib/auth'
+
+export const metadata = {
+  title: 'Engagements · Bedrock C3PAO',
+  description: 'Portfolio-wide engagements list with saved views and bulk actions',
 }
 
-export default function C3PAOEngagementsPage() {
-  const searchParams = useSearchParams()
-  const initialStatus = searchParams.get('status') || 'all'
+export default async function C3PAOEngagementsPage() {
+  const session = await requireAuth()
+  if (!session) redirect('/login')
 
-  const [engagements, setEngagements] = useState<Engagement[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState(initialStatus)
+  const [listResult, teamResult] = await Promise.all([
+    getPortfolioList(),
+    getC3PAOTeam(),
+  ])
 
-  useEffect(() => {
-    loadEngagements()
-  }, [])
+  const items = listResult.success && listResult.data ? listResult.data : []
+  const team =
+    teamResult.success && teamResult.data ? (teamResult.data as Array<{ id: string; name: string }>) : []
+  const apiError = !listResult.success ? listResult.error : null
 
-  async function loadEngagements() {
-    setLoading(true)
-    try {
-      const result = await getC3PAOEngagements()
-      if (result.success && result.data) {
-        setEngagements(result.data as unknown as Engagement[])
-      }
-    } catch (error) {
-      console.error('Error loading engagements:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const filteredEngagements = engagements.filter(engagement => {
-    if (!searchQuery) {
-      if (statusFilter === 'all') return true
-      return engagement.status === statusFilter
-    }
-    const q = searchQuery.toLowerCase()
-    const matchesSearch =
-      engagement.packageName?.toLowerCase().includes(q) ||
-      engagement.organizationName?.toLowerCase().includes(q)
-
-    if (statusFilter === 'all') return matchesSearch
-    return matchesSearch && engagement.status === statusFilter
-  })
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'REQUESTED':
-        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20">New Request</Badge>
-      case 'PENDING':
-        return <Badge variant="outline" className="bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20">Pending</Badge>
-      case 'ACCEPTED':
-        return <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20">Accepted</Badge>
-      case 'IN_PROGRESS':
-        return <Badge variant="outline" className="bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20">In Progress</Badge>
-      case 'COMPLETED':
-        return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20">Completed</Badge>
-      case 'CANCELLED':
-        return <Badge variant="outline" className="bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20">Cancelled</Badge>
-      default:
-        return <Badge variant="outline">{status}</Badge>
-    }
-  }
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'REQUESTED':
-        return <AlertCircle className="h-5 w-5 text-yellow-600" />
-      case 'PENDING':
-      case 'ACCEPTED':
-        return <Clock className="h-5 w-5 text-blue-600" />
-      case 'IN_PROGRESS':
-        return <Clock className="h-5 w-5 text-purple-600" />
-      case 'COMPLETED':
-        return <CheckCircle2 className="h-5 w-5 text-green-600" />
-      default:
-        return <Building2 className="h-5 w-5 text-muted-foreground" />
-    }
-  }
+  // Lead options for the bulk re-assign menu. Include everyone on the team
+  // (backend enforces lead-capability when the role is updated).
+  const leadOptions: ReadonlyArray<readonly [string, string]> = team
+    .filter((m) => m.id && m.name)
+    .map((m) => [m.id, m.name] as const)
+    .sort((a, b) => a[1].localeCompare(b[1]))
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Engagements</h1>
+        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+          <FolderKanban className="h-6 w-6 text-muted-foreground" />
+          Engagements
+        </h1>
         <p className="text-muted-foreground">
-          Manage your assessment engagements with customers
+          Portfolio-wide view of every engagement · saved views, grouping, and
+          bulk actions.
         </p>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Engagements</CardTitle>
-          <CardDescription>
-            View and manage customer assessment requests
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search by organization or package name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="REQUESTED">New Requests</SelectItem>
-                <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="ACCEPTED">Accepted</SelectItem>
-                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                <SelectItem value="COMPLETED">Completed</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {loading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map(i => (
-                <Skeleton key={i} className="h-24" />
-              ))}
-            </div>
-          ) : filteredEngagements.length === 0 ? (
-            <div className="text-center py-12">
-              <Building2 className="mx-auto h-12 w-12 text-muted-foreground/50" />
-              <h3 className="mt-4 text-lg font-semibold">No Engagements Found</h3>
-              <p className="text-muted-foreground">
-                {searchQuery || statusFilter !== 'all'
-                  ? 'Try adjusting your search or filters'
-                  : 'When customers request assessments, they will appear here'}
+      {apiError && (
+        <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />
+            <div className="flex-1 text-sm">
+              <p className="font-medium text-orange-900 dark:text-orange-100">
+                Unable to load engagements
+              </p>
+              <p className="mt-0.5 text-xs text-orange-800 dark:text-orange-300">
+                {apiError}
               </p>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredEngagements.map((engagement) => {
-                // CANCELLED is the only true terminal status — COMPLETED engagements are now viewable read-only.
-                const isCancelled = engagement.status === 'CANCELLED'
-                const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
-                const rowContent = (
-                  <>
-                    <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                        {getStatusIcon(engagement.status)}
-                      </div>
-                      <div>
-                        <p className="font-medium">{engagement.packageName || 'Unknown Package'}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {engagement.organizationName || 'Unknown Organization'}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          <span>
-                            {safeDate(engagement.createdAt)
-                              ? formatDistanceToNow(safeDate(engagement.createdAt)!, { addSuffix: true })
-                              : 'Unknown'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge variant="outline" className="hidden sm:inline-flex">
-                        {engagement.targetLevel.replace('_', ' ')}
-                      </Badge>
-                      {getStatusBadge(engagement.status)}
-                      {cmmcStatus ? (
-                        <Badge
-                          variant="outline"
-                          className={`${CMMCStatusConfig[cmmcStatus].bgClass} ${CMMCStatusConfig[cmmcStatus].textClass} ${CMMCStatusConfig[cmmcStatus].borderClass}`}
-                        >
-                          {CMMCStatusConfig[cmmcStatus].label}
-                        </Badge>
-                      ) : (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </div>
-                  </>
-                )
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/connection">Check Connection</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
-                if (isCancelled) {
-                  return (
-                    <div
-                      key={engagement.id}
-                      className="flex items-center justify-between p-4 rounded-lg border opacity-75 cursor-default"
-                    >
-                      {rowContent}
-                    </div>
-                  )
-                }
-
-                return (
-                  <Link
-                    key={engagement.id}
-                    href={`/engagements/${engagement.id}`}
-                    className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
-                  >
-                    {rowContent}
-                  </Link>
-                )
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <EngagementsList
+        initialItems={items}
+        currentUserId={session.c3paoUser.id}
+        leadOptions={leadOptions}
+      />
     </div>
   )
 }
