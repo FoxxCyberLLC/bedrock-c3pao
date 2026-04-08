@@ -74,6 +74,7 @@ import { EngagementTeamCard } from './engagement-team-card'
 import { ConflictDialog } from './conflict-dialog'
 import { STIGViewer } from './stig-viewer'
 import { AssessmentPlanningBoard } from './assessment-planning-board'
+import { PreAssessmentWorkspace } from './engagement/pre-assessment-workspace'
 import { AssessmentProgressTracker } from './assessment-progress-tracker'
 import { FindingsReviewQueue } from './findings-review-queue'
 import { CheckinCard } from './checkin-card'
@@ -1508,8 +1509,12 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           <PoliciesTab ssp={sspData} sspLoading={sspLoading} />
         </TabsContent>
 
-        {/* Planning Tab */}
-        <TabsContent value="planning">
+        {/* Planning Tab — CAP v2.0 pre-assessment readiness workspace + scope/methodology */}
+        <TabsContent value="planning" className="space-y-6">
+          <PreAssessmentWorkspace
+            engagementId={engagement.id}
+            isLeadAssessor={user.isLeadAssessor}
+          />
           <AssessmentPlanningBoard
             engagementId={engagement.id}
             isLeadAssessor={user.isLeadAssessor}
