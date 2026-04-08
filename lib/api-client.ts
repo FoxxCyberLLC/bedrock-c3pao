@@ -1042,6 +1042,64 @@ export async function fetchWorkload(token: string): Promise<AssessorWorkloadItem
   return apiRequest<AssessorWorkloadItem[]>('/api/c3pao/workload', { token })
 }
 
+// ---- Portfolio (lead-assessor dashboard + kanban + engagements list) ----
+
+/**
+ * KPI rollup returned by GET /api/c3pao/assessments/portfolio-stats.
+ *
+ * ⚠️ Keep in sync with the Go `PortfolioStats` struct in
+ * `bedrock-cmmc-api/internal/c3pao/portfolio_service.go`. The Go struct is
+ * locked by `TestPortfolioStats_Shape` / `TestPortfolioStats_JSONTags`.
+ */
+export interface PortfolioStats {
+  activeCount: number
+  atRiskCount: number
+  preBriefThisWeek: number
+  qaDueCount: number
+  certsExpiring30d: number
+  poamCloseoutsDue: number
+  /** Oldest-first array of 8 weekly completion counts for the sparkline. */
+  throughputLast8Weeks: number[]
+}
+
+/**
+ * A single row returned by GET /api/c3pao/assessments/portfolio-list.
+ *
+ * Pre-joined progress stats (`objectivesTotal` / `objectivesAssessed`) avoid
+ * the N+1 fetchStats pattern on the kanban board (Task 5) and engagements
+ * list (Task 7).
+ */
+export interface PortfolioListItem {
+  id: string
+  packageName: string
+  organizationName: string
+  status: string
+  leadAssessorId: string | null
+  leadAssessorName: string | null
+  scheduledStartDate: string | null
+  scheduledEndDate: string | null
+  daysInPhase: number
+  objectivesTotal: number
+  objectivesAssessed: number
+  assessmentResult: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export async function fetchPortfolioStats(token: string): Promise<PortfolioStats> {
+  return apiRequest<PortfolioStats>('/api/c3pao/assessments/portfolio-stats', {
+    token,
+  })
+}
+
+export async function fetchPortfolioList(
+  token: string,
+): Promise<PortfolioListItem[]> {
+  return apiRequest<PortfolioListItem[]>('/api/c3pao/assessments/portfolio-list', {
+    token,
+  })
+}
+
 // ---- Org-level C3PAO User Management ----
 
 export interface C3PAOUserItem {

@@ -1,180 +1,119 @@
 import { requireAuth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
-import { getC3PAOEngagements } from '@/app/actions/engagements'
-import {
-  LayoutDashboard,
-  ClipboardCheck,
-  Clock,
-  CheckCircle2,
-  ArrowRight,
-} from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { AlertTriangle } from 'lucide-react'
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PortfolioKpiHero } from '@/components/c3pao/portfolio/portfolio-kpi-hero'
+import { PortfolioThisWeek } from '@/components/c3pao/portfolio/portfolio-this-week'
+import { PortfolioThroughputSparkline } from '@/components/c3pao/portfolio/portfolio-throughput-sparkline'
+import { PortfolioActivityStream } from '@/components/c3pao/portfolio/portfolio-activity-stream'
+import { getPortfolioStats, getPortfolioList } from '@/app/actions/c3pao-portfolio'
+import { filterMyAssigned } from '@/lib/portfolio/derive-risk'
 import Link from 'next/link'
 
 export default async function DashboardPage() {
   const session = await requireAuth()
   if (!session) redirect('/login')
 
-  const result = await getC3PAOEngagements()
-  const engagements = result.data || []
+  const [statsResult, listResult] = await Promise.all([
+    getPortfolioStats(),
+    getPortfolioList(),
+  ])
 
-  const newRequests = engagements.filter(e => e.status === 'REQUESTED').length
-  const inProgress = engagements.filter(e => e.status === 'IN_PROGRESS').length
-  const completed = engagements.filter(e => e.status === 'COMPLETED').length
-  const totalActive = engagements.filter(e => !['COMPLETED', 'CANCELLED'].includes(e.status)).length
+  const stats = statsResult.success ? statsResult.data : null
+  const allItems = listResult.success && listResult.data ? listResult.data : []
+  const apiError =
+    !statsResult.success || !listResult.success
+      ? statsResult.error || listResult.error
+      : null
+
+  const isLead = session.c3paoUser.isLeadAssessor
+  const myItems = isLead
+    ? allItems
+    : filterMyAssigned(allItems, session.c3paoUser.id)
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Welcome, {session.c3paoUser.name}
+          {isLead ? 'Portfolio' : 'My Assignments'}
         </h1>
         <p className="text-muted-foreground">
-          {session.c3paoUser.c3paoName} Assessment Portal
+          {isLead
+            ? `${session.c3paoUser.c3paoName} · Lead assessor view`
+            : `Welcome back, ${session.c3paoUser.name}`}
         </p>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <ClipboardCheck className="h-4 w-4" />
-              New Requests
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{newRequests}</div>
+      {apiError && (
+        <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
+          <CardContent className="flex items-start gap-3 py-4">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />
+            <div className="flex-1 text-sm">
+              <p className="font-medium text-orange-900 dark:text-orange-100">
+                Unable to load the latest portfolio data
+              </p>
+              <p className="mt-0.5 text-xs text-orange-800 dark:text-orange-300">
+                {apiError}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/connection">Check Connection</Link>
+            </Button>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              In Progress
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{inProgress}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <LayoutDashboard className="h-4 w-4" />
-              Total Active
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalActive}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Completed
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{completed}</div>
-          </CardContent>
-        </Card>
-      </div>
+      )}
 
-      {/* Quick Actions */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* KPI hero: lead-only. Assessors see a slimmer summary. */}
+      {isLead && stats && <PortfolioKpiHero stats={stats} />}
+      {!isLead && (
         <Card>
           <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button variant="outline" className="w-full justify-between" asChild>
-              <Link href="/engagements">
-                View All Engagements
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button variant="outline" className="w-full justify-between" asChild>
-              <Link href="/team">
-                View Team
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-            <Button variant="outline" className="w-full justify-between" asChild>
-              <Link href="/workload">
-                Team Workload
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Recent Engagements */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Engagements</CardTitle>
-            <CardDescription>Latest assessment activity</CardDescription>
+            <CardTitle className="text-base">Your Assignments</CardTitle>
           </CardHeader>
           <CardContent>
-            {engagements.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No engagements yet.</p>
-            ) : (
-              <div className="space-y-3">
-                {engagements.slice(0, 5).map((eng) => {
-                  const isTerminal = eng.status === 'COMPLETED' || eng.status === 'CANCELLED'
-                  const inner = (
-                    <>
-                      <div>
-                        <p className="font-medium text-sm">{eng.packageName}</p>
-                        <p className="text-xs text-muted-foreground">{eng.organizationName || 'Customer'}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline">{eng.status.replace(/_/g, ' ')}</Badge>
-                        {isTerminal && eng.assessmentResult && (
-                          <Badge
-                            variant="outline"
-                            className={
-                              eng.assessmentResult === 'PASSED'
-                                ? 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20'
-                                : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20'
-                            }
-                          >
-                            {eng.assessmentResult}
-                          </Badge>
-                        )}
-                      </div>
-                    </>
-                  )
-
-                  if (isTerminal) {
-                    return (
-                      <div
-                        key={eng.id}
-                        className="flex items-center justify-between p-3 rounded-lg border opacity-75 cursor-default"
-                      >
-                        {inner}
-                      </div>
-                    )
-                  }
-
-                  return (
-                    <Link
-                      key={eng.id}
-                      href={`/engagements/${eng.id}`}
-                      className="flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                    >
-                      {inner}
-                    </Link>
-                  )
-                })}
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <Stat label="Active" value={myItems.filter((i) => !['COMPLETED', 'CANCELLED'].includes(i.status)).length} />
+              <Stat
+                label="In Progress"
+                value={myItems.filter((i) => i.status === 'IN_PROGRESS').length}
+              />
+              <Stat
+                label="Pending Approval"
+                value={
+                  myItems.filter((i) => i.status === 'PENDING_APPROVAL').length
+                }
+              />
+              <Stat
+                label="Completed"
+                value={myItems.filter((i) => i.status === 'COMPLETED').length}
+              />
+            </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Two-column layout: this-week + activity on the left, sparkline on the right */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="space-y-4 lg:col-span-2">
+          <PortfolioThisWeek items={myItems} />
+          <PortfolioActivityStream items={myItems} />
+        </div>
+        <div className="space-y-4">
+          {stats && <PortfolioThroughputSparkline weeks={stats.throughputLast8Weeks} />}
+        </div>
       </div>
+    </div>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="text-2xl font-semibold tabular-nums">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   )
 }
