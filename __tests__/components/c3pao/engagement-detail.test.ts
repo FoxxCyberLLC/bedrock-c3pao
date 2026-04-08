@@ -1,6 +1,13 @@
 /**
+ * @vitest-environment jsdom
+ *
  * Compile-time tests for the restructured engagement-detail component.
  * Verifies: component exports, new SSP tab imports, PackageStatsSection import.
+ *
+ * Runs in jsdom because the component modules transitively pull in code
+ * that touches `window`/`document` during module init (dnd-kit, Shadcn
+ * dialogs, etc.); running in node was flaky depending on parallel test
+ * ordering.
  */
 import { describe, it, expect } from 'vitest'
 
