@@ -1432,6 +1432,103 @@ export async function updateQAReview(
   })
 }
 
+// ---- Engagement comments (Task 13a) ----
+
+export interface EngagementCommentItem {
+  id: string
+  engagementId: string
+  c3paoId: string
+  authorId: string | null
+  authorName: string | null
+  content: string
+  mentions: string[]
+  parentId: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateCommentInput {
+  content: string
+  mentions?: string[]
+  parentId?: string | null
+}
+
+export async function fetchEngagementComments(
+  engagementId: string,
+  token: string,
+): Promise<EngagementCommentItem[]> {
+  return apiRequest<EngagementCommentItem[]>(
+    `/api/c3pao/assessments/${engagementId}/comments`,
+    { token },
+  )
+}
+
+export async function createEngagementComment(
+  engagementId: string,
+  input: CreateCommentInput,
+  token: string,
+): Promise<EngagementCommentItem> {
+  return apiRequest<EngagementCommentItem>(
+    `/api/c3pao/assessments/${engagementId}/comments`,
+    {
+      method: 'POST',
+      body: input,
+      token,
+    },
+  )
+}
+
+// ---- In-app notifications backend wiring (Task 13b) ----
+// These replace the stubs in app/actions/notifications-inapp.ts.
+
+export interface ApiNotificationItem {
+  id: string
+  type: string
+  engagementId: string | null
+  engagementName: string | null
+  actorId: string | null
+  actorName: string | null
+  body: string
+  readAt: string | null
+  createdAt: string
+}
+
+export interface ApiNotificationList {
+  items: ApiNotificationItem[]
+  unreadCount: number
+}
+
+export async function fetchApiNotifications(
+  token: string,
+): Promise<ApiNotificationList> {
+  return apiRequest<ApiNotificationList>('/api/c3pao/notifications', { token })
+}
+
+export async function fetchApiUnreadCount(token: string): Promise<number> {
+  const r = await apiRequest<{ count: number }>(
+    '/api/c3pao/notifications/unread-count',
+    { token },
+  )
+  return r.count
+}
+
+export async function apiMarkNotificationRead(
+  id: string,
+  token: string,
+): Promise<void> {
+  await apiRequest<unknown>(`/api/c3pao/notifications/${id}/read`, {
+    method: 'PATCH',
+    token,
+  })
+}
+
+export async function apiMarkAllNotificationsRead(token: string): Promise<void> {
+  await apiRequest<unknown>('/api/c3pao/notifications/read-all', {
+    method: 'POST',
+    token,
+  })
+}
+
 // ---- Org-level C3PAO User Management ----
 
 export interface C3PAOUserItem {

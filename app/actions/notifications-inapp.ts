@@ -3,18 +3,22 @@
 /**
  * Notifications server actions.
  *
- * This module locks the return shape that Task 13b will eventually back
- * with real Go API calls. Until then, every action returns an empty but
- * correctly-typed response so the notifications bell, inbox page, and
- * polling hooks can be built and tested against the final schema.
- *
- * ⚠️ DO NOT change `NotificationItem` or `NotificationListResponse`
- * without also updating Task 13b's implementation plan — the shape is
- * exercised by a schema-lock test at
- * `__tests__/actions/notifications-inapp.test.ts`.
+ * Task 13b: these are now backed by the real Go API. Task 3 locked the
+ * return shape — the functions below keep that shape exactly so the
+ * NotificationsBell, NotificationsDropdown, and /inbox page work
+ * unchanged.
  */
 
-/** Discriminated notification type. Must match Task 13b's Go API payloads. */
+import { requireAuth } from '@/lib/auth'
+import {
+  fetchApiNotifications,
+  fetchApiUnreadCount,
+  apiMarkNotificationRead,
+  apiMarkAllNotificationsRead,
+  type ApiNotificationItem,
+} from '@/lib/api-client'
+
+/** Discriminated notification type. Kept for backward compatibility with Task 3. */
 export type NotificationType =
   | 'MENTION'
   | 'FINDING_SUBMITTED'
@@ -24,7 +28,7 @@ export type NotificationType =
   | 'CERT_EXPIRING'
   | 'POAM_CLOSEOUT_DUE'
 
-/** A single notification row displayed in the bell dropdown / inbox page. */
+/** Shape the UI components import — locked by the Task 3 schema test. */
 export interface NotificationItem {
   id: string
   type: NotificationType
@@ -36,56 +40,109 @@ export interface NotificationItem {
   createdAt: string
 }
 
-/** List response for `getNotifications`. Items + unreadCount together. */
 export interface NotificationListResponse {
   success: boolean
   data?: { items: NotificationItem[]; unreadCount: number }
   error?: string
 }
 
-/** Unread count response for the bell poll. */
 export interface UnreadCountResponse {
   success: boolean
   data?: number
   error?: string
 }
 
-/** Basic ack response for mark-read actions. */
 export interface AckResponse {
   success: boolean
   error?: string
 }
 
-/**
- * Return the most recent notifications for the current user.
- * Stub: returns an empty list. Task 13b wires this to the Go API and
- * adds a `limit` parameter for pagination.
- */
+/** Narrow the raw API type to the locked frontend type. */
+function toNotificationItem(api: ApiNotificationItem): NotificationItem {
+  return {
+    id: api.id,
+    type: (api.type as NotificationType) ?? 'MENTION',
+    engagementId: api.engagementId,
+    engagementName: api.engagementName,
+    actorName: api.actorName,
+    body: api.body,
+    readAt: api.readAt,
+    createdAt: api.createdAt,
+  }
+}
+
 export async function getNotifications(): Promise<NotificationListResponse> {
-  return { success: true, data: { items: [], unreadCount: 0 } }
+  try {
+    const session = await requireAuth()
+    if (!session)
+      return { success: true, data: { items: [], unreadCount: 0 } }
+    const list = await fetchApiNotifications(session.apiToken)
+    return {
+      success: true,
+      data: {
+        items: list.items.map(toNotificationItem),
+        unreadCount: list.unreadCount,
+      },
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to load notifications',
+    }
+  }
 }
 
-/**
- * Return the current user's unread notification count.
- * Stub: returns 0. Task 13b wires this to the Go API.
- */
 export async function getUnreadNotificationCount(): Promise<UnreadCountResponse> {
-  return { success: true, data: 0 }
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: true, data: 0 }
+    const count = await fetchApiUnreadCount(session.apiToken)
+    return { success: true, data: count }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to load unread count',
+    }
+  }
 }
 
-/**
- * Mark a single notification as read.
- * Stub: no-op. Task 13b wires this to the Go API and consumes the id.
- */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function markNotificationRead(notificationId: string): Promise<AckResponse> {
-  return { success: true }
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    await apiMarkNotificationRead(notificationId, session.apiToken)
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to mark read',
+    }
+  }
 }
 
-/**
- * Mark all notifications for the current user as read.
- * Stub: no-op. Task 13b wires this to the Go API.
- */
 export async function markAllNotificationsRead(): Promise<AckResponse> {
-  return { success: true }
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    await apiMarkAllNotificationsRead(session.apiToken)
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to mark all read',
+    }
+  }
 }

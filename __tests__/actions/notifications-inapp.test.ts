@@ -1,12 +1,23 @@
 /**
  * Schema lock test for the notifications-inapp server actions.
  *
- * Task 3 locks the NotificationListResponse / NotificationItem shape so that
- * Task 13b's real backend wiring is a drop-in replacement — no frontend
- * changes required. If this test breaks, a new field was added or renamed
- * and Task 13b's implementation must be updated accordingly.
+ * Task 3 locked the NotificationListResponse / NotificationItem shape
+ * so that Task 13b's real backend wiring is a drop-in replacement — no
+ * frontend changes required. If this test breaks, a new field was
+ * added or renamed and the UI components must be updated accordingly.
+ *
+ * Task 13b now calls the real Go API via the server actions, so this
+ * test mocks requireAuth to return null (simulating an unauthenticated
+ * request). The functions gracefully handle that case by returning
+ * empty data — the shape assertion still proves the contract.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+// Must mock BEFORE importing the module under test.
+vi.mock('@/lib/auth', () => ({
+  requireAuth: vi.fn().mockResolvedValue(null),
+}))
+
 import {
   getNotifications,
   getUnreadNotificationCount,
@@ -19,35 +30,32 @@ import {
 describe('notifications-inapp server actions schema lock', () => {
   it('getNotifications returns the locked NotificationListResponse shape', async () => {
     const result = await getNotifications()
-    expect(result).toEqual({
-      success: true,
-      data: { items: [], unreadCount: 0 },
-    })
-    // TypeScript type assertion: the shape is NotificationListResponse
+    // Shape assertions — we care about keys/types, not exact values.
+    expect(result.success).toBe(true)
+    expect(result.data).toBeDefined()
+    expect(Array.isArray(result.data?.items)).toBe(true)
+    expect(typeof result.data?.unreadCount).toBe('number')
     const typed: NotificationListResponse = result
-    expect(typed.success).toBe(true)
-    expect(Array.isArray(typed.data?.items)).toBe(true)
-    expect(typeof typed.data?.unreadCount).toBe('number')
+    expect(typed).toBeDefined()
   })
 
   it('getUnreadNotificationCount returns { success, data: number }', async () => {
     const result = await getUnreadNotificationCount()
-    expect(result).toEqual({ success: true, data: 0 })
+    expect(result.success).toBe(true)
+    expect(typeof result.data).toBe('number')
   })
 
-  it('markNotificationRead returns { success } without throwing', async () => {
+  it('markNotificationRead returns a response with a success boolean', async () => {
     const result = await markNotificationRead('some-id')
-    expect(result).toEqual({ success: true })
+    expect(typeof result.success).toBe('boolean')
   })
 
-  it('markAllNotificationsRead returns { success } without throwing', async () => {
+  it('markAllNotificationsRead returns a response with a success boolean', async () => {
     const result = await markAllNotificationsRead()
-    expect(result).toEqual({ success: true })
+    expect(typeof result.success).toBe('boolean')
   })
 
   it('NotificationItem type has all 7 notification types in the discriminator', () => {
-    // This test is a compile-time assertion — the annotation below must match
-    // all valid NotificationItem types exactly.
     const allTypes: NotificationItem['type'][] = [
       'MENTION',
       'FINDING_SUBMITTED',

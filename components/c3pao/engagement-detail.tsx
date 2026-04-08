@@ -75,6 +75,7 @@ import { ConflictDialog } from './conflict-dialog'
 import { STIGViewer } from './stig-viewer'
 import { AssessmentPlanningBoard } from './assessment-planning-board'
 import { PreAssessmentWorkspace } from './engagement/pre-assessment-workspace'
+import { EngagementComments } from './engagement/engagement-comments'
 import { AssessmentProgressTracker } from './assessment-progress-tracker'
 import { FindingsReviewQueue } from './findings-review-queue'
 import { CheckinCard } from './checkin-card'
@@ -1713,36 +1714,17 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           </Card>
         </TabsContent>
 
-        {/* Notes Tab */}
+        {/* Notes Tab — Task 13a comment thread with @mentions */}
         <TabsContent value="notes">
           <Card>
             <CardHeader>
-              <CardTitle>Assessor Notes</CardTitle>
+              <CardTitle>Team Discussion</CardTitle>
               <CardDescription>
-                Internal notes for your assessment team
+                Comments are visible to your C3PAO team. Use @ to mention a teammate.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <Textarea
-                placeholder="Add notes about this assessment..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={8}
-                className="resize-none"
-                readOnly={isReadOnly}
-                disabled={isReadOnly}
-              />
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Notes are only visible to your C3PAO team
-                </p>
-                {!isReadOnly && (
-                  <Button onClick={handleSaveNotes} disabled={isUpdating}>
-                    {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Save Notes
-                  </Button>
-                )}
-              </div>
+            <CardContent>
+              <EngagementComments engagementId={engagement.id} />
             </CardContent>
           </Card>
         </TabsContent>
