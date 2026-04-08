@@ -1314,6 +1314,88 @@ export async function checkCOIAssignment(
   )
 }
 
+// ---- QA review queue (Task 11a) ----
+
+export type QAReviewKind = 'PRE_ASSESS_FORM' | 'FINAL_REPORT'
+export type QAReviewStatus =
+  | 'PENDING'
+  | 'IN_REVIEW'
+  | 'APPROVED'
+  | 'NEEDS_REVISION'
+  | 'REJECTED'
+
+export interface QAReview {
+  id: string
+  c3paoId: string
+  engagementId: string
+  engagementName: string | null
+  organizationName: string | null
+  kind: QAReviewKind
+  assignedToId: string
+  assignedToName: string | null
+  assignedById: string | null
+  status: QAReviewStatus
+  notes: string | null
+  assignedAt: string
+  completedAt: string | null
+}
+
+export interface CreateQAReviewInput {
+  kind: QAReviewKind
+  assignedToId: string
+  notes?: string
+}
+
+export interface UpdateQAReviewInput {
+  status?: QAReviewStatus
+  notes?: string
+}
+
+export async function fetchQAReviews(
+  token: string,
+  mine = false,
+): Promise<QAReview[]> {
+  const qs = mine ? '?mine=true' : ''
+  return apiRequest<QAReview[]>(`/api/c3pao/qa-reviews${qs}`, { token })
+}
+
+export async function fetchEngagementQAReviews(
+  engagementId: string,
+  token: string,
+): Promise<QAReview[]> {
+  return apiRequest<QAReview[]>(
+    `/api/c3pao/assessments/${engagementId}/qa-reviews`,
+    { token },
+  )
+}
+
+export async function createQAReview(
+  engagementId: string,
+  input: CreateQAReviewInput,
+  token: string,
+): Promise<QAReview> {
+  return apiRequest<QAReview>(
+    `/api/c3pao/assessments/${engagementId}/qa-reviews`,
+    {
+      method: 'POST',
+      body: input,
+      token,
+    },
+  )
+}
+
+export async function updateQAReview(
+  reviewId: string,
+  input: UpdateQAReviewInput,
+  token: string,
+): Promise<QAReview> {
+  return apiRequest<QAReview>(`/api/c3pao/qa-reviews/${reviewId}`, {
+    method: 'PATCH',
+    body: input,
+    token,
+  })
+}
+
 // ---- Org-level C3PAO User Management ----
 
 export interface C3PAOUserItem {
