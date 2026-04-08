@@ -1443,6 +1443,11 @@ export interface EngagementCommentItem {
   content: string
   mentions: string[]
   parentId: string | null
+  /**
+   * 'INTERNAL' (assessor team only) or 'CUSTOMER_VISIBLE' (also visible to
+   * the contractor). OSC CAP Visibility — Task 7.
+   */
+  visibility: 'INTERNAL' | 'CUSTOMER_VISIBLE'
   createdAt: string
   updatedAt: string
 }
@@ -1451,6 +1456,8 @@ export interface CreateCommentInput {
   content: string
   mentions?: string[]
   parentId?: string | null
+  /** OSC CAP Visibility — Task 10. Defaults to 'INTERNAL' if omitted. */
+  visibility?: 'INTERNAL' | 'CUSTOMER_VISIBLE'
 }
 
 export async function fetchEngagementComments(

@@ -10,10 +10,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { formatDistanceToNow } from 'date-fns'
-import { AtSign, Loader2, Send } from 'lucide-react'
+import { AtSign, Eye, Loader2, Lock, Send } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { safeDate } from '@/lib/utils'
 import {
@@ -39,6 +40,10 @@ export function EngagementComments({ engagementId }: EngagementCommentsProps) {
   const [draft, setDraft] = useState('')
   const [team, setTeam] = useState<TeamMember[]>([])
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+  // OSC CAP Visibility (Task 10): explicit opt-in for sharing the comment
+  // with the contractor on their assessment page. Default OFF — comments
+  // never become customer-visible by accident.
+  const [shareWithCustomer, setShareWithCustomer] = useState(false)
   const [isPending, startTransition] = useTransition()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -145,18 +150,26 @@ export function EngagementComments({ engagementId }: EngagementCommentsProps) {
     const content = draft.trim()
     if (!content) return
     const mentions = extractMentionedIds(content)
+    const visibility: 'INTERNAL' | 'CUSTOMER_VISIBLE' = shareWithCustomer
+      ? 'CUSTOMER_VISIBLE'
+      : 'INTERNAL'
     startTransition(async () => {
       const result = await createEngagementCommentAction(engagementId, {
         content,
         mentions,
+        visibility,
       })
       if (result.success && result.data) {
         setComments((prev) => [result.data!, ...prev])
         setDraft('')
+        // Reset the toggle so the next comment doesn't accidentally inherit
+        // CUSTOMER_VISIBLE — defense in depth against muscle memory.
+        setShareWithCustomer(false)
+        const sharedNote = visibility === 'CUSTOMER_VISIBLE' ? ' (shared with customer)' : ''
         toast.success(
           mentions.length > 0
-            ? `Comment posted · ${mentions.length} notified`
-            : 'Comment posted',
+            ? `Comment posted · ${mentions.length} notified${sharedNote}`
+            : `Comment posted${sharedNote}`,
         )
       } else {
         toast.error(result.error ?? 'Failed to post comment')
@@ -197,7 +210,29 @@ export function EngagementComments({ engagementId }: EngagementCommentsProps) {
             </div>
           )}
         </div>
-        <div className="flex justify-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <label
+            htmlFor="comment-share-toggle"
+            className="flex items-center gap-2 text-xs text-muted-foreground select-none cursor-pointer"
+          >
+            <Switch
+              id="comment-share-toggle"
+              checked={shareWithCustomer}
+              onCheckedChange={setShareWithCustomer}
+              disabled={isPending}
+              aria-label="Share comment with customer"
+              data-testid="share-with-customer-toggle"
+            />
+            {shareWithCustomer ? (
+              <span className="inline-flex items-center gap-1 font-medium text-emerald-700 dark:text-emerald-400">
+                <Eye className="h-3 w-3" aria-hidden /> Visible to customer
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                <Lock className="h-3 w-3" aria-hidden /> Internal only — share with customer
+              </span>
+            )}
+          </label>
           <Button
             type="button"
             onClick={handleSubmit}
@@ -229,7 +264,7 @@ export function EngagementComments({ engagementId }: EngagementCommentsProps) {
                     {(c.authorName ?? '?').charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-sm font-medium">
                         {c.authorName ?? 'Deleted user'}
                       </span>
@@ -242,6 +277,15 @@ export function EngagementComments({ engagementId }: EngagementCommentsProps) {
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                           <AtSign className="h-3 w-3" aria-hidden />
                           {c.mentions.length}
+                        </span>
+                      )}
+                      {c.visibility === 'CUSTOMER_VISIBLE' && (
+                        <span
+                          data-testid="customer-visible-badge"
+                          className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                        >
+                          <Eye className="h-2.5 w-2.5" aria-hidden />
+                          Visible to customer
                         </span>
                       )}
                     </div>
