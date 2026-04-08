@@ -1,17 +1,36 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+/**
+ * Workload dashboard (Task 12 rebuild).
+ *
+ * Consumes the fixed Go API /workload endpoint with real pending/completed
+ * counts, per-assessor engagement lists, skill matrices, and CCA/CCP cert
+ * expiry. Replaces the old hard-coded-zero mapping from earlier.
+ *
+ * Sections:
+ *   - Top KPI strip (total assessors, active, pending, completed)
+ *   - Cert expiry alerts (any assessor with CCA/CCP expiring in ≤90 days)
+ *   - Team workload table with per-row capacity bar
+ *   - Skill matrix (rows = assessors, cols = 14 NIST 800-171 families)
+ */
+
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
+import { differenceInDays, format } from 'date-fns'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+  AlertTriangle,
+  Briefcase,
+  CheckCircle2,
+  Crown,
+  Loader2,
+  ShieldCheck,
+  TrendingUp,
+  Users,
+} from 'lucide-react'
+
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Progress } from '@/components/ui/progress'
 import {
   Table,
   TableBody,
@@ -20,429 +39,406 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import {
-  Users,
-  Briefcase,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  Crown,
-  User,
-  ExternalLink,
-  TrendingUp,
-  AlertCircle,
-} from 'lucide-react'
-import { getC3PAOWorkloadOverview, getAssessorWorkload } from '@/app/actions/c3pao-workload'
-import { Progress } from '@/components/ui/progress'
+import { safeDate } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { getC3PAOWorkloadOverview } from '@/app/actions/c3pao-workload'
+import type { AssessorWorkloadItem, AssessorSkillItem } from '@/lib/api-client'
 
-interface AssessorWorkload {
-  id: string
-  name: string
-  email: string
-  jobTitle: string | null
-  isLeadAssessor: boolean
-  ccaNumber: string | null
-  ccpNumber: string | null
-  activeEngagements: number
-  pendingEngagements: number
-  completedEngagements: number
-  totalAssigned: number
-}
+const NIST_FAMILIES: readonly string[] = [
+  'AC', 'AT', 'AU', 'CM', 'IA', 'IR', 'MA', 'MP', 'PS', 'PE', 'RA', 'CA', 'SC', 'SI',
+]
 
-interface WorkloadOverview {
-  assessors: AssessorWorkload[]
-  engagementsByStatus: Record<string, number>
-  totalActiveEngagements: number
-  totalAssessors: number
-  totalEngagements: number
-}
+/** Default max active engagements per assessor. Configurable later. */
+const DEFAULT_CAPACITY = 3
 
-interface AssessorDetail {
-  assessor: {
-    id: string
-    name: string
-    email: string
-    jobTitle: string | null
-    isLeadAssessor: boolean
-    ccaNumber: string | null
-    ccpNumber: string | null
-  }
-  engagements: Array<{
-    id: string
-    packageName: string
-    organizationName: string
-    status: string
-    role: string
-    targetLevel: string
-    startedAt: Date | null
-    completedAt: Date | null
-    assignedAt: Date
-  }>
-  stats: {
-    active: number
-    pending: number
-    completed: number
-    total: number
-  }
+const PROFICIENCY_LABEL: Record<number, string> = {
+  1: 'Unfamiliar',
+  2: 'Aware',
+  3: 'Proficient',
+  4: 'Advanced',
+  5: 'Expert',
 }
 
 export function WorkloadDashboard() {
   const [loading, setLoading] = useState(true)
-  const [overview, setOverview] = useState<WorkloadOverview | null>(null)
-  const [selectedAssessor, setSelectedAssessor] = useState<string>('all')
-  const [assessorDetail, setAssessorDetail] = useState<AssessorDetail | null>(null)
-  const [loadingDetail, setLoadingDetail] = useState(false)
+  const [assessors, setAssessors] = useState<AssessorWorkloadItem[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadOverview()
+  const load = useCallback(async () => {
+    setLoading(true)
+    const result = await getC3PAOWorkloadOverview()
+    if (result.success && result.data) {
+      setAssessors(result.data.assessors)
+      setError(null)
+    } else {
+      setError(result.error ?? 'Failed to load workload')
+    }
+    setLoading(false)
   }, [])
 
   useEffect(() => {
-    if (selectedAssessor && selectedAssessor !== 'all') {
-      loadAssessorDetail(selectedAssessor)
-    } else {
-      setAssessorDetail(null)
-    }
-  }, [selectedAssessor])
-
-  async function loadOverview() {
-    setLoading(true)
-    try {
-      const result = await getC3PAOWorkloadOverview()
-      if (result.success && result.data) {
-        setOverview(result.data)
-      }
-    } catch (error) {
-      console.error('Failed to load workload overview:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function loadAssessorDetail(assessorId: string) {
-    setLoadingDetail(true)
-    try {
-      const result = await getAssessorWorkload(assessorId)
-      if (result.success && result.data) {
-        setAssessorDetail(result.data)
-      }
-    } catch (error) {
-      console.error('Failed to load assessor detail:', error)
-    } finally {
-      setLoadingDetail(false)
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'IN_PROGRESS':
-        return <Badge className="bg-purple-500/10 text-purple-700 border-purple-200">In Progress</Badge>
-      case 'COMPLETED':
-        return <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-200">Completed</Badge>
-      case 'REQUESTED':
-      case 'PENDING':
-        return <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-200">Pending</Badge>
-      case 'PROPOSAL_SENT':
-        return <Badge className="bg-amber-500/10 text-amber-700 border-amber-200">Proposal Sent</Badge>
-      case 'PROPOSAL_ACCEPTED':
-      case 'ACCEPTED':
-        return <Badge className="bg-green-500/10 text-green-700 border-green-200">Accepted</Badge>
-      default:
-        return <Badge variant="secondary">{status}</Badge>
-    }
-  }
-
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case 'LEAD':
-        return <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-200"><Crown className="h-3 w-3 mr-1" />Lead</Badge>
-      case 'ASSESSOR':
-        return <Badge className="bg-blue-500/10 text-blue-700 border-blue-200"><User className="h-3 w-3 mr-1" />Assessor</Badge>
-      case 'OBSERVER':
-        return <Badge variant="secondary">Observer</Badge>
-      default:
-        return <Badge variant="secondary">{role}</Badge>
-    }
-  }
+    load()
+  }, [load])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (!overview) {
-    return (
       <Card>
-        <CardContent className="py-12 text-center">
-          <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground/50" />
-          <h3 className="mt-4 text-lg font-semibold">Failed to Load</h3>
-          <p className="text-muted-foreground mt-1">
-            Could not load workload data. Please try again.
-          </p>
-          <Button className="mt-4" onClick={loadOverview}>
-            Retry
-          </Button>
+        <CardContent className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </CardContent>
       </Card>
     )
   }
 
-  // Calculate max workload for progress bars
-  const maxWorkload = Math.max(...overview.assessors.map((a) => a.activeEngagements), 1)
+  if (error) {
+    return (
+      <Card className="border-orange-200 bg-orange-50 dark:border-orange-900 dark:bg-orange-950/30">
+        <CardContent className="flex items-start gap-3 py-6">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />
+          <div>
+            <p className="text-sm font-medium text-orange-900 dark:text-orange-100">
+              Unable to load workload
+            </p>
+            <p className="mt-0.5 text-xs text-orange-800 dark:text-orange-300">
+              {error}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  const totalActive = assessors.reduce((sum, a) => sum + a.activeEngagements, 0)
+  const totalPending = assessors.reduce((sum, a) => sum + a.pendingEngagements, 0)
+  const totalCompleted = assessors.reduce(
+    (sum, a) => sum + a.completedEngagements,
+    0,
+  )
+
+  // Find assessors with expiring credentials (≤90 days or already expired).
+  const now = new Date()
+  const expiringAlerts = assessors.filter((a) => {
+    const cca = safeDate(a.ccaExpiresAt)
+    const ccp = safeDate(a.ccpExpiresAt)
+    const ccaDays = cca ? differenceInDays(cca, now) : Infinity
+    const ccpDays = ccp ? differenceInDays(ccp, now) : Infinity
+    return ccaDays <= 90 || ccpDays <= 90
+  })
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Assessors</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{overview.totalAssessors}</div>
-            <p className="text-xs text-muted-foreground">
-              {overview.assessors.filter((a) => a.isLeadAssessor).length} lead assessors
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Active Assessments</CardTitle>
-            <Briefcase className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{overview.totalActiveEngagements}</div>
-            <p className="text-xs text-muted-foreground">Currently in progress</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{overview.engagementsByStatus['COMPLETED'] || 0}</div>
-            <p className="text-xs text-muted-foreground">Total completed</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Avg per Assessor</CardTitle>
-            <TrendingUp className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {overview.totalAssessors > 0
-                ? (overview.totalActiveEngagements / overview.totalAssessors).toFixed(1)
-                : '0'}
-            </div>
-            <p className="text-xs text-muted-foreground">Active engagements</p>
-          </CardContent>
-        </Card>
+      {/* KPI strip */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <KpiCard icon={Users} label="Total Assessors" value={assessors.length} />
+        <KpiCard
+          icon={Briefcase}
+          label="Active"
+          value={totalActive}
+          accentClass="text-primary"
+        />
+        <KpiCard
+          icon={TrendingUp}
+          label="Pending"
+          value={totalPending}
+          accentClass="text-amber-600"
+        />
+        <KpiCard
+          icon={CheckCircle2}
+          label="Completed"
+          value={totalCompleted}
+          accentClass="text-emerald-600"
+        />
       </div>
 
-      {/* Filter */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Filter by Assessor:</span>
-          <Select value={selectedAssessor} onValueChange={setSelectedAssessor}>
-            <SelectTrigger className="w-[250px]">
-              <SelectValue placeholder="All assessors" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Assessors</SelectItem>
-              {overview.assessors.map((assessor) => (
-                <SelectItem key={assessor.id} value={assessor.id}>
-                  <div className="flex items-center gap-2">
-                    {assessor.isLeadAssessor && <Crown className="h-3 w-3 text-yellow-600" />}
-                    {assessor.name}
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      {/* Assessor Detail View */}
-      {selectedAssessor !== 'all' && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {loadingDetail ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : assessorDetail?.assessor.isLeadAssessor ? (
-                <Crown className="h-5 w-5 text-yellow-600" />
-              ) : (
-                <User className="h-5 w-5" />
-              )}
-              {assessorDetail?.assessor.name || 'Loading...'}
+      {/* Cert expiry alerts */}
+      {expiringAlerts.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="h-4 w-4 text-amber-600" aria-hidden />
+              Expiring Credentials
             </CardTitle>
-            {assessorDetail && (
-              <CardDescription>
-                {assessorDetail.assessor.jobTitle || assessorDetail.assessor.email}
-                {assessorDetail.assessor.ccaNumber && ` | CCA: ${assessorDetail.assessor.ccaNumber}`}
-              </CardDescription>
-            )}
+            <CardDescription>
+              CCA / CCP credentials expiring within 90 days
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {loadingDetail ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin" />
-              </div>
-            ) : assessorDetail ? (
-              <div className="space-y-4">
-                {/* Stats */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="text-center p-3 rounded-lg bg-purple-500/10">
-                    <div className="text-2xl font-bold text-purple-700">{assessorDetail.stats.active}</div>
-                    <div className="text-xs text-muted-foreground">Active</div>
-                  </div>
-                  <div className="text-center p-3 rounded-lg bg-yellow-500/10">
-                    <div className="text-2xl font-bold text-yellow-700">{assessorDetail.stats.pending}</div>
-                    <div className="text-xs text-muted-foreground">Pending</div>
-                  </div>
-                  <div className="text-center p-3 rounded-lg bg-emerald-500/10">
-                    <div className="text-2xl font-bold text-emerald-700">{assessorDetail.stats.completed}</div>
-                    <div className="text-xs text-muted-foreground">Completed</div>
-                  </div>
-                  <div className="text-center p-3 rounded-lg bg-muted">
-                    <div className="text-2xl font-bold">{assessorDetail.stats.total}</div>
-                    <div className="text-xs text-muted-foreground">Total</div>
-                  </div>
-                </div>
-
-                {/* Engagements Table */}
-                {assessorDetail.engagements.length > 0 ? (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Package</TableHead>
-                        <TableHead>Organization</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Level</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {assessorDetail.engagements.map((eng) => (
-                        <TableRow key={eng.id}>
-                          <TableCell className="font-medium">{eng.packageName}</TableCell>
-                          <TableCell>{eng.organizationName}</TableCell>
-                          <TableCell>{getStatusBadge(eng.status)}</TableCell>
-                          <TableCell>{getRoleBadge(eng.role)}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{eng.targetLevel}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/engagements/${eng.id}`}>
-                                <ExternalLink className="h-4 w-4" />
-                              </Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                ) : (
-                  <p className="text-center text-muted-foreground py-4">
-                    No engagements assigned yet.
-                  </p>
-                )}
-              </div>
-            ) : null}
+            <ul className="space-y-2">
+              {expiringAlerts.map((a) => (
+                <li
+                  key={a.assessorId}
+                  className="flex items-center justify-between gap-3 text-sm"
+                >
+                  <span className="flex items-center gap-1.5">
+                    {a.isLeadAssessor && (
+                      <Crown className="h-3 w-3 text-amber-600" aria-hidden />
+                    )}
+                    <span className="font-medium">{a.assessorName}</span>
+                  </span>
+                  <span className="flex items-center gap-3 text-xs text-muted-foreground">
+                    {a.ccaExpiresAt && (
+                      <CredExpiryBadge
+                        label="CCA"
+                        expiresAt={a.ccaExpiresAt}
+                        now={now}
+                      />
+                    )}
+                    {a.ccpExpiresAt && (
+                      <CredExpiryBadge
+                        label="CCP"
+                        expiresAt={a.ccpExpiresAt}
+                        now={now}
+                      />
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
       )}
 
-      {/* Team Workload Table */}
-      {selectedAssessor === 'all' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Team Workload</CardTitle>
-            <CardDescription>
-              Overview of engagement distribution across your assessment team
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      {/* Team workload table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Team Workload</CardTitle>
+          <CardDescription>
+            Active / Pending / Completed counts with capacity utilization
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {assessors.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No assessors in the C3PAO.
+            </p>
+          ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Assessor</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead className="text-center">Active</TableHead>
-                  <TableHead className="text-center">Pending</TableHead>
-                  <TableHead className="text-center">Completed</TableHead>
-                  <TableHead>Workload</TableHead>
-                  <TableHead></TableHead>
+                  <TableHead className="text-right">Active</TableHead>
+                  <TableHead className="text-right">Pending</TableHead>
+                  <TableHead className="text-right">Completed</TableHead>
+                  <TableHead className="w-[180px]">Capacity</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {overview.assessors.map((assessor) => (
-                  <TableRow key={assessor.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium flex items-center gap-2">
-                          {assessor.isLeadAssessor && <Crown className="h-3 w-3 text-yellow-600" />}
-                          {assessor.name}
+                {assessors.map((a) => {
+                  const utilization = Math.min(
+                    100,
+                    (a.activeEngagements / DEFAULT_CAPACITY) * 100,
+                  )
+                  const overloaded = a.activeEngagements > DEFAULT_CAPACITY
+                  return (
+                    <TableRow key={a.assessorId}>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {a.isLeadAssessor && (
+                            <Crown
+                              className="h-3 w-3 text-amber-600"
+                              aria-hidden
+                            />
+                          )}
+                          <span className="font-medium">{a.assessorName}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {a.assessorType}
+                          </Badge>
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {assessor.jobTitle || assessor.email}
+                        <p className="text-xs text-muted-foreground">
+                          {a.assessorEmail}
+                        </p>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {a.activeEngagements}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-amber-700">
+                        {a.pendingEngagements}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-emerald-700">
+                        {a.completedEngagements}
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-0.5">
+                          <Progress
+                            value={utilization}
+                            className={cn('h-1.5', overloaded && '[&>*]:bg-rose-500')}
+                          />
+                          <p className="text-[10px] text-muted-foreground tabular-nums">
+                            {a.activeEngagements}/{DEFAULT_CAPACITY}
+                            {overloaded && ' · overloaded'}
+                          </p>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {assessor.isLeadAssessor ? (
-                        <Badge className="bg-yellow-500/10 text-yellow-700 border-yellow-200">Lead</Badge>
-                      ) : (
-                        <Badge variant="secondary">Assessor</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="font-medium text-purple-700">{assessor.activeEngagements}</span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="text-yellow-700">{assessor.pendingEngagements}</span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="text-emerald-700">{assessor.completedEngagements}</span>
-                    </TableCell>
-                    <TableCell className="w-[150px]">
-                      <div className="flex items-center gap-2">
-                        <Progress
-                          value={(assessor.activeEngagements / maxWorkload) * 100}
-                          className="h-2"
-                        />
-                        <span className="text-xs text-muted-foreground w-8">
-                          {assessor.activeEngagements}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedAssessor(assessor.id)}
-                      >
-                        View
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
-      )}
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Skill matrix */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Skill / Domain Matrix</CardTitle>
+          <CardDescription>
+            NIST 800-171 family proficiency · 1 = Unfamiliar, 5 = Expert
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-muted-foreground">
+                <th className="sticky left-0 bg-background p-2 text-left">
+                  Assessor
+                </th>
+                {NIST_FAMILIES.map((fc) => (
+                  <th key={fc} className="p-2 text-center font-medium">
+                    {fc}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {assessors.map((a) => (
+                <tr key={a.assessorId} className="border-t">
+                  <td className="sticky left-0 bg-background p-2 text-left">
+                    <div className="flex items-center gap-1.5">
+                      {a.isLeadAssessor && (
+                        <Crown
+                          className="h-3 w-3 text-amber-600"
+                          aria-hidden
+                        />
+                      )}
+                      <span className="text-xs font-medium">
+                        {a.assessorName}
+                      </span>
+                    </div>
+                  </td>
+                  {NIST_FAMILIES.map((fc) => {
+                    const skill = a.skills.find((s) => s.familyCode === fc)
+                    return (
+                      <td
+                        key={fc}
+                        className="p-1 text-center"
+                        title={
+                          skill
+                            ? `${PROFICIENCY_LABEL[skill.proficiency]} (${skill.proficiency}/5)`
+                            : 'Not rated'
+                        }
+                      >
+                        <SkillCell proficiency={skill?.proficiency ?? 0} />
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </CardContent>
+      </Card>
     </div>
+  )
+}
+
+function KpiCard({
+  icon: Icon,
+  label,
+  value,
+  accentClass,
+}: {
+  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean }>
+  label: string
+  value: number
+  accentClass?: string
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-xs font-medium text-muted-foreground">
+          {label}
+        </CardTitle>
+        <Icon
+          className={cn('h-3.5 w-3.5 text-muted-foreground', accentClass)}
+          aria-hidden
+        />
+      </CardHeader>
+      <CardContent>
+        <div
+          className={cn(
+            'text-2xl font-semibold tabular-nums',
+            accentClass,
+          )}
+        >
+          {value}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function CredExpiryBadge({
+  label,
+  expiresAt,
+  now,
+}: {
+  label: string
+  expiresAt: string
+  now: Date
+}) {
+  const d = safeDate(expiresAt)
+  if (!d) return null
+  const days = differenceInDays(d, now)
+  const expired = days < 0
+  const urgent = days >= 0 && days <= 30
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px]',
+        expired
+          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+          : urgent
+            ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-300'
+            : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+      )}
+    >
+      <span className="font-semibold">{label}</span>
+      <span>
+        {expired ? `expired ${-days}d ago` : days === 0 ? 'today' : `${days}d`}
+      </span>
+      <span className="text-muted-foreground/70">
+        · {format(d, 'MMM yyyy')}
+      </span>
+    </span>
+  )
+}
+
+function SkillCell({ proficiency }: { proficiency: number }) {
+  if (proficiency === 0) {
+    return (
+      <span className="inline-block h-5 w-5 rounded-sm bg-muted/30" />
+    )
+  }
+  // Color intensity rises with proficiency (1-5).
+  const bgClass =
+    proficiency === 5
+      ? 'bg-emerald-600 text-white'
+      : proficiency === 4
+        ? 'bg-emerald-500 text-white'
+        : proficiency === 3
+          ? 'bg-emerald-400 text-white'
+          : proficiency === 2
+            ? 'bg-emerald-200 text-emerald-900'
+            : 'bg-emerald-100 text-emerald-800'
+  return (
+    <span
+      className={cn(
+        'inline-flex h-5 w-5 items-center justify-center rounded-sm text-[10px] font-semibold tabular-nums',
+        bgClass,
+      )}
+    >
+      {proficiency}
+    </span>
   )
 }

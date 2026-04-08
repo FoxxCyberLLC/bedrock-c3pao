@@ -1,74 +1,107 @@
 'use server'
 
-import { getWorkloadData as _getWorkload } from './team'
+/**
+ * C3PAO workload server actions.
+ *
+ * Task 12: the Go API workload endpoint now returns the full shape
+ * (pending/completed counts, per-assessor engagement list, skills, cert
+ * expiry). This module just wraps it with the standard server-action
+ * shape. The previous hard-coded zero mapping (pendingEngagements: 0,
+ * completedEngagements: 0, engagements: []) is gone.
+ */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getC3PAOWorkloadOverview(): Promise<{ success: boolean; data?: any; error?: string }> {
-  const result = await _getWorkload()
-  if (!result.success || !result.data) return result
-  // API returns flat AssessorWorkloadItem[] — map to shape the component expects
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawItems = Array.isArray(result.data) ? result.data : (result.data as any)?.assessors || []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const assessors = rawItems.map((a: any) => ({
-    id: a.assessorId || a.id,
-    name: a.assessorName || a.name,
-    email: a.assessorEmail || a.email,
-    jobTitle: a.jobTitle || null,
-    isLeadAssessor: a.assessorType === 'CCA' || a.isLeadAssessor || false,
-    ccaNumber: a.ccaNumber || null,
-    ccpNumber: a.ccpNumber || null,
-    activeEngagements: a.activeEngagements || 0,
-    pendingEngagements: 0,
-    completedEngagements: 0,
-    totalAssigned: a.activeEngagements || 0,
-  }))
-  const totalAssessors = assessors.length
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const totalActiveEngagements = assessors.reduce((sum: number, a: any) => sum + (a.activeEngagements || 0), 0)
-  return {
-    success: true,
-    data: {
+import { requireAuth } from '@/lib/auth'
+import {
+  fetchWorkload,
+  updateAssessorSkills as apiUpdateSkills,
+  type AssessorWorkloadItem,
+  type AssessorSkillItem,
+} from '@/lib/api-client'
+
+export interface WorkloadOverview {
+  assessors: AssessorWorkloadItem[]
+  totalAssessors: number
+  totalActiveEngagements: number
+  totalPendingEngagements: number
+  totalCompletedEngagements: number
+}
+
+export interface WorkloadOverviewResponse {
+  success: boolean
+  data?: WorkloadOverview
+  error?: string
+}
+
+export async function getC3PAOWorkloadOverview(): Promise<WorkloadOverviewResponse> {
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    const assessors = await fetchWorkload(session.apiToken)
+    const overview: WorkloadOverview = {
       assessors,
-      engagementsByStatus: {} as Record<string, number>,
-      totalAssessors,
-      totalActiveEngagements,
-      totalEngagements: totalActiveEngagements,
-    },
+      totalAssessors: assessors.length,
+      totalActiveEngagements: assessors.reduce(
+        (sum, a) => sum + (a.activeEngagements ?? 0),
+        0,
+      ),
+      totalPendingEngagements: assessors.reduce(
+        (sum, a) => sum + (a.pendingEngagements ?? 0),
+        0,
+      ),
+      totalCompletedEngagements: assessors.reduce(
+        (sum, a) => sum + (a.completedEngagements ?? 0),
+        0,
+      ),
+    }
+    return { success: true, data: overview }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to load workload overview',
+    }
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getAssessorWorkload(assessorId: string): Promise<{ success: boolean; data?: any; error?: string }> {
-  // Individual assessor workload detail — get full workload and filter
-  const result = await _getWorkload()
-  if (!result.success || !result.data) return result
-  // API returns flat AssessorWorkloadItem[]
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const rawItems = Array.isArray(result.data) ? result.data : (result.data as any)?.assessors || []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const assessor = rawItems.find((a: any) => (a.assessorId || a.id) === assessorId) || null
-  if (!assessor) return { success: true, data: null }
-  // Build AssessorDetail shape the component expects
-  return {
-    success: true,
-    data: {
-      assessor: {
-        id: assessor.assessorId || assessor.id,
-        name: assessor.assessorName || assessor.name,
-        email: assessor.assessorEmail || assessor.email,
-        jobTitle: assessor.jobTitle || null,
-        isLeadAssessor: assessor.assessorType === 'CCA' || assessor.isLeadAssessor || false,
-        ccaNumber: assessor.ccaNumber || null,
-        ccpNumber: assessor.ccpNumber || null,
-      },
-      engagements: [],
-      stats: {
-        active: assessor.activeEngagements || 0,
-        pending: 0,
-        completed: 0,
-        total: assessor.activeEngagements || 0,
-      },
-    },
+/** Get a single assessor's workload detail (just a filter over the list). */
+export async function getAssessorWorkload(
+  assessorId: string,
+): Promise<{ success: boolean; data?: AssessorWorkloadItem; error?: string }> {
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    const assessors = await fetchWorkload(session.apiToken)
+    const match = assessors.find((a) => a.assessorId === assessorId)
+    if (!match) return { success: false, error: 'Assessor not found' }
+    return { success: true, data: match }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to load assessor workload',
+    }
+  }
+}
+
+/** Update an assessor's skill matrix. */
+export async function updateAssessorSkillsAction(
+  assessorId: string,
+  skills: AssessorSkillItem[],
+): Promise<{
+  success: boolean
+  data?: AssessorSkillItem[]
+  error?: string
+}> {
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    const data = await apiUpdateSkills(assessorId, skills, session.apiToken)
+    return { success: true, data }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to update skills',
+    }
   }
 }

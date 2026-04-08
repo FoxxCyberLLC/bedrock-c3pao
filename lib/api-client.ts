@@ -1026,20 +1026,56 @@ export async function fetchStats(engagementId: string, token: string): Promise<S
   return apiRequest<StatsResponse>(`/api/c3pao/assessments/${engagementId}/stats`, { token })
 }
 
-// ---- Workload ----
+// ---- Workload (Task 12) ----
+
+export interface WorkloadEngagement {
+  id: string
+  packageName: string
+  organizationName: string
+  status: string
+  role: string
+  currentPhase?: string
+}
+
+export interface AssessorSkillItem {
+  familyCode: string
+  proficiency: number
+}
 
 export interface AssessorWorkloadItem {
   assessorId: string
   assessorName: string
   assessorEmail: string
   assessorType: string
+  isLeadAssessor: boolean
   activeEngagements: number
+  pendingEngagements: number
+  completedEngagements: number
   objectivesAssessed: number
   domainsAssigned: number
+  ccaExpiresAt: string | null
+  ccpExpiresAt: string | null
+  engagements: WorkloadEngagement[]
+  skills: AssessorSkillItem[]
 }
 
 export async function fetchWorkload(token: string): Promise<AssessorWorkloadItem[]> {
   return apiRequest<AssessorWorkloadItem[]>('/api/c3pao/workload', { token })
+}
+
+export async function updateAssessorSkills(
+  assessorId: string,
+  skills: AssessorSkillItem[],
+  token: string,
+): Promise<AssessorSkillItem[]> {
+  return apiRequest<AssessorSkillItem[]>(
+    `/api/c3pao/users/${assessorId}/skills`,
+    {
+      method: 'PUT',
+      body: { skills },
+      token,
+    },
+  )
 }
 
 // ---- Portfolio (lead-assessor dashboard + kanban + engagements list) ----
