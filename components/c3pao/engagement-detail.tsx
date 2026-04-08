@@ -76,6 +76,7 @@ import { STIGViewer } from './stig-viewer'
 import { AssessmentPlanningBoard } from './assessment-planning-board'
 import { PreAssessmentWorkspace } from './engagement/pre-assessment-workspace'
 import { EngagementComments } from './engagement/engagement-comments'
+import { EngagementLifecycleStepper } from './engagement/engagement-lifecycle-stepper'
 import { AssessmentProgressTracker } from './assessment-progress-tracker'
 import { FindingsReviewQueue } from './findings-review-queue'
 import { CheckinCard } from './checkin-card'
@@ -728,6 +729,11 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           Back to Engagements
         </Link>
       </Button>
+
+      {/* CAP v2.0 lifecycle stepper (Task 14) */}
+      {engagement.status !== 'CANCELLED' && (
+        <EngagementLifecycleStepper engagementId={engagement.id} />
+      )}
 
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
