@@ -1239,6 +1239,81 @@ export async function updatePreAssess(
   )
 }
 
+// ---- Conflicts of Interest register (Task 10) ----
+
+export interface COIDisclosure {
+  id: string
+  c3paoId: string
+  assessorId: string
+  assessorName: string | null
+  organizationId: string
+  organizationName: string | null
+  disclosureType: string
+  details: string | null
+  disclosedAt: string
+  expiresAt: string | null
+  status: string
+  disclosedById: string | null
+}
+
+export interface CheckCOIResult {
+  hasActive: boolean
+  /** "clear" | "active_conflict" | "unknown_org" */
+  reason: string
+  disclosures: COIDisclosure[]
+}
+
+export interface CreateCOIInput {
+  assessorId: string
+  organizationId: string
+  disclosureType: string
+  details?: string
+  expiresAt?: string
+}
+
+export interface UpdateCOIInput {
+  status?: string
+  details?: string
+}
+
+export async function fetchCOIList(token: string): Promise<COIDisclosure[]> {
+  return apiRequest<COIDisclosure[]>('/api/c3pao/coi', { token })
+}
+
+export async function createCOI(
+  input: CreateCOIInput,
+  token: string,
+): Promise<COIDisclosure> {
+  return apiRequest<COIDisclosure>('/api/c3pao/coi', {
+    method: 'POST',
+    body: input,
+    token,
+  })
+}
+
+export async function updateCOI(
+  id: string,
+  input: UpdateCOIInput,
+  token: string,
+): Promise<COIDisclosure> {
+  return apiRequest<COIDisclosure>(`/api/c3pao/coi/${id}`, {
+    method: 'PATCH',
+    body: input,
+    token,
+  })
+}
+
+export async function checkCOIAssignment(
+  engagementId: string,
+  assessorId: string,
+  token: string,
+): Promise<CheckCOIResult> {
+  return apiRequest<CheckCOIResult>(
+    `/api/c3pao/coi/check?engagementId=${engagementId}&assessorId=${assessorId}`,
+    { token },
+  )
+}
+
 // ---- Org-level C3PAO User Management ----
 
 export interface C3PAOUserItem {

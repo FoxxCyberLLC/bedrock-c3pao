@@ -1,7 +1,7 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
-import { fetchTeam, fetchAvailableAssessors, addTeamMember as apiAddTeam, updateTeamMemberRole, removeTeamMember } from '@/lib/api-client'
+import { fetchTeam, fetchAvailableAssessors, addTeamMember as apiAddTeam, updateTeamMemberRole, removeTeamMember, checkCOIAssignment } from '@/lib/api-client'
 
 export async function getEngagementTeam(engagementId: string) {
   try {
@@ -43,6 +43,36 @@ export async function assignAssessorToEngagement(dataOrEngagementId: string | Re
       uId = (dataOrEngagementId.assessorId || dataOrEngagementId.userId) as string
       r = (dataOrEngagementId.role as string) || 'ASSESSOR'
     }
+
+    // CAP v2.0 Preliminary Proceedings COI guard (Task 10):
+    // Check for active conflicts of interest before assigning. An
+    // "active_conflict" is a hard block; "unknown_org" (pre-migration
+    // Customer rows) surfaces as a warning so the lead can verify manually.
+    try {
+      const coi = await checkCOIAssignment(engId, uId, session.apiToken)
+      if (coi.hasActive) {
+        const types = coi.disclosures.map((d) => d.disclosureType).join(', ')
+        return {
+          success: false,
+          error: `COI conflict — assessor has active ${types} disclosure for this organization`,
+          coiConflict: true,
+          disclosures: coi.disclosures,
+        }
+      }
+      if (coi.reason === 'unknown_org') {
+        return {
+          success: false,
+          error: 'COI check unavailable — this customer predates the organization migration. Verify manually via the COI register before proceeding.',
+          coiWarning: true,
+        }
+      }
+    } catch (coiErr) {
+      // If the COI service itself fails (not a conflict), log and continue —
+      // blocking all assignments on infrastructure errors would be worse than
+      // missing a rare conflict.
+      console.warn('COI check failed, proceeding with assignment:', coiErr)
+    }
+
     await apiAddTeam(engId, { assessorId: uId, role: r }, session.apiToken)
     return { success: true }
   } catch (error) {
