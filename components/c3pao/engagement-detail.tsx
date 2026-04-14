@@ -312,6 +312,21 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
   const [assetsLoading, setAssetsLoading] = useState(true)
   const [assessorStats, setAssessorStats] = useState<StatsResponse | null>(null)
 
+  // Sectioned tab navigation
+  type NavSection = 'package' | 'assessment' | 'engagement'
+  const [section, setSection] = useState<NavSection>('package')
+  const [tabValue, setTabValue] = useState('overview')
+
+  const handleSectionChange = (newSection: NavSection) => {
+    const defaults: Record<NavSection, string> = {
+      package: 'overview',
+      assessment: 'planning',
+      engagement: 'team',
+    }
+    setSection(newSection)
+    setTabValue(defaults[newSection])
+  }
+
   const pkg = engagement.atoPackage
 
   // Handle export to eMASS format
@@ -1389,84 +1404,119 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
         assetCount={assetsData.length}
       />
 
+      {/* Sectioned Navigation */}
+      <div className="space-y-4">
+        {/* Section Switcher */}
+        <div className="flex items-center gap-0.5 bg-muted/40 p-1 rounded-lg w-fit border">
+          {(['package', 'assessment', 'engagement'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => handleSectionChange(s)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
+                section === s
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {s === 'package' && <Building2 className="h-4 w-4 shrink-0" />}
+              {s === 'assessment' && <Shield className="h-4 w-4 shrink-0" />}
+              {s === 'engagement' && <Users className="h-4 w-4 shrink-0" />}
+              <span className="hidden sm:inline capitalize">
+                {s === 'package' ? 'Package Data' : s === 'assessment' ? 'Assessment' : 'Engagement'}
+              </span>
+            </button>
+          ))}
+        </div>
+
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-4">
+      <Tabs value={tabValue} onValueChange={setTabValue} className="space-y-4">
         <TabsList className="flex w-full flex-wrap h-auto gap-1">
-          {/* Package / SSP tabs */}
-          <TabsTrigger value="overview" className="gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Overview</span>
-          </TabsTrigger>
-          <TabsTrigger value="system-profile" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            <span className="hidden sm:inline">System Profile</span>
-          </TabsTrigger>
-          <TabsTrigger value="network" className="gap-2">
-            <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Network</span>
-          </TabsTrigger>
-          <TabsTrigger value="personnel" className="gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Personnel</span>
-          </TabsTrigger>
-          <TabsTrigger value="controls" className="gap-2">
-            <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Controls</span>
-            <Badge variant="secondary" className="ml-1">{controlStats.total}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="policies" className="gap-2">
-            <Lock className="h-4 w-4" />
-            <span className="hidden sm:inline">Policies</span>
-          </TabsTrigger>
-          <TabsTrigger value="evidence" className="gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Evidence</span>
-            <Badge variant="secondary" className="ml-1">{pkg?.evidence.length || 0}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="assets" className="gap-2">
-            <FolderOpen className="h-4 w-4" />
-            <span className="hidden sm:inline">Assets</span>
-            <Badge variant="secondary" className="ml-1">{assetsData.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="poams" className="gap-2">
-            <AlertTriangle className="h-4 w-4" />
-            <span className="hidden sm:inline">POA&Ms</span>
-            <Badge variant="secondary" className="ml-1">{pkg?.poams.length || 0}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="stigs" className="gap-2">
-            <FileJson className="h-4 w-4" />
-            <span className="hidden sm:inline">STIGs</span>
-          </TabsTrigger>
-          <TabsTrigger value="full-ssp" className="gap-2">
-            <FileSignature className="h-4 w-4" />
-            <span className="hidden sm:inline">Full SSP</span>
-          </TabsTrigger>
-          {/* Assessment tabs */}
-          <TabsTrigger value="planning" className="gap-2">
-            <ClipboardList className="h-4 w-4" />
-            <span className="hidden sm:inline">Planning</span>
-          </TabsTrigger>
-          <TabsTrigger value="progress" className="gap-2">
-            <BarChart3 className="h-4 w-4" />
-            <span className="hidden sm:inline">Progress</span>
-          </TabsTrigger>
-          <TabsTrigger value="review" className="gap-2">
-            <CheckSquare className="h-4 w-4" />
-            <span className="hidden sm:inline">Review</span>
-          </TabsTrigger>
-          <TabsTrigger value="team" className="gap-2">
-            <Users className="h-4 w-4" />
-            <span className="hidden sm:inline">Team</span>
-            <Badge variant="secondary" className="ml-1">{team.length}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="notes" className="gap-2">
-            <MessageSquare className="h-4 w-4" />
-            <span className="hidden sm:inline">Notes</span>
-          </TabsTrigger>
-          <TabsTrigger value="details" className="gap-2">
-            <Eye className="h-4 w-4" />
-            <span className="hidden sm:inline">Details</span>
-          </TabsTrigger>
+          {section === 'package' && (
+            <>
+              <TabsTrigger value="overview" className="gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Overview</span>
+              </TabsTrigger>
+              <TabsTrigger value="system-profile" className="gap-2">
+                <Building2 className="h-4 w-4" />
+                <span className="hidden sm:inline">System Profile</span>
+              </TabsTrigger>
+              <TabsTrigger value="network" className="gap-2">
+                <Shield className="h-4 w-4" />
+                <span className="hidden sm:inline">Network</span>
+              </TabsTrigger>
+              <TabsTrigger value="personnel" className="gap-2">
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline">Personnel</span>
+              </TabsTrigger>
+              <TabsTrigger value="policies" className="gap-2">
+                <Lock className="h-4 w-4" />
+                <span className="hidden sm:inline">Policies</span>
+              </TabsTrigger>
+              <TabsTrigger value="assets" className="gap-2">
+                <FolderOpen className="h-4 w-4" />
+                <span className="hidden sm:inline">Assets</span>
+                <Badge variant="secondary" className="ml-1">{assetsData.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="evidence" className="gap-2">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Evidence</span>
+                <Badge variant="secondary" className="ml-1">{pkg?.evidence.length || 0}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="stigs" className="gap-2">
+                <FileJson className="h-4 w-4" />
+                <span className="hidden sm:inline">STIGs</span>
+              </TabsTrigger>
+              <TabsTrigger value="poams" className="gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                <span className="hidden sm:inline">POA&Ms</span>
+                <Badge variant="secondary" className="ml-1">{pkg?.poams.length || 0}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="full-ssp" className="gap-2">
+                <FileSignature className="h-4 w-4" />
+                <span className="hidden sm:inline">Full SSP</span>
+              </TabsTrigger>
+            </>
+          )}
+          {section === 'assessment' && (
+            <>
+              <TabsTrigger value="planning" className="gap-2">
+                <ClipboardList className="h-4 w-4" />
+                <span className="hidden sm:inline">Planning</span>
+              </TabsTrigger>
+              <TabsTrigger value="controls" className="gap-2">
+                <Shield className="h-4 w-4" />
+                <span className="hidden sm:inline">Controls</span>
+                <Badge variant="secondary" className="ml-1">{controlStats.total}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="progress" className="gap-2">
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Progress</span>
+              </TabsTrigger>
+              <TabsTrigger value="review" className="gap-2">
+                <CheckSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">Review</span>
+              </TabsTrigger>
+            </>
+          )}
+          {section === 'engagement' && (
+            <>
+              <TabsTrigger value="team" className="gap-2">
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline">Team</span>
+                <Badge variant="secondary" className="ml-1">{team.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="notes" className="gap-2">
+                <MessageSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">Notes</span>
+              </TabsTrigger>
+              <TabsTrigger value="details" className="gap-2">
+                <Eye className="h-4 w-4" />
+                <span className="hidden sm:inline">Details</span>
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* Overview Tab */}
@@ -1735,6 +1785,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
 
       {/* Conflict Dialog */}
       <ConflictDialog

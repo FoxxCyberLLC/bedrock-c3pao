@@ -17,7 +17,7 @@ const ALLOWED_CONTENT_TYPES = new Set([
 ])
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ engagementId: string; evidenceId: string }> },
 ) {
   const session = await requireAuth()
@@ -62,8 +62,19 @@ export async function GET(
   }
 
   // Step 4: Sanitize Content-Type — strip charset params, allowlist safe types (H3)
+  // Fall back to a caller-supplied hint (e.g. ?hint=image/jpeg) when S3 returns
+  // no content-type or a generic binary type. This fixes previews for files that
+  // were uploaded without explicit S3 object metadata.
   const rawType = upstream.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? ''
-  const contentType = ALLOWED_CONTENT_TYPES.has(rawType) ? rawType : 'application/octet-stream'
+  const hintType = request.nextUrl.searchParams.get('hint')?.split(';')[0].trim().toLowerCase() ?? ''
+  let contentType: string
+  if (ALLOWED_CONTENT_TYPES.has(rawType)) {
+    contentType = rawType
+  } else if (hintType && ALLOWED_CONTENT_TYPES.has(hintType)) {
+    contentType = hintType
+  } else {
+    contentType = 'application/octet-stream'
+  }
 
   // Step 5: Stream the file bytes with size guard for missing Content-Length (H4)
   if (!upstream.body) {

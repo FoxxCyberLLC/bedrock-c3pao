@@ -56,7 +56,9 @@ export function FilePreviewDialog({
   const [xlsxData, setXlsxData] = useState<{ sheetName: string; rows: (string | null)[][] } | null>(null)
 
   const previewType = getPreviewType(mimeType, fileName)
-  const proxyUrl = `/api/evidence/${engagementId}/${evidenceId}/proxy`
+  const proxyUrl = mimeType
+    ? `/api/evidence/${engagementId}/${evidenceId}/proxy?hint=${encodeURIComponent(mimeType)}`
+    : `/api/evidence/${engagementId}/${evidenceId}/proxy`
 
   useEffect(() => {
     if (!open) {

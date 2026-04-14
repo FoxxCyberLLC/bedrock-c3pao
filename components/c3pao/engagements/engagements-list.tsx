@@ -1,7 +1,6 @@
 'use client'
 
 import { useCallback, useMemo, useState, useTransition } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronDown, ChevronRight, Loader2, Search, UserPlus, X } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -41,8 +40,6 @@ export function EngagementsList({
   currentUserId,
   leadOptions,
 }: EngagementsListProps) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
   const [isPending, startTransition] = useTransition()
 
   const [items, setItems] = useState<PortfolioListItem[]>(initialItems)
@@ -50,6 +47,7 @@ export function EngagementsList({
   const [groupKey, setGroupKey] = useState<GroupKey>('none')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkLeadId, setBulkLeadId] = useState<string>('')
+  const [activeViewId, setActiveViewId] = useState<SavedViewId | null>(null)
 
   // Collapse state is read from localStorage lazily per-groupKey change.
   // A single `collapseVersion` bumps on groupKey change to re-read storage
@@ -68,9 +66,6 @@ export function EngagementsList({
     // collapseVersion forces re-read after a user toggle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupKey, collapseVersion])
-
-  // Parse the active saved view from the URL.
-  const activeViewId = (searchParams.get('view') as SavedViewId | null) ?? null
 
   // Derive the filtered + grouped items.
   const viewFiltered = useMemo(() => {
@@ -103,16 +98,10 @@ export function EngagementsList({
 
   const handleSwitchView = useCallback(
     (viewId: SavedViewId | null) => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (viewId) {
-        params.set('view', viewId)
-      } else {
-        params.delete('view')
-      }
-      router.replace(`/engagements?${params.toString()}`)
-      setSelected(new Set()) // clear selection on view change
+      setActiveViewId(viewId)
+      setSelected(new Set())
     },
-    [router, searchParams],
+    [],
   )
 
   const handleToggleSelect = useCallback((id: string, isSelected: boolean) => {
