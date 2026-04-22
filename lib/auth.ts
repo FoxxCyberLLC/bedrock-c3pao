@@ -132,3 +132,35 @@ export async function getApiToken(): Promise<string | null> {
   const session = await getSession()
   return session?.apiToken || null
 }
+
+export type RequireLeadAssessorResult = {
+  session: C3PAOSessionPayload | null
+  isLead: boolean
+  error?: string
+}
+
+/**
+ * Require an authenticated lead assessor for a specific engagement.
+ * Fast path: `isLeadAssessor` flag set at login. Slow path: check team
+ * membership via the Go API and verify the caller has role `LEAD_ASSESSOR`.
+ * Either qualifier flips `isLead = true`.
+ */
+export async function requireLeadAssessor(
+  engagementId: string,
+): Promise<RequireLeadAssessorResult> {
+  const session = await requireAuth()
+  if (!session) return { session: null, isLead: false, error: 'Unauthorized' }
+
+  if (session.c3paoUser.isLeadAssessor) return { session, isLead: true }
+
+  try {
+    const { fetchTeam } = await import('./api-client')
+    const team = await fetchTeam(engagementId, session.apiToken)
+    const isLead = team.some(
+      (m) => m.assessorId === session.c3paoUser.id && m.role === 'LEAD_ASSESSOR',
+    )
+    return { session, isLead }
+  } catch {
+    return { session, isLead: false, error: 'Failed to verify lead assessor status' }
+  }
+}
