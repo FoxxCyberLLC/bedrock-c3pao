@@ -70,6 +70,7 @@ export type AuditAction =
   | 'note_edited'
   | 'note_deleted'
   | 'phase_advanced'
+  | 'audit_exported'
 
 export interface AuditEntry {
   id: string
