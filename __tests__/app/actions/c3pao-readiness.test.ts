@@ -26,6 +26,7 @@ vi.mock('@/lib/db-audit', () => ({
 vi.mock('@/lib/api-client', () => ({
   fetchEngagementPhase: vi.fn(),
   updateEngagementPhase: vi.fn(),
+  fetchTeam: vi.fn(),
 }))
 
 vi.mock('next/cache', () => ({
@@ -45,6 +46,9 @@ const {
   removeArtifact: dbRemoveArtifact,
 } = await import('@/lib/db-readiness')
 const { appendAudit, getAuditLog } = await import('@/lib/db-audit')
+const { fetchEngagementPhase, updateEngagementPhase } = await import(
+  '@/lib/api-client'
+)
 
 async function getActions() {
   return import('@/app/actions/c3pao-readiness')
@@ -557,5 +561,93 @@ describe('removeArtifact', () => {
     const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
     expect(result.success).toBe(true)
     expect(dbRemoveArtifact).toHaveBeenCalledWith('a1')
+  })
+})
+
+describe('ensureEngagementInPlanPhase', () => {
+  it('returns unauthorized when no session', async () => {
+    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    const { ensureEngagementInPlanPhase } = await getActions()
+    const result = await ensureEngagementInPlanPhase('eng-1')
+    expect(result.success).toBe(false)
+    expect(fetchEngagementPhase).not.toHaveBeenCalled()
+  })
+
+  it('sets phase to PRE_ASSESS when currentPhase is empty/null', async () => {
+    vi.mocked(fetchEngagementPhase).mockResolvedValueOnce({
+      currentPhase: null,
+    } as never)
+    const { ensureEngagementInPlanPhase } = await getActions()
+    const result = await ensureEngagementInPlanPhase('eng-1')
+    expect(result.success).toBe(true)
+    expect(updateEngagementPhase).toHaveBeenCalledWith('eng-1', 'PRE_ASSESS', 'tok')
+  })
+
+  it('is a no-op when engagement is already past the plan phase', async () => {
+    vi.mocked(fetchEngagementPhase).mockResolvedValueOnce({
+      currentPhase: 'ASSESS',
+    } as never)
+    const { ensureEngagementInPlanPhase } = await getActions()
+    const result = await ensureEngagementInPlanPhase('eng-1')
+    expect(result.success).toBe(true)
+    expect(updateEngagementPhase).not.toHaveBeenCalled()
+  })
+
+  it('is a no-op when engagement is already PRE_ASSESS', async () => {
+    vi.mocked(fetchEngagementPhase).mockResolvedValueOnce({
+      currentPhase: 'PRE_ASSESS',
+    } as never)
+    const { ensureEngagementInPlanPhase } = await getActions()
+    const result = await ensureEngagementInPlanPhase('eng-1')
+    expect(result.success).toBe(true)
+    expect(updateEngagementPhase).not.toHaveBeenCalled()
+  })
+})
+
+function make8ReadyItems(): ReadinessItem[] {
+  return Array.from({ length: 8 }, (_, i) =>
+    makeItem({
+      id: `item-${i}`,
+      itemKey: 'contract_executed',
+      status: i % 2 === 0 ? 'complete' : 'waived',
+    }),
+  )
+}
+
+describe('startAssessment', () => {
+  it('denies non-lead', async () => {
+    vi.mocked(requireLeadAssessor).mockResolvedValueOnce(nonLeadResult())
+    const { startAssessment } = await getActions()
+    const result = await startAssessment('eng-1')
+    expect(result.success).toBe(false)
+    expect(updateEngagementPhase).not.toHaveBeenCalled()
+  })
+
+  it('refuses when fewer than 8 items ready (server re-checks)', async () => {
+    vi.mocked(requireLeadAssessor).mockResolvedValueOnce(leadResult())
+    vi.mocked(getItems).mockResolvedValueOnce([makeItem({ status: 'complete' })])
+    const { startAssessment } = await getActions()
+    const result = await startAssessment('eng-1')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/1\/8/)
+    expect(updateEngagementPhase).not.toHaveBeenCalled()
+  })
+
+  it('transitions to ASSESS and logs audit when 8/8 ready', async () => {
+    vi.mocked(requireLeadAssessor).mockResolvedValueOnce(leadResult())
+    vi.mocked(getItems).mockResolvedValueOnce(make8ReadyItems())
+    vi.mocked(fetchEngagementPhase).mockResolvedValueOnce({
+      currentPhase: 'PRE_ASSESS',
+    } as never)
+    const { startAssessment } = await getActions()
+    const result = await startAssessment('eng-1')
+    expect(result.success).toBe(true)
+    expect(updateEngagementPhase).toHaveBeenCalledWith('eng-1', 'ASSESS', 'tok')
+    expect(appendAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'phase_advanced',
+        details: expect.objectContaining({ to: 'ASSESS', from: 'PRE_ASSESS' }),
+      }),
+    )
   })
 })

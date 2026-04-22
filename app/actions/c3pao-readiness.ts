@@ -22,6 +22,10 @@ import {
   unwaiveItem,
 } from '@/lib/db-readiness'
 import { appendAudit, getAuditLog } from '@/lib/db-audit'
+import {
+  fetchEngagementPhase,
+  updateEngagementPhase,
+} from '@/lib/api-client'
 import { READINESS_ITEM_KEYS } from '@/lib/readiness-types'
 import type {
   AuditEntry,
@@ -402,5 +406,78 @@ export async function removeArtifact(
     return { success: true }
   } catch (error) {
     return errorEnvelope(error, 'Failed to remove artifact')
+  }
+}
+
+/**
+ * Idempotent: ensures the engagement is in the `PLAN` phase. Fixes the
+ * legacy bug where engagements created before the PLAN default exist with
+ * an empty phase string and fail the `"" → ASSESS` adjacency check.
+ * Called on readiness workspace mount.
+ */
+export async function ensureEngagementInPlanPhase(
+  engagementId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+
+    const current = await fetchEngagementPhase(engagementId, session.apiToken)
+    if (current.currentPhase && current.currentPhase !== 'PRE_ASSESS') {
+      return { success: true }
+    }
+    // Already in a post-plan phase or already PRE_ASSESS — PRE_ASSESS is the
+    // Go API's name for the planning phase, so leave it alone if already set.
+    if (current.currentPhase === 'PRE_ASSESS') return { success: true }
+
+    await updateEngagementPhase(engagementId, 'PRE_ASSESS', session.apiToken)
+    return { success: true }
+  } catch (error) {
+    return errorEnvelope(error, 'Failed to initialize engagement phase')
+  }
+}
+
+/**
+ * Lead-only: start the assessment. Re-validates the full checklist server-
+ * side (never trusts the client), transitions the engagement to `ASSESS`
+ * via the Go API, logs a `phase_advanced` audit entry.
+ */
+export async function startAssessment(
+  engagementId: string,
+): Promise<ActionResult<void>> {
+  try {
+    const lead = await resolveLead(engagementId)
+    if (!lead.ok) return lead.response
+    const session = lead.ctx.session
+    if (!session) return { success: false, error: 'Unauthorized' }
+
+    // Re-check canStart against DB state (server is source of truth).
+    await ensureItemsSeeded(engagementId)
+    const items = await getItems(engagementId)
+    const readyCount = items.filter(
+      (i) => i.status === 'complete' || i.status === 'waived',
+    ).length
+    if (readyCount !== 8) {
+      return {
+        success: false,
+        error: `Readiness incomplete (${readyCount}/8) — cannot start assessment`,
+      }
+    }
+
+    const current = await fetchEngagementPhase(engagementId, session.apiToken)
+    const fromPhase = current.currentPhase ?? null
+
+    await updateEngagementPhase(engagementId, 'ASSESS', session.apiToken)
+
+    await safeAppendAudit({
+      engagementId,
+      actor: lead.ctx.actor,
+      action: 'phase_advanced',
+      details: { from: fromPhase, to: 'ASSESS' },
+    })
+    revalidateEngagement(engagementId)
+    return { success: true }
+  } catch (error) {
+    return errorEnvelope(error, 'Failed to start assessment')
   }
 }
