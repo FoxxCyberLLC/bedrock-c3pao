@@ -85,6 +85,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Docker image names must be lowercase, but github.repository preserves
+      # original casing (FoxxCyberLLC/bedrock-c3pao). Override IMAGE_NAME for
+      # the rest of this job with a lowercased version.
+      - name: Normalize image name to lowercase
+        env:
+          REPO: ${{ github.repository }}
+        run: echo "IMAGE_NAME=${REPO,,}" >> "$GITHUB_ENV"
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
