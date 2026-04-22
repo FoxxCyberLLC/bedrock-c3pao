@@ -36,10 +36,13 @@ const { requireAuth, requireLeadAssessor } = await import('@/lib/auth')
 const {
   ensureItemsSeeded,
   getItems,
+  getItemByKey,
   markItemComplete,
   unmarkItemComplete,
   waiveItem,
   unwaiveItem,
+  addArtifact,
+  removeArtifact: dbRemoveArtifact,
 } = await import('@/lib/db-readiness')
 const { appendAudit, getAuditLog } = await import('@/lib/db-audit')
 
@@ -322,5 +325,237 @@ describe('revokeWaiver', () => {
     expect(appendAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'waiver_revoked' }),
     )
+  })
+})
+
+function makePdfFile(opts: { size?: number; type?: string; name?: string } = {}): File {
+  const bytes = new Uint8Array(opts.size ?? 4)
+  return new File([bytes], opts.name ?? 'contract.pdf', {
+    type: opts.type ?? 'application/pdf',
+  })
+}
+
+describe('uploadArtifact', () => {
+  it('returns unauthorized when no session', async () => {
+    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    const fd = new FormData()
+    fd.append('file', makePdfFile())
+    const { uploadArtifact } = await getActions()
+    const result = await uploadArtifact('eng-1', 'contract_executed', fd)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/unauthorized/i)
+  })
+
+  it('rejects invalid item key', async () => {
+    const fd = new FormData()
+    fd.append('file', makePdfFile())
+    const { uploadArtifact } = await getActions()
+    const result = await uploadArtifact('eng-1', 'bogus' as never, fd)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/invalid/i)
+  })
+
+  it('rejects empty file', async () => {
+    const fd = new FormData()
+    fd.append('file', new File([], 'empty.pdf', { type: 'application/pdf' }))
+    const { uploadArtifact } = await getActions()
+    const result = await uploadArtifact('eng-1', 'contract_executed', fd)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/empty/i)
+  })
+
+  it('rejects files larger than 50 MB', async () => {
+    const huge = new File([new Uint8Array(51 * 1024 * 1024)], 'big.pdf', {
+      type: 'application/pdf',
+    })
+    const fd = new FormData()
+    fd.append('file', huge)
+    const { uploadArtifact } = await getActions()
+    const result = await uploadArtifact('eng-1', 'contract_executed', fd)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/50 MB/i)
+  })
+
+  it('rejects disallowed mime types', async () => {
+    const fd = new FormData()
+    fd.append('file', makePdfFile({ type: 'application/x-msdownload' }))
+    const { uploadArtifact } = await getActions()
+    const result = await uploadArtifact('eng-1', 'contract_executed', fd)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/unsupported/i)
+  })
+
+  it('rejects when the readiness item has not been seeded', async () => {
+    vi.mocked(getItemByKey).mockResolvedValueOnce(null)
+    const fd = new FormData()
+    fd.append('file', makePdfFile())
+    const { uploadArtifact } = await getActions()
+    const result = await uploadArtifact('eng-1', 'contract_executed', fd)
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/not found/i)
+  })
+
+  it('uploads valid PDF and records audit', async () => {
+    vi.mocked(getItemByKey).mockResolvedValueOnce(makeItem({ id: 'item-1' }))
+    vi.mocked(addArtifact).mockResolvedValueOnce({
+      id: 'artifact-1',
+      itemId: 'item-1',
+      filename: 'contract.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 4,
+      description: null,
+      uploadedBy: 'Lead User',
+      uploadedByEmail: 'lead@c3pao.test',
+      uploadedAt: new Date().toISOString(),
+    })
+    const fd = new FormData()
+    fd.append('file', makePdfFile())
+    fd.append('description', 'signed original')
+    const { uploadArtifact } = await getActions()
+    const result = await uploadArtifact('eng-1', 'contract_executed', fd)
+    expect(result.success).toBe(true)
+    expect(result.data?.id).toBe('artifact-1')
+    expect(addArtifact).toHaveBeenCalledWith(
+      'item-1',
+      expect.objectContaining({
+        filename: 'contract.pdf',
+        mimeType: 'application/pdf',
+        uploadedByEmail: 'lead@c3pao.test',
+        description: 'signed original',
+      }),
+    )
+    expect(appendAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'artifact_uploaded' }),
+    )
+  })
+})
+
+describe('removeArtifact', () => {
+  it('returns unauthorized when no session', async () => {
+    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    const { removeArtifact } = await getActions()
+    const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/unauthorized/i)
+  })
+
+  it('rejects when the readiness item does not exist', async () => {
+    vi.mocked(getItemByKey).mockResolvedValueOnce(null)
+    const { removeArtifact } = await getActions()
+    const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/not found/i)
+  })
+
+  it('rejects when the artifact belongs to another item', async () => {
+    vi.mocked(getItemByKey).mockResolvedValueOnce(makeItem({ artifacts: [] }))
+    const { removeArtifact } = await getActions()
+    const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/artifact not found/i)
+  })
+
+  it('denies non-lead trying to remove another user’s artifact', async () => {
+    // Caller is a non-lead member; artifact uploaded by someone else.
+    vi.mocked(requireAuth).mockResolvedValueOnce(
+      sessionFixture({
+        c3paoUser: {
+          id: 'user-2',
+          email: 'member@c3pao.test',
+          name: 'Member',
+          c3paoId: 'c3pao-1',
+          c3paoName: 'C3PAO Inc',
+          isLeadAssessor: false,
+          status: 'active',
+        },
+      }) as never,
+    )
+    vi.mocked(requireLeadAssessor).mockResolvedValueOnce(nonLeadResult())
+    vi.mocked(getItemByKey).mockResolvedValueOnce(
+      makeItem({
+        artifacts: [
+          {
+            id: 'a1',
+            itemId: 'item-1',
+            filename: 'x.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 1,
+            description: null,
+            uploadedBy: 'Someone Else',
+            uploadedByEmail: 'other@c3pao.test',
+            uploadedAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    )
+    const { removeArtifact } = await getActions()
+    const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/uploader or a lead/i)
+    expect(dbRemoveArtifact).not.toHaveBeenCalled()
+  })
+
+  it('allows uploader to remove their own artifact', async () => {
+    vi.mocked(requireAuth).mockResolvedValueOnce(
+      sessionFixture({
+        c3paoUser: {
+          id: 'user-2',
+          email: 'member@c3pao.test',
+          name: 'Member',
+          c3paoId: 'c3pao-1',
+          c3paoName: 'C3PAO Inc',
+          isLeadAssessor: false,
+          status: 'active',
+        },
+      }) as never,
+    )
+    vi.mocked(getItemByKey).mockResolvedValueOnce(
+      makeItem({
+        artifacts: [
+          {
+            id: 'a1',
+            itemId: 'item-1',
+            filename: 'mine.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 1,
+            description: null,
+            uploadedBy: 'Member',
+            uploadedByEmail: 'member@c3pao.test',
+            uploadedAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    )
+    const { removeArtifact } = await getActions()
+    const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
+    expect(result.success).toBe(true)
+    expect(dbRemoveArtifact).toHaveBeenCalledWith('a1')
+    expect(appendAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'artifact_removed' }),
+    )
+  })
+
+  it('allows lead to remove any artifact', async () => {
+    vi.mocked(getItemByKey).mockResolvedValueOnce(
+      makeItem({
+        artifacts: [
+          {
+            id: 'a1',
+            itemId: 'item-1',
+            filename: 'others.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 1,
+            description: null,
+            uploadedBy: 'Other',
+            uploadedByEmail: 'other@c3pao.test',
+            uploadedAt: new Date().toISOString(),
+          },
+        ],
+      }),
+    )
+    const { removeArtifact } = await getActions()
+    const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
+    expect(result.success).toBe(true)
+    expect(dbRemoveArtifact).toHaveBeenCalledWith('a1')
   })
 })
