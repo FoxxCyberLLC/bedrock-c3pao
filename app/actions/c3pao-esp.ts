@@ -1,12 +1,47 @@
 'use server'
 
-// ESP (External Service Provider) actions — stubs until Go API supports ESPs
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getESPsByEngagement(engagementId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
-  return { success: true, data: [] }
+import { requireAuth } from '@/lib/auth'
+import {
+  fetchESPsForEngagement,
+  fetchESPDetailForEngagement,
+  type ESPView,
+  type ESPDetailView,
+} from '@/lib/api-client'
+
+export async function getESPsByEngagement(
+  engagementId: string,
+): Promise<{ success: boolean; data?: ESPView[]; error?: string }> {
+  const session = await requireAuth()
+  if (!session) return { success: false, error: 'Unauthorized' }
+  try {
+    const esps = await fetchESPsForEngagement(engagementId, session.apiToken)
+    return { success: true, data: esps }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to load ESPs',
+    }
+  }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getESPDetailForEngagement(engagementId: string, espId: string): Promise<{ success: boolean; data?: any; error?: string }> {
-  return { success: false, error: 'ESP details not yet available via API' }
+export async function getESPDetailForEngagement(
+  engagementId: string,
+  espId: string,
+): Promise<{ success: boolean; data?: ESPDetailView; error?: string }> {
+  const session = await requireAuth()
+  if (!session) return { success: false, error: 'Unauthorized' }
+  try {
+    const esp = await fetchESPDetailForEngagement(
+      engagementId,
+      espId,
+      session.apiToken,
+    )
+    return { success: true, data: esp }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error ? error.message : 'Failed to load ESP detail',
+    }
+  }
 }

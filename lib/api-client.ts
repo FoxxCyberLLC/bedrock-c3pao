@@ -125,17 +125,6 @@ export interface MeResponse {
   isLeadAssessor?: boolean
 }
 
-export async function apiMe(token: string): Promise<MeResponse> {
-  return apiRequest<MeResponse>('/api/auth/me', { token })
-}
-
-export async function apiRefreshToken(token: string): Promise<{ token: string }> {
-  return apiRequest<{ token: string }>('/api/auth/refresh', {
-    method: 'POST',
-    token,
-  })
-}
-
 // ---- C3PAO Assessments ----
 
 export interface EngagementSummary {
@@ -541,6 +530,84 @@ export async function fetchEMassExport(engagementId: string, token: string): Pro
   return apiRequest<EMassExportData>(`/api/c3pao/assessments/${engagementId}/export/emass`, { token })
 }
 
+// ---- ESP (External Service Providers) — read-only ----
+
+export interface ESPView {
+  id: string
+  atoPackageId: string
+  providerName: string
+  providerType: string
+  status: string
+  primaryContact?: string | null
+  email?: string | null
+  phone?: string | null
+  storesCui: boolean
+  processesCui: boolean
+  transmitsCui: boolean
+  fedRampCertified: boolean
+  cmmcCertified: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ESPRequirementMappingView {
+  id: string
+  requirementId: string
+  inheritanceType: string
+  espResponsibility?: string | null
+  oscResponsibility?: string | null
+  controlId: string
+  requirementTitle: string
+  familyCode: string
+  familyName: string
+  notes?: string | null
+}
+
+export interface ESPDetailView extends ESPView {
+  website?: string | null
+  fedRampLevel?: string | null
+  cmmcLevel?: string | null
+  dfarsFlowDown: boolean
+  protectsEnclave: boolean
+  services?: string | null
+  systemsAccessed?: string | null
+  riskLevel?: string | null
+  lastRiskAssessment?: string | null
+  nextRiskAssessment?: string | null
+  notes?: string | null
+  documentationUrl?: string | null
+  contractNumber?: string | null
+  contractStartDate?: string | null
+  contractEndDate?: string | null
+  srmFileName?: string | null
+  srmFileUrl?: string | null
+  srmUploadedAt?: string | null
+  crmFileName?: string | null
+  crmFileUrl?: string | null
+  crmUploadedAt?: string | null
+  city?: string | null
+  state?: string | null
+  requirementMappings: ESPRequirementMappingView[]
+}
+
+export async function fetchESPsForEngagement(
+  engagementId: string,
+  token: string,
+): Promise<ESPView[]> {
+  return apiRequest<ESPView[]>(`/api/c3pao/assessments/${engagementId}/esps`, { token })
+}
+
+export async function fetchESPDetailForEngagement(
+  engagementId: string,
+  espId: string,
+  token: string,
+): Promise<ESPDetailView> {
+  return apiRequest<ESPDetailView>(
+    `/api/c3pao/assessments/${engagementId}/esps/${espId}`,
+    { token },
+  )
+}
+
 // ---- Write Functions ----
 
 export interface CreateFindingInput {
@@ -706,14 +773,6 @@ export interface DomainAssignment {
   assignedAt: string
 }
 
-export async function fetchDomains(engagementId: string, token: string): Promise<DomainAssignment[]> {
-  return apiRequest<DomainAssignment[]>(`/api/c3pao/assessments/${engagementId}/domains`, { token })
-}
-
-export async function fetchMyDomains(engagementId: string, token: string): Promise<string[]> {
-  return apiRequest<string[]>(`/api/c3pao/assessments/${engagementId}/domains/mine`, { token })
-}
-
 export async function setAssessorDomains(engagementId: string, assessorId: string, familyCodes: string[], token: string): Promise<DomainAssignment[]> {
   return apiRequest<DomainAssignment[]>(`/api/c3pao/assessments/${engagementId}/domains/${assessorId}`, {
     method: 'PUT',
@@ -863,31 +922,6 @@ export async function updateObjective(engagementId: string, objectiveId: string,
   })
 }
 
-export async function lockObjective(engagementId: string, objectiveId: string, token: string): Promise<Record<string, unknown>> {
-  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/objectives/${objectiveId}/lock`, {
-    method: 'POST',
-    token,
-  })
-}
-
-export async function unlockObjective(engagementId: string, objectiveId: string, token: string): Promise<Record<string, unknown>> {
-  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/objectives/${objectiveId}/lock`, {
-    method: 'DELETE',
-    token,
-  })
-}
-
-export async function bulkUpdateObjectives(engagementId: string, body: { updates: { objStatusId: string; status: string; version: number }[] }, token: string): Promise<Record<string, unknown>> {
-  return apiRequest<Record<string, unknown>>(`/api/c3pao/assessments/${engagementId}/objectives/bulk`, {
-    method: 'POST',
-    body,
-    token,
-  })
-}
-
-export async function fetchObjectiveHistory(engagementId: string, objectiveId: string, token: string): Promise<Record<string, unknown>[]> {
-  return apiRequest<Record<string, unknown>[]>(`/api/c3pao/assessments/${engagementId}/objectives/${objectiveId}/history`, { token })
-}
 
 // ---- STIGs ----
 
@@ -898,6 +932,82 @@ export interface STIGData {
 
 export async function fetchSTIGs(engagementId: string, token: string): Promise<STIGData> {
   return apiRequest<STIGData>(`/api/c3pao/assessments/${engagementId}/stigs`, { token })
+}
+
+export interface STIGRuleView {
+  id: string
+  ruleId: string
+  ruleTitle: string
+  severity: string
+  status: string
+  ccis?: string[] | null
+  findingDetails?: string | null
+  comments?: string | null
+  discussion?: string | null
+  checklistId: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface STIGChecklistView {
+  id: string
+  stigId: string
+  displayName: string
+  version?: string | null
+  releaseInfo?: string | null
+  classification?: string | null
+  totalRules: number
+  openCount: number
+  notAFindingCount: number
+  notApplicableCount: number
+  notReviewedCount: number
+  targetId: string
+  importId?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface STIGTargetView {
+  id: string
+  hostname: string
+  fqdn?: string | null
+  ipAddress?: string | null
+  macAddress?: string | null
+  targetType?: string | null
+  role?: string | null
+  atoPackageId: string
+  assetId?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface STIGRuleSummary {
+  totalRules: number
+  openCount: number
+  notAFindingCount: number
+  notApplicableCount: number
+  notReviewedCount: number
+  highOpen: number
+  mediumOpen: number
+  lowOpen: number
+}
+
+export interface STIGTargetDetail {
+  target: STIGTargetView
+  checklists: STIGChecklistView[]
+  ruleSummary: STIGRuleSummary
+  rules: STIGRuleView[]
+}
+
+export async function fetchSTIGTargetDetail(
+  engagementId: string,
+  targetId: string,
+  token: string,
+): Promise<STIGTargetDetail> {
+  return apiRequest<STIGTargetDetail>(
+    `/api/c3pao/assessments/${engagementId}/stigs/targets/${targetId}`,
+    { token },
+  )
 }
 
 // ---- Profile ----
@@ -1573,10 +1683,6 @@ export interface C3PAOUserItem {
 
 export async function fetchC3PAOUsers(token: string): Promise<C3PAOUserItem[]> {
   return apiRequest<C3PAOUserItem[]>('/api/c3pao/users', { token })
-}
-
-export async function fetchC3PAOCurrentUser(token: string): Promise<C3PAOUserItem> {
-  return apiRequest<C3PAOUserItem>('/api/c3pao/users/me', { token })
 }
 
 export async function createC3PAOUser(body: {

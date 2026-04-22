@@ -1,29 +1,76 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
-import { fetchSTIGs } from '@/lib/api-client'
+import {
+  fetchSTIGs,
+  fetchSTIGTargetDetail,
+  type STIGTargetDetail,
+} from '@/lib/api-client'
+import type { STIGStatistics, STIGTargetWithStats } from '@/lib/stig/types'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getSTIGTargets(engagementId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
+// The C3PAO does NOT import, upload, link, delete, or otherwise mutate STIG data.
+// All STIG authoring is OSC-owned. These two reads expose what the OSC has imported
+// so the assessor can review results during assessment.
+
+export async function getSTIGTargets(
+  engagementId: string,
+): Promise<{
+  success: boolean
+  data?: STIGTargetWithStats[]
+  error?: string
+}> {
   try {
     const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' } // H14: don't mask auth failure
+    if (!session) return { success: false, error: 'Unauthorized' }
     const stigs = await fetchSTIGs(engagementId, session.apiToken)
-    return { success: true, data: stigs.targets || [] }
+    return {
+      success: true,
+      data: (stigs.targets || []) as unknown as STIGTargetWithStats[],
+    }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to load STIGs' }
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to load STIGs',
+    }
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getSTIGStatistics(engagementId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+export async function getSTIGTargetDetail(
+  engagementId: string,
+  targetId: string,
+): Promise<{ success: boolean; data?: STIGTargetDetail; error?: string }> {
   try {
     const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' } // H14: don't mask auth failure
+    if (!session) return { success: false, error: 'Unauthorized' }
+    const detail = await fetchSTIGTargetDetail(
+      engagementId,
+      targetId,
+      session.apiToken,
+    )
+    return { success: true, data: detail }
+  } catch (error) {
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to load STIG target detail',
+    }
+  }
+}
+
+export async function getSTIGStatistics(
+  engagementId: string,
+): Promise<{
+  success: boolean
+  data?: STIGStatistics
+  error?: string
+}> {
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
     const stigs = await fetchSTIGs(engagementId, session.apiToken)
-    // Ensure the returned data conforms to STIGStatistics shape
-    const statistics = stigs.statistics || {}
-    const defaultStats = {
+    const defaultStats: STIGStatistics = {
       totalTargets: 0,
       totalChecklists: 0,
       totalRules: 0,
@@ -32,46 +79,17 @@ export async function getSTIGStatistics(engagementId: string): Promise<{ success
       compliancePercentage: 0,
       recentImports: [],
     }
-    return { success: true, data: { ...defaultStats, ...statistics } }
+    return {
+      success: true,
+      data: { ...defaultStats, ...(stigs.statistics || {}) } as STIGStatistics,
+    }
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to load STIG statistics' }
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? error.message
+          : 'Failed to load STIG statistics',
+    }
   }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getSTIGRules(checklistId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
-  // Individual checklist rules not exposed via C3PAO API endpoint — would need OSC STIG endpoint
-  return { success: true, data: [] }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getSTIGRulesByTarget(targetId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
-  return { success: true, data: [] }
-}
-
-// These are OSC write operations — not available from C3PAO
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function importCKLBFile(...args: unknown[]): Promise<{ success: boolean; error?: string; data?: any }> {
-  return { success: false, error: 'STIG import is only available from the OSC interface' }
-}
-
-export async function linkSTIGTargetToAsset(...args: unknown[]) {
-  return { success: false, error: 'Not available from C3PAO interface' }
-}
-
-export async function deleteSTIGTarget(targetId: string) {
-  return { success: false, error: 'Not available from C3PAO interface' }
-}
-
-export async function deleteSTIGImport(importId: string) {
-  return { success: false, error: 'Not available from C3PAO interface' }
-}
-
-export async function deleteSTIGChecklist(checklistId: string) {
-  return { success: false, error: 'Not available from C3PAO interface' }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function createAssetFromSTIGTarget(targetId: string, ...args: unknown[]): Promise<{ success: boolean; error?: string; data?: any }> {
-  return { success: false, error: 'Not available from C3PAO interface' }
 }

@@ -41,8 +41,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { toast } from 'sonner'
-import { updateTeamMember, deleteTeamMember, resetTeamMemberPassword } from '@/app/actions/c3pao-dashboard'
-import { Eye, EyeOff, Trash2, Key } from 'lucide-react'
+import { updateTeamMember, deleteTeamMember } from '@/app/actions/c3pao-dashboard'
+import { Trash2 } from 'lucide-react'
 
 const formSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -85,9 +85,6 @@ export function EditTeamMemberDialog({
 }: EditTeamMemberDialogProps) {
   const [loading, setLoading] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [resetPasswordDialogOpen, setResetPasswordDialogOpen] = useState(false)
-  const [newPassword, setNewPassword] = useState('')
-  const [showPassword, setShowPassword] = useState(false)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -156,29 +153,6 @@ export function EditTeamMemberDialog({
         onSuccess()
       } else {
         toast.error(result.error || 'Failed to delete team member')
-      }
-    } catch {
-      toast.error('An error occurred')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleResetPassword() {
-    if (!member || !newPassword) return
-    if (newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters')
-      return
-    }
-    setLoading(true)
-    try {
-      const result = await resetTeamMemberPassword(member.id, newPassword)
-      if (result.success) {
-        toast.success('Password reset successfully')
-        setResetPasswordDialogOpen(false)
-        setNewPassword('')
-      } else {
-        toast.error(result.error || 'Failed to reset password')
       }
     } catch {
       toast.error('An error occurred')
@@ -326,17 +300,8 @@ export function EditTeamMemberDialog({
                   )}
                 />
 
-                <div className="flex gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setResetPasswordDialogOpen(true)}
-                  >
-                    <Key className="h-4 w-4 mr-2" />
-                    Reset Password
-                  </Button>
-                  {!isSelf && (
+                {!isSelf && (
+                  <div className="flex gap-2 pt-2">
                     <Button
                       type="button"
                       variant="destructive"
@@ -346,8 +311,8 @@ export function EditTeamMemberDialog({
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete
                     </Button>
-                  )}
-                </div>
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-2 pt-4 border-t">
                   <Button
@@ -388,54 +353,6 @@ export function EditTeamMemberDialog({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reset Password Dialog */}
-      <Dialog open={resetPasswordDialogOpen} onOpenChange={setResetPasswordDialogOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Reset Password</DialogTitle>
-            <DialogDescription>
-              Set a new password for {member?.name}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="relative">
-              <Input
-                type={showPassword ? 'text' : 'password'}
-                placeholder="New password (min 8 characters)"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                onClick={() => setShowPassword(!showPassword)}
-              >
-                {showPassword ? (
-                  <EyeOff className="h-4 w-4" />
-                ) : (
-                  <Eye className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setResetPasswordDialogOpen(false)
-                  setNewPassword('')
-                }}
-              >
-                Cancel
-              </Button>
-              <Button onClick={handleResetPassword} disabled={loading || !newPassword}>
-                {loading ? 'Resetting...' : 'Reset Password'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

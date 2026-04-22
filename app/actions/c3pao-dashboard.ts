@@ -389,9 +389,9 @@ export async function deleteTeamMember(memberIdOrEngagementId: string, assessorI
   }
 }
 
-export async function resetTeamMemberPassword(memberId: string, newPassword?: string): Promise<{ success: boolean; error?: string }> {
-  return { success: false, error: 'Password reset not yet available via API' }
-}
+// Password reset for assessors is NOT a C3PAO team-lead responsibility.
+// It is handled exclusively by the local admin at /admin (see app/actions/admin.ts
+// → resetPassword). Team leads manage roles, assignments, and status only.
 
 // ---- Evidence Repository (read-only) ----
 

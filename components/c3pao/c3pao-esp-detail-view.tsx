@@ -27,73 +27,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { OPAStatusBadge } from '@/components/esp/OPAStatusBadge';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-interface ESPWithRelations {
-  id: string
-  providerName: string
-  providerType: string
-  status: string
-  services: string | null
-  systemsAccessed: string | null
-  storesCui: boolean
-  processesCui: boolean
-  transmitsCui: boolean
-  protectsEnclave: boolean
-  fedRampCertified: boolean
-  fedRampLevel: string | null
-  cmmcCertified: boolean
-  cmmcLevel: string | null
-  dfarsFlowDown: boolean
-  primaryContact: string | null
-  email: string | null
-  phone: string | null
-  website: string | null
-  city: string | null
-  state: string | null
-  notes: string | null
-  srmFileName: string | null
-  srmFileUrl: string | null
-  srmUploadedAt: Date | null
-  crmFileName: string | null
-  crmFileUrl: string | null
-  crmUploadedAt: Date | null
-  providerSSPFileName: string | null
-  providerSSPFileUrl: string | null
-  providerSSPUploadedAt: Date | null
-  createdAt: Date
-  updatedAt: Date
-  atoPackage: { id: string; name: string }
-  requirementMappings: Array<{
-    id: string
-    inheritanceType: string
-    espResponsibility: string | null
-    oscResponsibility: string | null
-    requirement: {
-      requirementId: string
-      title: string
-      family: { code: string; name: string }
-    }
-  }>
-  dependentOPAs: Array<{
-    id: string
-    title: string
-    status: string
-    gapStatement: string
-    evidenceRequired: boolean
-    evidenceFileName: string | null
-    createdAt: Date
-    requirement: {
-      requirementId: string
-      title: string
-      family: { code: string }
-    }
-  }>
-}
+import type { ESPDetailView } from '@/lib/api-client';
 
 interface C3PAOESPDetailViewProps {
-  esp: ESPWithRelations;
+  esp: ESPDetailView;
   engagementId: string;
 }
 
@@ -104,14 +41,26 @@ const statusColors: Record<string, string> = {
   TERMINATED: 'bg-red-600',
 };
 
-const inheritanceBadge: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
+const inheritanceBadge: Record<
+  string,
+  { label: string; variant: 'default' | 'secondary' | 'outline' }
+> = {
   NONE: { label: 'None', variant: 'outline' },
   PARTIAL: { label: 'Partial', variant: 'default' },
   FULL: { label: 'Full', variant: 'secondary' },
 };
 
+function formatDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  try {
+    return format(new Date(value), 'MMM d, yyyy');
+  } catch {
+    return '—';
+  }
+}
+
 export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProps) {
-  const documentCount = [esp.srmFileName, esp.crmFileName, esp.providerSSPFileName].filter(Boolean).length;
+  const documentCount = [esp.srmFileName, esp.crmFileName].filter(Boolean).length;
 
   return (
     <div className="container mx-auto py-8 space-y-8">
@@ -129,38 +78,46 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
               {esp.status.replace('_', ' ')}
             </Badge>
             <Badge variant="outline">{esp.providerType}</Badge>
-            <Badge variant="outline" className="text-xs">Read Only</Badge>
+            <Badge variant="outline" className="text-xs">
+              Read Only
+            </Badge>
           </div>
           <h1 className="text-3xl font-bold">{esp.providerName}</h1>
-          <p className="text-muted-foreground">{esp.atoPackage.name}</p>
         </div>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Tabs defaultValue="overview">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="documents">Documents ({documentCount})</TabsTrigger>
-              <TabsTrigger value="mappings">Mappings ({esp.requirementMappings.length})</TabsTrigger>
-              <TabsTrigger value="opas">OPAs ({esp.dependentOPAs.length})</TabsTrigger>
+              <TabsTrigger value="mappings">
+                Mappings ({esp.requirementMappings.length})
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6 mt-6">
               {(esp.services || esp.systemsAccessed) && (
                 <Card>
-                  <CardHeader><CardTitle>Services & Systems</CardTitle></CardHeader>
+                  <CardHeader>
+                    <CardTitle>Services &amp; Systems</CardTitle>
+                  </CardHeader>
                   <CardContent className="space-y-4">
                     {esp.services && (
                       <div>
                         <p className="text-sm font-medium mb-1">Services Provided</p>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{esp.services}</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {esp.services}
+                        </p>
                       </div>
                     )}
                     {esp.systemsAccessed && (
                       <div>
                         <p className="text-sm font-medium mb-1">Systems Accessed</p>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{esp.systemsAccessed}</p>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          {esp.systemsAccessed}
+                        </p>
                       </div>
                     )}
                   </CardContent>
@@ -168,52 +125,81 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
               )}
 
               <Card>
-                <CardHeader><CardTitle>CUI Handling</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle>CUI Handling</CardTitle>
+                </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     <CUIIndicator label="Stores CUI" value={esp.storesCui} />
                     <CUIIndicator label="Processes CUI" value={esp.processesCui} />
                     <CUIIndicator label="Transmits CUI" value={esp.transmitsCui} />
-                    <CUIIndicator label="Protects Enclave" value={esp.protectsEnclave} />
+                    <CUIIndicator
+                      label="Protects Enclave"
+                      value={esp.protectsEnclave}
+                    />
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardHeader><CardTitle>Compliance & Certification</CardTitle></CardHeader>
+                <CardHeader>
+                  <CardTitle>Compliance &amp; Certification</CardTitle>
+                </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        {esp.fedRampCertified ? <CheckCircle className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}
+                        {esp.fedRampCertified ? (
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-muted-foreground" />
+                        )}
                         <span className="text-sm font-medium">FedRAMP</span>
                       </div>
                       {esp.fedRampCertified && esp.fedRampLevel && (
-                        <p className="pl-6 text-sm text-muted-foreground">Level: {esp.fedRampLevel}</p>
+                        <p className="pl-6 text-sm text-muted-foreground">
+                          Level: {esp.fedRampLevel}
+                        </p>
                       )}
                     </div>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
-                        {esp.cmmcCertified ? <CheckCircle className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}
+                        {esp.cmmcCertified ? (
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <XCircle className="h-4 w-4 text-muted-foreground" />
+                        )}
                         <span className="text-sm font-medium">CMMC</span>
                       </div>
                       {esp.cmmcCertified && esp.cmmcLevel && (
-                        <p className="pl-6 text-sm text-muted-foreground">Level: {esp.cmmcLevel.replace('_', ' ')}</p>
+                        <p className="pl-6 text-sm text-muted-foreground">
+                          Level: {esp.cmmcLevel.replace('_', ' ')}
+                        </p>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2 pt-2">
-                    {esp.dfarsFlowDown ? <CheckCircle className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}
-                    <span className="text-sm font-medium">DFARS 252.204-7012 Flow-Down</span>
+                    {esp.dfarsFlowDown ? (
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span className="text-sm font-medium">
+                      DFARS 252.204-7012 Flow-Down
+                    </span>
                   </div>
                 </CardContent>
               </Card>
 
               {esp.notes && (
                 <Card>
-                  <CardHeader><CardTitle>Notes</CardTitle></CardHeader>
+                  <CardHeader>
+                    <CardTitle>Notes</CardTitle>
+                  </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{esp.notes}</p>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                      {esp.notes}
+                    </p>
                   </CardContent>
                 </Card>
               )}
@@ -222,21 +208,15 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
             <TabsContent value="documents" className="space-y-4 mt-6">
               <DocumentCard
                 title="Customer Responsibility Matrix (CRM)"
-                fileName={esp.crmFileName}
-                fileUrl={esp.crmFileUrl}
-                uploadedAt={esp.crmUploadedAt}
+                fileName={esp.crmFileName ?? null}
+                fileUrl={esp.crmFileUrl ?? null}
+                uploadedAt={esp.crmUploadedAt ?? null}
               />
               <DocumentCard
                 title="Shared Responsibility Matrix (SRM)"
-                fileName={esp.srmFileName}
-                fileUrl={esp.srmFileUrl}
-                uploadedAt={esp.srmUploadedAt}
-              />
-              <DocumentCard
-                title="Provider System Security Plan (SSP)"
-                fileName={esp.providerSSPFileName}
-                fileUrl={esp.providerSSPFileUrl}
-                uploadedAt={esp.providerSSPUploadedAt}
+                fileName={esp.srmFileName ?? null}
+                fileUrl={esp.srmFileUrl ?? null}
+                uploadedAt={esp.srmUploadedAt ?? null}
               />
             </TabsContent>
 
@@ -261,21 +241,33 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
                         <TableRow key={m.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-xs">{m.requirement.family.code}</Badge>
-                              <span className="text-sm font-medium">{m.requirement.requirementId}</span>
+                              <Badge variant="outline" className="text-xs">
+                                {m.familyCode}
+                              </Badge>
+                              <span className="text-sm font-medium">
+                                {m.controlId}
+                              </span>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-0.5">{m.requirement.title}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {m.requirementTitle}
+                            </p>
                           </TableCell>
                           <TableCell>
-                            <Badge variant={inheritanceBadge[m.inheritanceType]?.variant || 'outline'}>
-                              {inheritanceBadge[m.inheritanceType]?.label || m.inheritanceType}
+                            <Badge
+                              variant={
+                                inheritanceBadge[m.inheritanceType]?.variant ||
+                                'outline'
+                              }
+                            >
+                              {inheritanceBadge[m.inheritanceType]?.label ||
+                                m.inheritanceType}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                            {m.espResponsibility || '-'}
+                            {m.espResponsibility || '—'}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground max-w-[200px]">
-                            {m.oscResponsibility || '-'}
+                            {m.oscResponsibility || '—'}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -284,42 +276,14 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
                 </div>
               )}
             </TabsContent>
-
-            <TabsContent value="opas" className="mt-6">
-              {esp.dependentOPAs.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No Operational Plans of Action for this ESP.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {esp.dependentOPAs.map((opa) => (
-                    <div key={opa.id} className="border rounded-lg p-4 space-y-2">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <OPAStatusBadge status={opa.status} />
-                        <Badge variant="outline" className="text-xs">{opa.requirement.family.code}</Badge>
-                        <span className="text-xs text-muted-foreground">{opa.requirement.requirementId}</span>
-                        {opa.evidenceRequired && (
-                          <span className={`text-xs ${opa.evidenceFileName ? 'text-green-600' : 'text-amber-600'}`}>
-                            {opa.evidenceFileName ? 'Evidence received' : 'Evidence pending'}
-                          </span>
-                        )}
-                      </div>
-                      <h4 className="text-sm font-medium">{opa.title}</h4>
-                      <p className="text-sm text-muted-foreground line-clamp-2">{opa.gapStatement}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Created {format(new Date(opa.createdAt), 'MMM d, yyyy')}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
           </Tabs>
         </div>
 
         <div className="space-y-6">
           <Card>
-            <CardHeader><CardTitle className="text-base">Contact Information</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Contact Information</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-3">
               {esp.primaryContact && (
                 <div className="flex items-center gap-2 text-sm">
@@ -342,7 +306,12 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
               {esp.website && (
                 <div className="flex items-center gap-2 text-sm">
                   <Globe className="h-4 w-4 text-muted-foreground" />
-                  <a href={esp.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
+                  <a
+                    href={esp.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline truncate"
+                  >
                     {esp.website}
                   </a>
                 </div>
@@ -352,7 +321,9 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
                   <Separator />
                   <div className="flex items-start gap-2 text-sm">
                     <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                    <span>{[esp.city, esp.state].filter(Boolean).join(', ')}</span>
+                    <span>
+                      {[esp.city, esp.state].filter(Boolean).join(', ')}
+                    </span>
                   </div>
                 </>
               )}
@@ -360,33 +331,35 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Summary</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Summary</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Documents</span>
-                <span className="font-medium">{documentCount}/3</span>
+                <span className="font-medium">{documentCount}/2</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Requirement Mappings</span>
-                <span className="font-medium">{esp.requirementMappings.length}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">OPAs</span>
-                <span className="font-medium">{esp.dependentOPAs.length}</span>
+                <span className="font-medium">
+                  {esp.requirementMappings.length}
+                </span>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle className="text-base">Timeline</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-base">Timeline</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <div className="flex justify-between">
                 <span>Created</span>
-                <span>{format(new Date(esp.createdAt), 'MMM d, yyyy')}</span>
+                <span>{formatDate(esp.createdAt)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Updated</span>
-                <span>{format(new Date(esp.updatedAt), 'MMM d, yyyy')}</span>
+                <span>{formatDate(esp.updatedAt)}</span>
               </div>
             </CardContent>
           </Card>
@@ -399,7 +372,11 @@ export function C3PAOESPDetailView({ esp, engagementId }: C3PAOESPDetailViewProp
 function CUIIndicator({ label, value }: { label: string; value: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      {value ? <CheckCircle className="h-4 w-4 text-amber-600" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}
+      {value ? (
+        <CheckCircle className="h-4 w-4 text-amber-600" />
+      ) : (
+        <XCircle className="h-4 w-4 text-muted-foreground" />
+      )}
       <span className="text-sm">{label}</span>
     </div>
   );
@@ -414,7 +391,7 @@ function DocumentCard({
   title: string;
   fileName: string | null;
   fileUrl: string | null;
-  uploadedAt: Date | null;
+  uploadedAt: string | null;
 }) {
   return (
     <Card>
@@ -422,28 +399,37 @@ function DocumentCard({
         <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        {fileName && fileUrl ? (
-          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-            <FileText className="h-8 w-8 text-muted-foreground" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{fileName}</p>
-              {uploadedAt && (
-                <p className="text-xs text-muted-foreground">
-                  Uploaded {format(new Date(uploadedAt), 'MMM d, yyyy')}
-                </p>
-              )}
+        {fileName ? (
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{fileName}</p>
+                {uploadedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Uploaded {formatDate(uploadedAt)}
+                  </p>
+                )}
+              </div>
             </div>
-            <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-              <a href={fileUrl} target="_blank" rel="noopener noreferrer">
-                <Download className="h-4 w-4" />
-              </a>
-            </Button>
+            {fileUrl && (
+              <Button variant="outline" size="sm" asChild>
+                <a
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
+                </a>
+              </Button>
+            )}
           </div>
         ) : (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <XCircle className="h-4 w-4" />
-            <span>Not uploaded</span>
-          </div>
+          <p className="text-sm text-muted-foreground italic">
+            Not uploaded by the OSC
+          </p>
         )}
       </CardContent>
     </Card>
