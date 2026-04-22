@@ -35,6 +35,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { updateAssessorNotes, getEvidenceDownloadUrlForC3PAO } from '@/app/actions/c3pao-dashboard'
+import { triggerFileDownload } from '@/lib/download'
 import { toast } from 'sonner'
 import { ObjectiveAssessmentCard } from './objective-assessment-card'
 import { OSCObjectiveCard } from './osc-objective-card'
@@ -208,7 +209,7 @@ export function ControlDetailPage({
     try {
       const result = await getEvidenceDownloadUrlForC3PAO(evidenceId, engagementId)
       if (result.success && result.data) {
-        window.open(result.data.url, '_blank')
+        triggerFileDownload(result.data.url, fileName)
         toast.success(`Downloading ${fileName}`)
       } else {
         toast.error(result.error || 'Could not generate download URL')

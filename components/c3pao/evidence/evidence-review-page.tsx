@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { getEvidenceDownloadUrlForC3PAO } from '@/app/actions/c3pao-dashboard'
+import { triggerFileDownload } from '@/lib/download'
 import { InternalReviewThread } from '@/components/c3pao/internal-review-thread'
 import type { EvidenceView } from '@/lib/api-client'
 
@@ -78,7 +79,8 @@ export function EvidenceReviewPage({
     try {
       const result = await getEvidenceDownloadUrlForC3PAO(evidence.id, engagementId)
       if (result.success && result.data) {
-        window.open(result.data.url, '_blank')
+        triggerFileDownload(result.data.url, evidence.fileName)
+        toast.success('Download started', { description: evidence.fileName })
       } else {
         toast.error(result.error || 'Failed to generate download URL')
       }

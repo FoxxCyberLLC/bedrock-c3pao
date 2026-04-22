@@ -43,6 +43,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { getEvidenceDownloadUrlForC3PAO } from '@/app/actions/c3pao-dashboard'
+import { triggerFileDownload } from '@/lib/download'
 
 interface Evidence {
   id: string
@@ -178,8 +179,8 @@ export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) 
     try {
       const result = await getEvidenceDownloadUrlForC3PAO(evidenceId, engagementId)
       if (result.success && result.data) {
-        window.open(result.data.url, '_blank')
-        toast.success('Download Started', { description: `Opening ${fileName}` })
+        triggerFileDownload(result.data.url, fileName)
+        toast.success('Download Started', { description: `Downloading ${fileName}` })
       } else {
         toast.error('Download Failed', { description: result.error || 'Could not generate download URL' })
       }
