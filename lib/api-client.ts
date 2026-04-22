@@ -1219,62 +1219,6 @@ export async function fetchEngagementLifecycle(
   )
 }
 
-// ---- Pre-assessment readiness checklist (Task 9) ----
-
-/**
- * CAP v2.0 pre-assessment readiness checklist returned by
- * GET /api/c3pao/assessments/:id/pre-assess.
- *
- * 4 derived items (SSP reviewed, BoE confirmed, COI cleared, team composed)
- * reflect current state via joins. 4 manual items (contract, form drafted,
- * form QA'd, form uploaded) are toggleable by the lead assessor.
- */
-export interface PreAssessChecklist {
-  contractExecutedAt: string | null
-  preAssessFormDrafted: boolean
-  preAssessFormQaStatus: string | null
-  preAssessFormUploadedAt: string | null
-  sspReviewed: boolean
-  boeConfirmed: boolean
-  coiCleared: boolean
-  teamComposed: boolean
-  /** Server-computed convenience flag — true when all 8 items are satisfied. */
-  allItemsComplete: boolean
-}
-
-/** PATCH body for /pre-assess — only manual items. Undefined fields are untouched. */
-export interface UpdatePreAssessInput {
-  contractExecutedAt?: string | null
-  preAssessFormDrafted?: boolean
-  preAssessFormQaStatus?: string | null
-  preAssessFormUploadedAt?: string | null
-}
-
-export async function fetchPreAssess(
-  engagementId: string,
-  token: string,
-): Promise<PreAssessChecklist> {
-  return apiRequest<PreAssessChecklist>(
-    `/api/c3pao/assessments/${engagementId}/pre-assess`,
-    { token },
-  )
-}
-
-export async function updatePreAssess(
-  engagementId: string,
-  input: UpdatePreAssessInput,
-  token: string,
-): Promise<PreAssessChecklist> {
-  return apiRequest<PreAssessChecklist>(
-    `/api/c3pao/assessments/${engagementId}/pre-assess`,
-    {
-      method: 'PATCH',
-      body: input,
-      token,
-    },
-  )
-}
-
 // ---- Customer readiness (OSC pre-assessment coordination) ----
 
 /**

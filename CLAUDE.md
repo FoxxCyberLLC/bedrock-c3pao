@@ -12,11 +12,16 @@ Browser → HTTPS (port 3001, self-signed TLS via start.js)
        → Server Actions / API Routes → Go API (BEDROCK_API_URL)
 ```
 
-- **No direct DB access for assessment data** — the Go API (`bedrock-cmmc-api`) is the sole source of truth
-- **Local SQLite** (`data/config.db`) stores only instance configuration and local admin users
+- **No direct DB access for shared assessment data** — the Go API (`bedrock-cmmc-api`) is the source of truth for engagement, SSP, asset, evidence, POAM, and team data
 - **Offline-capable** — designed to work in disconnected environments
 - Next.js `output: 'standalone'` for containerized deployment
 - `better-sqlite3` is a native module excluded from bundling via `serverExternalPackages`
+
+## Data Model
+
+- **Go API** (`bedrock-cmmc-api`) is the source of truth for engagement, SSP, asset, evidence, POAM, and team data. Accessed via `lib/api-client.ts`. Never queried directly from the frontend.
+- **Local SQLite** (`data/config.db` via `better-sqlite3`) stores instance configuration and local admin users only.
+- **Local Postgres** (accessed via `lib/db.ts` / `pg` driver, configured by `DATABASE_URL`) stores C3PAO-local assessment records: pre-assessment readiness checklist + artifacts (bytea blobs), living notes + revisions, audit log, engagement schedule. None of this data is shared with the OSC or other C3PAOs.
 
 ## Tech Stack
 

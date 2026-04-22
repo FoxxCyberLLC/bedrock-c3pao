@@ -98,4 +98,100 @@ describe('lib/db', () => {
       expect(callCount2).toBe(callCount1)
     })
   })
+
+  describe('ensureSchema() — readiness tables', () => {
+    it('should create readiness_checklist_items table', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('CREATE TABLE IF NOT EXISTS readiness_checklist_items')
+      expect(allSql).toContain('engagement_id')
+      expect(allSql).toContain('item_key')
+      expect(allSql).toContain('UNIQUE (engagement_id, item_key)')
+    })
+
+    it('should create readiness_artifacts table with bytea content column', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('CREATE TABLE IF NOT EXISTS readiness_artifacts')
+      expect(allSql).toContain('content           BYTEA NOT NULL')
+      expect(allSql).toContain('REFERENCES readiness_checklist_items(id) ON DELETE CASCADE')
+    })
+
+    it('should create assessment_notes table', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('CREATE TABLE IF NOT EXISTS assessment_notes')
+      expect(allSql).toContain('author_id')
+      expect(allSql).toContain('deleted_at')
+    })
+
+    it('should create assessment_note_revisions table', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('CREATE TABLE IF NOT EXISTS assessment_note_revisions')
+      expect(allSql).toContain('REFERENCES assessment_notes(id) ON DELETE CASCADE')
+    })
+
+    it('should create readiness_audit_log table with jsonb details column', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('CREATE TABLE IF NOT EXISTS readiness_audit_log')
+      expect(allSql).toContain('details       JSONB')
+      expect(allSql).toContain('action        TEXT NOT NULL')
+    })
+
+    it('should create engagement_schedule table', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('CREATE TABLE IF NOT EXISTS engagement_schedule')
+      expect(allSql).toContain('engagement_id         TEXT PRIMARY KEY')
+      expect(allSql).toContain('kickoff_date')
+    })
+
+    it('should enable pgcrypto extension', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('CREATE EXTENSION IF NOT EXISTS pgcrypto')
+    })
+
+    it('should create readiness indexes', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('idx_readiness_items_engagement')
+      expect(allSql).toContain('idx_readiness_audit_engagement')
+      expect(allSql).toContain('idx_assessment_notes_engagement')
+    })
+  })
 })
