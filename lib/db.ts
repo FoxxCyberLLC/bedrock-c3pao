@@ -75,6 +75,92 @@ export async function ensureSchema(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS idx_c3pao_reviews_entity
         ON c3pao_internal_reviews (engagement_id, entity_type, entity_id);
+
+      CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+      CREATE TABLE IF NOT EXISTS readiness_checklist_items (
+        id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        engagement_id      TEXT NOT NULL,
+        item_key           TEXT NOT NULL,
+        status             TEXT NOT NULL DEFAULT 'not_started',
+        completed_by       TEXT,
+        completed_by_email TEXT,
+        completed_at       TIMESTAMPTZ,
+        waived_by          TEXT,
+        waived_by_email    TEXT,
+        waived_at          TIMESTAMPTZ,
+        waiver_reason      TEXT,
+        updated_at         TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (engagement_id, item_key)
+      );
+
+      CREATE TABLE IF NOT EXISTS readiness_artifacts (
+        id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        item_id           UUID NOT NULL REFERENCES readiness_checklist_items(id) ON DELETE CASCADE,
+        filename          TEXT NOT NULL,
+        mime_type         TEXT NOT NULL,
+        size_bytes        BIGINT NOT NULL,
+        content           BYTEA NOT NULL,
+        description       TEXT,
+        uploaded_by       TEXT NOT NULL,
+        uploaded_by_email TEXT NOT NULL,
+        uploaded_at       TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS assessment_notes (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        engagement_id TEXT NOT NULL,
+        author_id     TEXT NOT NULL,
+        author_email  TEXT NOT NULL,
+        author_name   TEXT NOT NULL,
+        body          TEXT NOT NULL,
+        created_at    TIMESTAMPTZ DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ DEFAULT NOW(),
+        deleted_at    TIMESTAMPTZ
+      );
+
+      CREATE TABLE IF NOT EXISTS assessment_note_revisions (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        note_id         UUID NOT NULL REFERENCES assessment_notes(id) ON DELETE CASCADE,
+        body            TEXT NOT NULL,
+        edited_by       TEXT NOT NULL,
+        edited_by_email TEXT NOT NULL,
+        revised_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS readiness_audit_log (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        engagement_id TEXT NOT NULL,
+        item_id       UUID,
+        actor_id      TEXT NOT NULL,
+        actor_email   TEXT NOT NULL,
+        actor_name    TEXT NOT NULL,
+        action        TEXT NOT NULL,
+        details       JSONB,
+        created_at    TIMESTAMPTZ DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS engagement_schedule (
+        engagement_id         TEXT PRIMARY KEY,
+        kickoff_date          DATE,
+        onsite_start          DATE,
+        onsite_end            DATE,
+        interview_schedule    TEXT,
+        deliverable_due_dates TEXT,
+        phase_1_target        DATE,
+        phase_2_target        DATE,
+        phase_3_target        DATE,
+        location_notes        TEXT,
+        updated_at            TIMESTAMPTZ DEFAULT NOW(),
+        updated_by            TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_readiness_items_engagement
+        ON readiness_checklist_items(engagement_id);
+      CREATE INDEX IF NOT EXISTS idx_readiness_audit_engagement
+        ON readiness_audit_log(engagement_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_assessment_notes_engagement
+        ON assessment_notes(engagement_id, created_at DESC);
     `)
   })()
 
