@@ -9,9 +9,10 @@ import { ReadOnlyTextArea, DiagramDisplay, ReadOnlyBanner } from './ssp-helpers'
 interface NetworkTabProps {
   ssp: SSPView | null
   sspLoading: boolean
+  engagementId: string
 }
 
-export function NetworkTab({ ssp, sspLoading }: NetworkTabProps) {
+export function NetworkTab({ ssp, sspLoading, engagementId }: NetworkTabProps) {
   if (sspLoading) {
     return (
       <div className="space-y-4">
@@ -49,6 +50,7 @@ export function NetworkTab({ ssp, sspLoading }: NetworkTabProps) {
             label="Network Diagram"
             url={ssp.networkDiagramUrl}
             fileName={ssp.networkDiagramFileName}
+            reviewHref={`/engagements/${engagementId}/ssp/diagrams/network`}
           />
           <ReadOnlyTextArea label="Network Description" value={ssp.networkDiagram} />
           <ReadOnlyTextArea label="Interconnectivity Overview" value={ssp.interconnectivityOverview} />
@@ -66,6 +68,7 @@ export function NetworkTab({ ssp, sspLoading }: NetworkTabProps) {
             label="Data Flow Diagram"
             url={ssp.dataFlowDiagramUrl}
             fileName={ssp.dataFlowDiagramFileName}
+            reviewHref={`/engagements/${engagementId}/ssp/diagrams/dataflow`}
           />
           <ReadOnlyTextArea label="Data Flow Description" value={ssp.dataFlow} />
         </CardContent>

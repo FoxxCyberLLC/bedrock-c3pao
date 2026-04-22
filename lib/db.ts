@@ -57,6 +57,24 @@ export async function ensureSchema(): Promise<void> {
         role TEXT NOT NULL DEFAULT 'admin',
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
+
+      -- C3PAO-internal reviews and comments on evidence/diagrams.
+      -- Per CAP v2.0, the C3PAO only provides MET/NOT_MET verdicts to the OSC —
+      -- no remediation guidance. These notes stay local to the container and are
+      -- never round-tripped through the Go API or surfaced to contractors.
+      CREATE TABLE IF NOT EXISTS c3pao_internal_reviews (
+        id TEXT PRIMARY KEY,
+        engagement_id TEXT NOT NULL,
+        entity_type TEXT NOT NULL CHECK (entity_type IN ('EVIDENCE', 'SSP_DIAGRAM')),
+        entity_id TEXT NOT NULL,
+        reviewer_id TEXT NOT NULL,
+        reviewer_name TEXT NOT NULL,
+        reviewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        comment TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_c3pao_reviews_entity
+        ON c3pao_internal_reviews (engagement_id, entity_type, entity_id);
     `)
   })()
 

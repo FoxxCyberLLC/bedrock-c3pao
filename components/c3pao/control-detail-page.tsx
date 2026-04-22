@@ -38,7 +38,6 @@ import { updateAssessorNotes, getEvidenceDownloadUrlForC3PAO } from '@/app/actio
 import { toast } from 'sonner'
 import { ObjectiveAssessmentCard } from './objective-assessment-card'
 import { OSCObjectiveCard } from './osc-objective-card'
-import { FilePreviewDialog } from './file-preview-dialog'
 import {
   Collapsible,
   CollapsibleContent,
@@ -203,7 +202,6 @@ export function ControlDetailPage({
   const [notesChanged, setNotesChanged] = useState(false)
   const [reqDetailsOpen, setReqDetailsOpen] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
-  const [previewEvidence, setPreviewEvidence] = useState<{ id: string; fileName: string; mimeType: string | null } | null>(null)
 
   const handleEvidenceDownload = async (evidenceId: string, fileName: string) => {
     setDownloadingId(evidenceId)
@@ -483,10 +481,12 @@ export function ControlDetailPage({
                           variant="outline"
                           size="sm"
                           className="flex-1"
-                          onClick={() => setPreviewEvidence({ id: ev.id, fileName: ev.fileName, mimeType: ev.mimeType })}
+                          asChild
                         >
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                          Preview
+                          <Link href={`/engagements/${engagementId}/evidence/${ev.id}`}>
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            Review
+                          </Link>
                         </Button>
                         <Button
                           variant="outline"
@@ -731,16 +731,6 @@ export function ControlDetailPage({
       </div>
     </div>
 
-    {previewEvidence && (
-      <FilePreviewDialog
-        open={previewEvidence !== null}
-        onOpenChange={(open) => !open && setPreviewEvidence(null)}
-        engagementId={engagementId}
-        evidenceId={previewEvidence.id}
-        fileName={previewEvidence.fileName}
-        mimeType={previewEvidence.mimeType}
-      />
-    )}
     </>
   )
 }

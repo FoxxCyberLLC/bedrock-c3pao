@@ -1531,7 +1531,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
 
         {/* Network Tab */}
         <TabsContent value="network">
-          <NetworkTab ssp={sspData} sspLoading={sspLoading} />
+          <NetworkTab ssp={sspData} sspLoading={sspLoading} engagementId={engagement.id} />
         </TabsContent>
 
         {/* Personnel Tab */}

@@ -1,12 +1,8 @@
 'use client'
 
 import Image from 'next/image'
-import { User, Phone, Mail, ZoomIn, ImageOff } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import Link from 'next/link'
+import { User, Phone, Mail, Maximize2, ImageOff } from 'lucide-react'
 
 export function ReadOnlyField({
   label,
@@ -79,14 +75,21 @@ export function ContactCard({
   )
 }
 
+/**
+ * Thumbnail display for an SSP diagram. When `reviewHref` is provided, the
+ * thumbnail is a link to the dedicated review page instead of opening a zoom
+ * dialog — assessors can leave internal review notes there per CAP v2.0.
+ */
 export function DiagramDisplay({
   label,
   url,
   fileName,
+  reviewHref,
 }: {
   label: string
   url: string | null | undefined
   fileName?: string | null
+  reviewHref?: string
 }) {
   if (!url) {
     if (!fileName) return null
@@ -107,40 +110,37 @@ export function DiagramDisplay({
       </div>
     )
   }
+
+  const thumbnail = (
+    <>
+      <Image
+        src={url}
+        alt={label}
+        fill
+        className="object-contain"
+        sizes="(max-width: 768px) 100vw, 800px"
+      />
+      <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
+        <Maximize2 className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+    </>
+  )
+
   return (
     <div className="space-y-2">
       <label className="text-xs font-medium text-muted-foreground">{label}</label>
       <div className="border rounded-lg overflow-hidden bg-muted/30">
-        <Dialog>
-          <DialogTrigger asChild>
-            <button
-              type="button"
-              className="relative w-full aspect-video cursor-zoom-in group"
-            >
-              <Image
-                src={url}
-                alt={label}
-                fill
-                className="object-contain"
-                sizes="(max-width: 768px) 100vw, 800px"
-              />
-              <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/20 transition-colors">
-                <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </button>
-          </DialogTrigger>
-          <DialogContent className="max-w-[90vw] max-h-[90vh] p-0">
-            <div className="relative w-full h-[80vh]">
-              <Image
-                src={url}
-                alt={label}
-                fill
-                className="object-contain"
-                sizes="90vw"
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
+        {reviewHref ? (
+          <Link
+            href={reviewHref}
+            className="relative block w-full aspect-video cursor-pointer group"
+            aria-label={`Open ${label} review page`}
+          >
+            {thumbnail}
+          </Link>
+        ) : (
+          <div className="relative w-full aspect-video group">{thumbnail}</div>
+        )}
       </div>
       {fileName && (
         <p className="text-xs text-muted-foreground">{fileName}</p>

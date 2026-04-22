@@ -85,9 +85,10 @@ interface SSPLongFormReadOnlyProps {
   ssp: SSPData
   families?: Family[]
   atoPackage?: ATOPackage
+  engagementId?: string
 }
 
-export function SSPLongFormReadOnly({ ssp, families = [], atoPackage }: SSPLongFormReadOnlyProps) {
+export function SSPLongFormReadOnly({ ssp, families = [], atoPackage, engagementId }: SSPLongFormReadOnlyProps) {
   const poamSummary = ssp.poamSummary ? JSON.parse(ssp.poamSummary) : null
   const assetInventory = ssp.assetInventorySummary ? JSON.parse(ssp.assetInventorySummary) : null
   const acronyms = ssp.acronyms ? JSON.parse(ssp.acronyms) : {}
@@ -253,6 +254,7 @@ export function SSPLongFormReadOnly({ ssp, families = [], atoPackage }: SSPLongF
             label="Network/Boundary Diagram"
             url={ssp.networkDiagramUrl}
             fileName={ssp.networkDiagramFileName}
+            reviewHref={engagementId ? `/engagements/${engagementId}/ssp/diagrams/network` : undefined}
           />
         </section>
 
@@ -291,6 +293,7 @@ export function SSPLongFormReadOnly({ ssp, families = [], atoPackage }: SSPLongF
             label="Data Flow Diagram"
             url={ssp.dataFlowDiagramUrl}
             fileName={ssp.dataFlowDiagramFileName}
+            reviewHref={engagementId ? `/engagements/${engagementId}/ssp/diagrams/dataflow` : undefined}
           />
           {ssp.dataFlowDiagramUrl && <Separator />}
           <ReadOnlyTextArea label="Identification & Authentication Overview" value={ssp.identificationAuthOverview} />

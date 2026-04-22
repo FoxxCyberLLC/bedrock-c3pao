@@ -41,8 +41,8 @@ import {
 } from '@/components/ui/table'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { toast } from 'sonner'
+import Link from 'next/link'
 import { getEvidenceDownloadUrlForC3PAO } from '@/app/actions/c3pao-dashboard'
-import { FilePreviewDialog } from './file-preview-dialog'
 
 interface Evidence {
   id: string
@@ -116,7 +116,6 @@ const categoryLabels: Record<string, string> = {
 export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
-  const [previewEvidence, setPreviewEvidence] = useState<Evidence | null>(null)
   const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [sortField, setSortField] = useState<SortField>('createdAt')
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc')
@@ -325,10 +324,12 @@ export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) 
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setPreviewEvidence(ev)}
-                          title="Preview"
+                          title="Open review page"
+                          asChild
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <Link href={`/engagements/${engagementId}/evidence/${ev.id}`}>
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
                         </Button>
                         <Button
                           variant="ghost"
@@ -380,13 +381,11 @@ export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) 
                   </div>
                 </div>
                 <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPreviewEvidence(ev)}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-1" />
-                    Preview
+                  <Button variant="ghost" size="sm" asChild>
+                    <Link href={`/engagements/${engagementId}/evidence/${ev.id}`}>
+                      <ExternalLink className="h-4 w-4 mr-1" />
+                      Review
+                    </Link>
                   </Button>
                   <Button
                     variant="ghost"
@@ -423,17 +422,6 @@ export function EvidenceViewer({ evidence, engagementId }: EvidenceViewerProps) 
       <div className="text-xs text-muted-foreground text-center">
         Evidence files are read-only during assessment review
       </div>
-
-      {previewEvidence && (
-        <FilePreviewDialog
-          open={previewEvidence !== null}
-          onOpenChange={(open) => !open && setPreviewEvidence(null)}
-          engagementId={engagementId}
-          evidenceId={previewEvidence.id}
-          fileName={previewEvidence.fileName}
-          mimeType={previewEvidence.mimeType}
-        />
-      )}
     </div>
   )
 }
