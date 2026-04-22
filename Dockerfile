@@ -30,6 +30,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # OpenSSL for self-signed cert generation at startup (Docker mode via start.js)
 RUN apk add --no-cache openssl
 
+# Strip the bundled npm CLI — not needed at runtime (we just run `node start.js`)
+# and it ships with vulnerable transitive deps (cross-spawn, glob, minimatch, tar)
+# that we can't patch via package.json overrides.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+           /usr/local/bin/npm \
+           /usr/local/bin/npx
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
