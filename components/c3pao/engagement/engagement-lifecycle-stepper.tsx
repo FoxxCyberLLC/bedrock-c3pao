@@ -26,6 +26,14 @@ import type { EngagementPhase, EngagementPhaseName } from '@/lib/api-client'
 
 interface EngagementLifecycleStepperProps {
   engagementId: string
+  /**
+   * Server-fetched phase snapshot. When provided, the stepper renders
+   * immediately with this data (skipping the initial client fetch) and
+   * re-renders whenever the prop changes — making `router.refresh()`
+   * sufficient to reflect phase transitions (fixes a stale-prop bug
+   * where the stepper showed PRE_ASSESS after Start Assessment).
+   */
+  initialPhase?: EngagementPhase | null
 }
 
 interface StepDef {
@@ -50,17 +58,24 @@ const phaseOrder: Record<EngagementPhaseName, number> = {
 
 export function EngagementLifecycleStepper({
   engagementId,
+  initialPhase = null,
 }: EngagementLifecycleStepperProps) {
-  const [phase, setPhase] = useState<EngagementPhase | null>(null)
-  const [loading, setLoading] = useState(true)
+  // Client-fetched phase for the no-prop case. When `initialPhase` is
+  // provided, the prop itself is the source of truth — no client sync
+  // effect is needed, and `router.refresh()` re-renders with fresh data.
+  const [clientPhase, setClientPhase] = useState<EngagementPhase | null>(null)
+  const [loading, setLoading] = useState(initialPhase === null)
+  const phase = initialPhase ?? clientPhase
 
   useEffect(() => {
+    // Only fetch on the client if the server didn't provide a snapshot.
+    if (initialPhase) return
     let cancelled = false
     async function load() {
       const result = await getEngagementPhase(engagementId)
       if (cancelled) return
       if (result.success && result.data) {
-        setPhase(result.data)
+        setClientPhase(result.data)
       }
       setLoading(false)
     }
@@ -68,7 +83,7 @@ export function EngagementLifecycleStepper({
     return () => {
       cancelled = true
     }
-  }, [engagementId])
+  }, [engagementId, initialPhase])
 
   if (loading) {
     return (
@@ -128,8 +143,10 @@ export function EngagementLifecycleStepper({
                   <div className="min-w-0">
                     <p
                       className={cn(
-                        'text-sm font-medium truncate',
-                        isFuture && 'text-muted-foreground',
+                        'text-sm truncate',
+                        isCurrent && 'font-semibold text-foreground',
+                        isDone && 'font-medium text-foreground',
+                        isFuture && 'font-normal text-muted-foreground',
                       )}
                     >
                       {step.label}

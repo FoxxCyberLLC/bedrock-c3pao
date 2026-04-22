@@ -84,7 +84,7 @@ import { CheckinCard } from './checkin-card'
 import { getEngagementTeam } from '@/app/actions/c3pao-team-assignment'
 import type { AuditEntry, ReadinessChecklist } from '@/lib/readiness-types'
 import type { EngagementSchedule as EngagementScheduleData } from '@/lib/db-schedule'
-import type { EngagementSummary } from '@/lib/api-client'
+import type { EngagementPhase, EngagementSummary } from '@/lib/api-client'
 
 type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER' | string
 // Prisma types replaced - data comes from SaaS API as JSON
@@ -321,6 +321,7 @@ interface EngagementDetailProps {
   initialChecklist: ReadinessChecklist
   initialAuditEntries: AuditEntry[]
   initialSchedule: EngagementScheduleData | null
+  initialPhase: EngagementPhase | null
   currentPhase: string | null
 }
 
@@ -330,6 +331,7 @@ export function EngagementDetail({
   initialChecklist,
   initialAuditEntries,
   initialSchedule,
+  initialPhase,
   currentPhase,
 }: EngagementDetailProps) {
   const router = useRouter()
@@ -807,7 +809,10 @@ export function EngagementDetail({
 
       {/* CAP v2.0 lifecycle stepper (Task 14) */}
       {engagement.status !== 'CANCELLED' && (
-        <EngagementLifecycleStepper engagementId={engagement.id} />
+        <EngagementLifecycleStepper
+          engagementId={engagement.id}
+          initialPhase={initialPhase}
+        />
       )}
 
       {/* Header */}

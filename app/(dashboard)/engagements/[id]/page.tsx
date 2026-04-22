@@ -11,6 +11,7 @@ import { EngagementDetail } from '@/components/c3pao/engagement-detail'
 import { LimitedEngagementDetail } from '@/components/c3pao/limited-engagement-detail'
 import type { AuditEntry, ReadinessChecklist } from '@/lib/readiness-types'
 import type { EngagementSchedule } from '@/lib/db-schedule'
+import type { EngagementPhase } from '@/lib/api-client'
 
 const EMPTY_CHECKLIST: ReadinessChecklist = {
   engagementId: '',
@@ -66,10 +67,9 @@ export default async function EngagementDetailPage({
       : []
   const initialSchedule: EngagementSchedule | null =
     scheduleResult.success && scheduleResult.data ? scheduleResult.data : null
-  const currentPhase: string | null =
-    phaseResult.success && phaseResult.data?.currentPhase
-      ? phaseResult.data.currentPhase
-      : null
+  const initialPhase: EngagementPhase | null =
+    phaseResult.success && phaseResult.data ? phaseResult.data : null
+  const currentPhase: string | null = initialPhase?.currentPhase ?? null
 
   // For read-only and assess access, show full engagement detail
   return (
@@ -80,6 +80,7 @@ export default async function EngagementDetailPage({
       initialChecklist={initialChecklist}
       initialAuditEntries={initialAuditEntries}
       initialSchedule={initialSchedule}
+      initialPhase={initialPhase}
       currentPhase={currentPhase}
     />
   )
