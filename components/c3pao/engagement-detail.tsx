@@ -1521,7 +1521,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
 
         {/* Overview Tab */}
         <TabsContent value="overview">
-          <OverviewTab ssp={sspData} sspLoading={sspLoading} engagementName={pkg?.name} />
+          <OverviewTab ssp={sspData} sspLoading={sspLoading} engagementName={pkg?.name} engagementId={engagement.id} />
         </TabsContent>
 
         {/* System Profile Tab */}
@@ -1620,7 +1620,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
         {/* STIGs Tab */}
         <TabsContent value="stigs">
           {pkg?.id ? (
-            <STIGViewer packageId={pkg.id} engagementId={engagement.id} assessmentModeActive={engagement.assessmentModeActive} />
+            <STIGViewer engagementId={engagement.id} assessmentModeActive={engagement.assessmentModeActive} />
           ) : (
             <Card>
               <CardContent className="py-12 text-center">

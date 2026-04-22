@@ -1275,6 +1275,79 @@ export async function updatePreAssess(
   )
 }
 
+// ---- Customer readiness (OSC pre-assessment coordination) ----
+
+/**
+ * Per-engagement, per-item-type readiness row returned by
+ * GET /api/c3pao/assessments/{id}/customer-readiness.
+ *
+ * Rows are sparse — missing rows default to NOT_STARTED status with no
+ * customer note or C3PAO confirmation. The C3PAO side can mark items as
+ * confirmed via POST /api/c3pao/assessments/{id}/customer-readiness/{itemType}/confirm.
+ */
+export type CustomerReadinessItemType =
+  | 'FINAL_SSP'
+  | 'ASSESSMENT_SCOPE_CONFIRMED'
+  | 'ASSET_INVENTORY'
+  | 'NETWORK_DIAGRAMS'
+  | 'DATA_FLOW_DIAGRAMS'
+  | 'POLICIES_PROCEDURES'
+  | 'PRIOR_VALIDATIONS'
+  | 'PERSONNEL_AVAILABILITY'
+
+export interface CustomerReadinessItem {
+  itemType: CustomerReadinessItemType
+  status: string
+  customerNote?: string | null
+  evidenceUrl?: string | null
+  c3paoConfirmedAt?: string | null
+  lastUpdatedAt?: string | null
+  lastUpdatedByType?: string | null
+}
+
+export async function fetchCustomerReadiness(
+  engagementId: string,
+  token: string,
+): Promise<CustomerReadinessItem[]> {
+  return apiRequest<CustomerReadinessItem[]>(
+    `/api/c3pao/assessments/${engagementId}/customer-readiness`,
+    { token },
+  )
+}
+
+export async function confirmCustomerReadinessItem(
+  engagementId: string,
+  itemType: CustomerReadinessItemType,
+  token: string,
+): Promise<CustomerReadinessItem> {
+  return apiRequest<CustomerReadinessItem>(
+    `/api/c3pao/assessments/${engagementId}/customer-readiness/${itemType}/confirm`,
+    { method: 'POST', token },
+  )
+}
+
+// ---- C3PAO License (seats, concurrent assessments, cert level) ----
+
+export interface C3PAOLicense {
+  id: string
+  licenseKey: string
+  type: string
+  status: string
+  maxSeats: number
+  maxAssessmentsPerYear: number
+  maxConcurrentAssessments: number
+  maxStandaloneInstances: number
+  currentUsers: number
+  currentAssessments: number
+  currentInstances: number
+  billingPeriod: string
+  expiresAt: string | null
+}
+
+export async function fetchLicense(token: string): Promise<C3PAOLicense> {
+  return apiRequest<C3PAOLicense>(`/api/c3pao/license`, { token })
+}
+
 // ---- Conflicts of Interest register (Task 10) ----
 
 export interface COIDisclosure {

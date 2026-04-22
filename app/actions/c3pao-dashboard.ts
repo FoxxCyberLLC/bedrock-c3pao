@@ -4,6 +4,8 @@ import { requireAuth } from '@/lib/auth'
 import type { CMMCStatus } from '@/lib/cmmc/status-determination'
 import {
   fetchProfile,
+  fetchLicense,
+  type C3PAOLicense,
   updateProfile,
   updateEngagementStatus as apiUpdateEngagementStatus,
   toggleAssessmentMode,
@@ -61,6 +63,18 @@ export async function getCurrentC3PAOUser() {
 
 export async function updateAssessorNotes(...args: Parameters<typeof _updateNotes>) {
   return _updateNotes(...args)
+}
+
+// ---- License ----
+
+export async function getC3PAOLicense(): Promise<{ success: boolean; data?: C3PAOLicense; error?: string }> {
+  try {
+    const token = await getToken()
+    const data = await fetchLicense(token)
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to load license' }
+  }
 }
 
 // ---- Profile ----

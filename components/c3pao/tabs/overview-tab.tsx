@@ -6,11 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { SSPView } from '@/lib/api-client'
 import { ReadOnlyField, ReadOnlyBanner } from './ssp-helpers'
+import { PreAssessmentSummaryCard } from '../pre-assessment-summary-card'
 
 interface OverviewTabProps {
   ssp: SSPView | null
   sspLoading: boolean
   engagementName?: string | null
+  engagementId: string
 }
 
 const SSP_STATUS_COLORS: Record<string, string> = {
@@ -20,7 +22,7 @@ const SSP_STATUS_COLORS: Record<string, string> = {
   ARCHIVED: 'secondary',
 }
 
-export function OverviewTab({ ssp, sspLoading, engagementName }: OverviewTabProps) {
+export function OverviewTab({ ssp, sspLoading, engagementName, engagementId }: OverviewTabProps) {
   if (sspLoading) {
     return (
       <div className="space-y-4">
@@ -32,15 +34,18 @@ export function OverviewTab({ ssp, sspLoading, engagementName }: OverviewTabProp
 
   if (!ssp) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-          <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
-          <p className="text-lg font-medium">No SSP data available</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            The OSC has not yet created a System Security Plan for this engagement.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="space-y-4">
+        <PreAssessmentSummaryCard engagementId={engagementId} />
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
+            <p className="text-lg font-medium">No SSP data available</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              The OSC has not yet created a System Security Plan for this engagement.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     )
   }
 
@@ -50,6 +55,8 @@ export function OverviewTab({ ssp, sspLoading, engagementName }: OverviewTabProp
   return (
     <div className="space-y-4">
       <ReadOnlyBanner />
+
+      <PreAssessmentSummaryCard engagementId={engagementId} />
 
       {/* System header */}
       <Card>

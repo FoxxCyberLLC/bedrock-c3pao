@@ -44,6 +44,7 @@ import {
 } from '@/app/actions/c3pao-preassess'
 import { updateEngagementPhase } from '@/app/actions/c3pao-phase'
 import type { PreAssessChecklist } from '@/lib/api-client'
+import { CustomerReadinessPanel } from './customer-readiness-panel'
 
 interface PreAssessmentWorkspaceProps {
   engagementId: string
@@ -420,6 +421,11 @@ export function PreAssessmentWorkspace({
           Only lead assessors can update the pre-assessment checklist.
         </p>
       )}
+
+      <CustomerReadinessPanel
+        engagementId={engagementId}
+        isLeadAssessor={isLeadAssessor}
+      />
     </div>
   )
 }

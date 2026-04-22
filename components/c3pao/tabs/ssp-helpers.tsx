@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { User, Phone, Mail, ZoomIn } from 'lucide-react'
+import { User, Phone, Mail, ZoomIn, ImageOff } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -88,7 +88,25 @@ export function DiagramDisplay({
   url: string | null | undefined
   fileName?: string | null
 }) {
-  if (!url) return null
+  if (!url) {
+    if (!fileName) return null
+    // OSC uploaded a diagram but the presigned URL couldn't be resolved
+    // (typically: OSC organization has no s3BucketName configured). Show an
+    // explicit placeholder so the assessor knows a diagram exists and who to chase.
+    return (
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-muted-foreground">{label}</label>
+        <div className="border border-dashed rounded-lg bg-muted/30 aspect-video flex flex-col items-center justify-center gap-2 text-center p-4">
+          <ImageOff className="h-8 w-8 text-muted-foreground/60" />
+          <p className="text-sm font-medium">Diagram unavailable</p>
+          <p className="text-xs text-muted-foreground max-w-md">
+            {fileName} was uploaded by the OSC but cannot be displayed.
+            Contact support — the organization&apos;s storage configuration is incomplete.
+          </p>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="space-y-2">
       <label className="text-xs font-medium text-muted-foreground">{label}</label>

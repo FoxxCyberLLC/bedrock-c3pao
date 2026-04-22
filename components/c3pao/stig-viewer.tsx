@@ -20,12 +20,11 @@ import { getSTIGTargets, getSTIGStatistics } from '@/app/actions/stig'
 import type { STIGStatistics, STIGTargetWithStats } from '@/lib/stig/types'
 
 interface STIGViewerProps {
-  packageId: string
   engagementId: string
   assessmentModeActive?: boolean
 }
 
-export function STIGViewer({ packageId, engagementId, assessmentModeActive = false }: STIGViewerProps) {
+export function STIGViewer({ engagementId, assessmentModeActive = false }: STIGViewerProps) {
   const [loading, setLoading] = useState(true)
   const [statistics, setStatistics] = useState<STIGStatistics | null>(null)
   const [targets, setTargets] = useState<STIGTargetWithStats[]>([])
@@ -35,8 +34,8 @@ export function STIGViewer({ packageId, engagementId, assessmentModeActive = fal
       setLoading(true)
       try {
         const [statsResult, targetsResult] = await Promise.all([
-          getSTIGStatistics(packageId),
-          getSTIGTargets(packageId),
+          getSTIGStatistics(engagementId),
+          getSTIGTargets(engagementId),
         ])
 
         if (statsResult.success && statsResult.data) {
@@ -53,7 +52,7 @@ export function STIGViewer({ packageId, engagementId, assessmentModeActive = fal
     }
 
     loadData()
-  }, [packageId])
+  }, [engagementId])
 
   if (loading) {
     return (

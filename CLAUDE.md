@@ -111,3 +111,44 @@ async function action(): Promise<{ success: boolean; data?: T; error?: string }>
 - **Instance API key format**: must start with `bri-`
 - `lib/pdf-generator.ts` and `lib/stig/cci-to-cmmc.ts` have `@ts-nocheck` — legacy Prisma refs, not used in production flow
 - `lib/prisma-types.ts` — stub types replacing Prisma-generated types (no actual Prisma dependency)
+
+## gstack (REQUIRED — global install)
+
+**Before doing ANY work, verify gstack is installed:**
+
+```bash
+test -d ~/.claude/skills/gstack/bin && echo "GSTACK_OK" || echo "GSTACK_MISSING"
+```
+
+If GSTACK_MISSING: STOP. Do not proceed. Tell the user:
+
+> gstack is required for all AI-assisted work in this repo.
+> Install it:
+> ```bash
+> git clone --depth 1 https://github.com/garrytan/gstack.git ~/.claude/skills/gstack
+> cd ~/.claude/skills/gstack && ./setup --team
+> ```
+> Then restart your AI coding tool.
+
+Do not skip skills, ignore gstack errors, or work around missing gstack.
+
+Using gstack skills: After install, skills like /gstack-qa, /gstack-ship, /gstack-review,
+/gstack-investigate, and /gstack-browse are available. Use /gstack-browse for all web browsing.
+Use ~/.claude/skills/gstack/... for gstack file paths (the global path).
+
+## Skill routing
+
+When the user's request matches an available skill, ALWAYS invoke it using the Skill
+tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
+
+Key routing rules:
+- Container errors, SQLite failures, dual-auth issues, offline mode bugs → invoke investigate
+- Instance config, encryption key, API connectivity problems → invoke investigate
+- QA the assessor container, test the assessment workflow, test STIG import → invoke qa
+- Security audit, encryption review, instance key management, auth flows → invoke cso
+- Architecture, dual-auth design, offline-first patterns → invoke plan-eng-review
+- Visual design, assessment UI polish → invoke design-review
+- Diff check, pre-PR review → invoke review
+- Ship, build container image, create PR → invoke ship
+- CMMC assessment workflow design, new feature brainstorm → invoke office-hours
+- Weekly retro → invoke retro

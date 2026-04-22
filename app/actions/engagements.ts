@@ -149,6 +149,16 @@ export async function getEngagementControls(engagementId: string): Promise<{ suc
   }
 }
 
+export async function getEngagementObjectives(engagementId: string): Promise<{ success: boolean; data?: ObjectiveView[]; error?: string }> {
+  try {
+    const token = await getToken()
+    const objectives = await fetchObjectives(engagementId, token)
+    return { success: true, data: objectives }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to load objectives' }
+  }
+}
+
 export async function getEngagementEvidence(engagementId: string): Promise<{ success: boolean; data?: EvidenceView[]; error?: string }> {
   try {
     const token = await getToken()
@@ -292,9 +302,13 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
         }],
         // OSC self-assessment context (package-scoped)
         oscStatuses: [{
+          status: o.oscStatus,
           implementationStatement: o.oscImplementationStatement,
           evidenceDescription: o.oscEvidenceDescription,
           assessmentNotes: o.oscAssessmentNotes,
+          policyReference: o.oscPolicyReference,
+          procedureReference: o.oscProcedureReference,
+          responsibilityDescription: o.oscResponsibilityDescription,
         }],
       })),
     },
@@ -372,5 +386,139 @@ export async function getEngagementControlDetail(engagementId: string, controlId
     }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load control detail' }
+  }
+}
+
+// Shape controls + objectives into the `families[]` structure the SSP long-form renderer expects.
+// The SSP is an OSC-authored document, so objective-level fields (implementation statement,
+// policy/procedure references, evidence description) come from the OSC self-assessment row,
+// not the c3pao assessor verdict.
+interface SSPFamily {
+  id: string
+  code: string
+  name: string
+  requirements: Array<{
+    id: string
+    requirementId: string
+    title: string
+    basicRequirement: string
+    derivedRequirement: string | null
+    objectives: Array<{
+      id: string
+      objectiveReference: string
+      description: string
+      statuses: Array<{
+        id: string
+        status: string
+        implementationStatement: string | null
+        policyReference: string | null
+        procedureReference: string | null
+        evidenceDescription: string | null
+        inheritedStatus: string | null
+        responsibilityDescription: string | null
+      }>
+    }>
+    statuses: Array<{
+      id: string
+      status: string
+      implementationNotes: string | null
+      implementationType: string | null
+      processOwner: string | null
+      processOperator: string | null
+      occurrence: string | null
+      technologyInUse: string | null
+      documentationLocation: string | null
+      supportingPolicy: string | null
+      supportingStandard: string | null
+      supportingProcedure: string | null
+    }>
+  }>
+}
+
+function shapeFamiliesForSSP(
+  controls: ControlView[],
+  objectives: ObjectiveView[],
+): SSPFamily[] {
+  const objMap = groupObjectivesByRequirement(objectives)
+  const familyMap = new Map<string, SSPFamily>()
+
+  for (const c of controls) {
+    let family = familyMap.get(c.familyCode)
+    if (!family) {
+      family = {
+        id: c.familyCode,
+        code: c.familyCode,
+        name: c.familyName,
+        requirements: [],
+      }
+      familyMap.set(c.familyCode, family)
+    }
+
+    const objs = objMap.get(c.requirementId) || []
+    family.requirements.push({
+      id: c.id,
+      requirementId: c.requirementId,
+      title: c.title,
+      basicRequirement: c.basicRequirement,
+      derivedRequirement: null,
+      objectives: objs.map(o => ({
+        id: o.id,
+        objectiveReference: o.objectiveReference,
+        description: o.description,
+        // SSP context → OSC self-assessment fields
+        statuses: [{
+          id: o.id,
+          status: o.oscStatus || 'NOT_ASSESSED',
+          implementationStatement: o.oscImplementationStatement,
+          policyReference: o.oscPolicyReference,
+          procedureReference: o.oscProcedureReference,
+          evidenceDescription: o.oscEvidenceDescription,
+          inheritedStatus: o.inheritedStatus,
+          responsibilityDescription: o.oscResponsibilityDescription,
+        }],
+      })),
+      statuses: [{
+        id: c.requirementStatusId || c.id,
+        status: c.status || 'NOT_STARTED',
+        implementationNotes: c.implementationNotes,
+        implementationType: c.implementationType,
+        processOwner: c.processOwner,
+        processOperator: null,
+        occurrence: null,
+        technologyInUse: null,
+        documentationLocation: null,
+        supportingPolicy: null,
+        supportingStandard: null,
+        supportingProcedure: null,
+      }],
+    })
+  }
+
+  return Array.from(familyMap.values())
+}
+
+export async function getSSPBundleForC3PAO(
+  engagementId: string,
+): Promise<{ success: boolean; data?: { ssp: SSPView; families: SSPFamily[] }; error?: string }> {
+  try {
+    const token = await getToken()
+    const [sspResult, controlsResult, objectivesResult] = await Promise.allSettled([
+      fetchSSP(engagementId, token),
+      fetchControls(engagementId, token),
+      fetchObjectives(engagementId, token),
+    ])
+
+    if (sspResult.status !== 'fulfilled') {
+      const err = sspResult.reason
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to load SSP' }
+    }
+
+    const controls = controlsResult.status === 'fulfilled' ? controlsResult.value : []
+    const objectives = objectivesResult.status === 'fulfilled' ? objectivesResult.value : []
+    const families = shapeFamiliesForSSP(controls, objectives)
+
+    return { success: true, data: { ssp: sspResult.value, families } }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to load SSP bundle' }
   }
 }

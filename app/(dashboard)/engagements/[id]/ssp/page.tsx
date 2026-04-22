@@ -8,7 +8,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { requireAuth } from '@/lib/auth'
-import { getSSPLongFormDataForC3PAO } from '@/app/actions/c3pao-dashboard'
+import { getSSPBundleForC3PAO } from '@/app/actions/engagements'
 import { SSPStatusBadge } from '@/components/ssp/SSPStatusBadge'
 import { SSPLongFormReadOnly } from '@/components/c3pao/ssp-long-form-read-only'
 
@@ -23,7 +23,7 @@ export default async function C3PAOSSPReviewPage({ params }: PageProps) {
   }
 
   const { id: engagementId } = await params
-  const result = await getSSPLongFormDataForC3PAO(engagementId)
+  const result = await getSSPBundleForC3PAO(engagementId)
 
   if (!result.success || !result.data) {
     if (result.error === 'No SSP found for this package') {
@@ -84,8 +84,7 @@ export default async function C3PAOSSPReviewPage({ params }: PageProps) {
     )
   }
 
-  // API returns flat SSPView object
-  const ssp = result.data
+  const { ssp, families } = result.data
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -119,6 +118,7 @@ export default async function C3PAOSSPReviewPage({ params }: PageProps) {
 
       <SSPLongFormReadOnly
         ssp={ssp}
+        families={families}
       />
     </div>
   )

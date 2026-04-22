@@ -23,6 +23,7 @@ import { AppSidebar } from '@/components/app-sidebar'
 import { AppHeader } from '@/components/app-header'
 import { CommandMenu } from '@/components/command-menu'
 import { NotificationsBell } from '@/components/notifications-bell'
+import { LicenseBadge } from '@/components/license-badge'
 import { ShellErrorBoundary } from '@/components/shell-error-boundary'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { useCommandMenu } from '@/hooks/use-command-menu'
@@ -48,7 +49,12 @@ export function AppShell({ user, children }: AppShellProps) {
           <AppHeader
             user={user}
             onOpenCommandMenu={commandMenu.toggle}
-            notificationsSlot={<NotificationsBell />}
+            notificationsSlot={
+              <>
+                <LicenseBadge />
+                <NotificationsBell />
+              </>
+            }
           />
           <main className="flex-1 p-4 md:p-6">{children}</main>
         </SidebarInset>
