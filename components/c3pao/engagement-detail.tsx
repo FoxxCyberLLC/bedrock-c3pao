@@ -14,7 +14,6 @@ import {
   XCircle,
   AlertTriangle,
   Eye,
-  MessageSquare,
   Loader2,
   Calendar,
   User,
@@ -33,7 +32,7 @@ import {
   FileDown,
   FolderOpen,
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -74,13 +73,18 @@ import { EngagementTeamCard } from './engagement-team-card'
 import { ConflictDialog } from './conflict-dialog'
 import { STIGViewer } from './stig-viewer'
 import { AssessmentPlanningBoard } from './assessment-planning-board'
-import { PreAssessmentWorkspace } from './engagement/pre-assessment-workspace'
-import { EngagementComments } from './engagement/engagement-comments'
 import { EngagementLifecycleStepper } from './engagement/engagement-lifecycle-stepper'
+import { EngagementOverview } from './engagement/engagement-overview'
+import { EngagementSchedule } from './engagement/engagement-schedule'
+import { ReadinessWorkspace } from './readiness/readiness-workspace'
+import { NotesPanel } from './notes/notes-panel'
 import { AssessmentProgressTracker } from './assessment-progress-tracker'
 import { FindingsReviewQueue } from './findings-review-queue'
 import { CheckinCard } from './checkin-card'
 import { getEngagementTeam } from '@/app/actions/c3pao-team-assignment'
+import type { AuditEntry, ReadinessChecklist } from '@/lib/readiness-types'
+import type { EngagementSchedule as EngagementScheduleData } from '@/lib/db-schedule'
+import type { EngagementSummary } from '@/lib/api-client'
 
 type EngagementAssessorRole = 'LEAD_ASSESSOR' | 'ASSESSOR' | 'OBSERVER' | string
 // Prisma types replaced - data comes from SaaS API as JSON
@@ -224,6 +228,51 @@ function mapRequirementStatus(status: string): 'MET' | 'NOT_MET' | 'NOT_APPLICAB
   }
 }
 
+/** Convert an ISO date or Date object to an ISO string, defensively. */
+function toIsoString(value: Date | string | null | undefined): string | null {
+  if (!value) return null
+  if (value instanceof Date) return value.toISOString()
+  return value
+}
+
+/**
+ * Shape the locally-held engagement data into the `EngagementSummary` DTO the
+ * `<EngagementOverview>` subtab expects. Fields the detail component never
+ * loads (scheduledStartDate, accessLevel, etc.) fall back to sane defaults.
+ */
+function buildEngagementSummary(
+  engagement: EngagementDetailProps['engagement'],
+): EngagementSummary {
+  return {
+    id: engagement.id,
+    customerId: engagement.atoPackage?.organization?.id ?? '',
+    atoPackageId: engagement.atoPackage?.id ?? '',
+    c3paoId: '',
+    leadAssessorId: engagement.leadAssessor?.id ?? null,
+    status: engagement.status,
+    accessLevel: '',
+    targetLevel: engagement.targetLevel,
+    requestedDate: toIsoString(engagement.createdAt) ?? '',
+    acceptedDate: toIsoString(engagement.acceptedDate),
+    scheduledStartDate: null,
+    scheduledEndDate: null,
+    actualStartDate: toIsoString(engagement.actualStartDate),
+    actualCompletionDate: toIsoString(engagement.actualCompletionDate),
+    assessmentScope: null,
+    assessmentNotes: engagement.assessmentNotes,
+    assessmentResult: engagement.assessmentResult,
+    findingsCount: null,
+    poamRequired: null,
+    assessmentModeActive: engagement.assessmentModeActive,
+    createdAt: toIsoString(engagement.createdAt) ?? '',
+    updatedAt: toIsoString(engagement.updatedAt) ?? '',
+    packageName: engagement.atoPackage?.name ?? 'Unknown Package',
+    organizationName:
+      engagement.atoPackage?.organization?.name ?? 'Unknown Organization',
+    leadAssessorName: engagement.leadAssessor?.name ?? null,
+  }
+}
+
 interface EngagementDetailProps {
   engagement: {
     id: string
@@ -269,9 +318,20 @@ interface EngagementDetailProps {
     email: string
     isLeadAssessor: boolean
   }
+  initialChecklist: ReadinessChecklist
+  initialAuditEntries: AuditEntry[]
+  initialSchedule: EngagementScheduleData | null
+  currentPhase: string | null
 }
 
-export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
+export function EngagementDetail({
+  engagement,
+  user,
+  initialChecklist,
+  initialAuditEntries,
+  initialSchedule,
+  currentPhase,
+}: EngagementDetailProps) {
   const router = useRouter()
   const [isUpdating, setIsUpdating] = useState(false)
   const [notes, setNotes] = useState(engagement.assessmentNotes || '')
@@ -321,7 +381,7 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
     const defaults: Record<NavSection, string> = {
       package: 'overview',
       assessment: 'planning',
-      engagement: 'team',
+      engagement: 'engagement-overview',
     }
     setSection(newSection)
     setTabValue(defaults[newSection])
@@ -1502,18 +1562,13 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           )}
           {section === 'engagement' && (
             <>
-              <TabsTrigger value="team" className="gap-2">
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Team</span>
-                <Badge variant="secondary" className="ml-1">{team.length}</Badge>
-              </TabsTrigger>
-              <TabsTrigger value="notes" className="gap-2">
-                <MessageSquare className="h-4 w-4" />
-                <span className="hidden sm:inline">Notes</span>
-              </TabsTrigger>
-              <TabsTrigger value="details" className="gap-2">
+              <TabsTrigger value="engagement-overview" className="gap-2">
                 <Eye className="h-4 w-4" />
-                <span className="hidden sm:inline">Details</span>
+                <span className="hidden sm:inline">Overview</span>
+              </TabsTrigger>
+              <TabsTrigger value="schedule-logistics" className="gap-2">
+                <Calendar className="h-4 w-4" />
+                <span className="hidden sm:inline">Schedule &amp; Logistics</span>
               </TabsTrigger>
             </>
           )}
@@ -1566,12 +1621,30 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           <PoliciesTab ssp={sspData} sspLoading={sspLoading} />
         </TabsContent>
 
-        {/* Planning Tab — CAP v2.0 pre-assessment readiness workspace + scope/methodology */}
+        {/* Planning Tab — readiness workspace + team card + planning board */}
         <TabsContent value="planning" className="space-y-6">
-          <PreAssessmentWorkspace
+          <ReadinessWorkspace
             engagementId={engagement.id}
-            isLeadAssessor={user.isLeadAssessor}
+            initialChecklist={initialChecklist}
+            initialAuditEntries={initialAuditEntries}
+            isLead={user.isLeadAssessor}
+            currentUserEmail={user.email}
           />
+          {loadingTeam ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+                <p className="mt-2 text-muted-foreground">Loading team...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <EngagementTeamCard
+              engagementId={engagement.id}
+              team={team as any}
+              isLeadAssessor={user.isLeadAssessor}
+              onTeamUpdated={loadTeam}
+            />
+          )}
           <AssessmentPlanningBoard
             engagementId={engagement.id}
             isLeadAssessor={user.isLeadAssessor}
@@ -1584,10 +1657,15 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
         </TabsContent>
 
         {/* Review Tab */}
-        <TabsContent value="review">
+        <TabsContent value="review" className="space-y-6">
           <FindingsReviewQueue
             engagementId={engagement.id}
             isLeadAssessor={user.isLeadAssessor}
+          />
+          <NotesPanel
+            engagementId={engagement.id}
+            currentUserId={user.id}
+            leadAssessorId={engagement.leadAssessor?.id ?? null}
           />
         </TabsContent>
 
@@ -1662,127 +1740,22 @@ export function EngagementDetail({ engagement, user }: EngagementDetailProps) {
           </Card>
         </TabsContent>
 
-        {/* Team Tab */}
-        <TabsContent value="team">
-          {loadingTeam ? (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
-                <p className="mt-2 text-muted-foreground">Loading team...</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <EngagementTeamCard
-              engagementId={engagement.id}
-              team={team as any}
-              isLeadAssessor={user.isLeadAssessor}
-              onTeamUpdated={loadTeam}
-            />
-          )}
+        {/* Engagement — Overview Tab */}
+        <TabsContent value="engagement-overview">
+          <EngagementOverview
+            engagement={buildEngagementSummary(engagement)}
+            currentPhase={currentPhase}
+            isLead={user.isLeadAssessor}
+          />
         </TabsContent>
 
-        {/* Details Tab */}
-        <TabsContent value="details">
-          <Card>
-            <CardHeader>
-              <CardTitle>Engagement Details</CardTitle>
-              <CardDescription>
-                Timeline and engagement information
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Timeline */}
-              <div>
-                <h4 className="text-sm font-medium mb-3">Timeline</h4>
-                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                  <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                    <Calendar className="h-5 w-5 text-muted-foreground mt-0.5" />
-                    <div>
-                      <div className="text-xs text-muted-foreground">Request Date</div>
-                      <div className="font-medium">{safeDate(engagement.createdAt) ? format(safeDate(engagement.createdAt)!, 'PPP') : '—'}</div>
-                    </div>
-                  </div>
-                  {engagement.acceptedDate && (
-                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                      <CheckCircle2 className="h-5 w-5 text-green-500 mt-0.5" />
-                      <div>
-                        <div className="text-xs text-muted-foreground">Accepted Date</div>
-                        <div className="font-medium">{safeDate(engagement.acceptedDate) ? format(safeDate(engagement.acceptedDate)!, 'PPP') : '—'}</div>
-                      </div>
-                    </div>
-                  )}
-                  {engagement.actualStartDate && (
-                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                      <Clock className="h-5 w-5 text-blue-500 mt-0.5" />
-                      <div>
-                        <div className="text-xs text-muted-foreground">Assessment Started</div>
-                        <div className="font-medium">{safeDate(engagement.actualStartDate) ? format(safeDate(engagement.actualStartDate)!, 'PPP') : '—'}</div>
-                      </div>
-                    </div>
-                  )}
-                  {engagement.actualCompletionDate && (
-                    <div className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5" />
-                      <div>
-                        <div className="text-xs text-muted-foreground">Assessment Completed</div>
-                        <div className="font-medium">{safeDate(engagement.actualCompletionDate) ? format(safeDate(engagement.actualCompletionDate)!, 'PPP') : '—'}</div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Customer Notes */}
-              {engagement.customerNotes && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Customer Notes</h4>
-                  <div className="bg-muted/50 p-4 rounded-lg">
-                    <p className="text-sm whitespace-pre-wrap">{engagement.customerNotes}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Package Info */}
-              {pkg && (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Package Information</h4>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="text-xs text-muted-foreground">Package Name</div>
-                      <div className="font-medium">{pkg.name}</div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="text-xs text-muted-foreground">CMMC Level</div>
-                      <div className="font-medium">{pkg.cmmcLevel.replace('_', ' ')}</div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="text-xs text-muted-foreground">Organization</div>
-                      <div className="font-medium">{pkg.organization?.name || 'Unknown'}</div>
-                    </div>
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <div className="text-xs text-muted-foreground">Target Level</div>
-                      <div className="font-medium">{engagement.targetLevel.replace('_', ' ')}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Notes Tab — Task 13a comment thread with @mentions */}
-        <TabsContent value="notes">
-          <Card>
-            <CardHeader>
-              <CardTitle>Team Discussion</CardTitle>
-              <CardDescription>
-                Comments are visible to your C3PAO team. Use @ to mention a teammate.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <EngagementComments engagementId={engagement.id} />
-            </CardContent>
-          </Card>
+        {/* Engagement — Schedule & Logistics Tab */}
+        <TabsContent value="schedule-logistics">
+          <EngagementSchedule
+            engagementId={engagement.id}
+            initialSchedule={initialSchedule}
+            isLead={user.isLeadAssessor}
+          />
         </TabsContent>
       </Tabs>
       </div>
