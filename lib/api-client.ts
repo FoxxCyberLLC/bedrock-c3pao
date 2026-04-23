@@ -937,6 +937,90 @@ export async function fetchObjectives(engagementId: string, token: string): Prom
   return apiRequest<ObjectiveView[]>(`/api/c3pao/assessments/${engagementId}/objectives`, { token })
 }
 
+// ---- Assessment Snapshots ----
+
+/**
+ * AssessmentSnapshotView is an immutable point-in-time capture of a C3PAO
+ * assessment. One snapshot is created when the lead assessor approves a
+ * determination (PENDING_APPROVAL -> COMPLETED). Exactly one snapshot per
+ * engagement has `isCurrent = true`. Snapshots chain via `parentSnapshotId`
+ * across correction cycles.
+ *
+ * Server-side shape lives at pkg/models/snapshot.go. A struct-contract test
+ * locks the JSON tags.
+ */
+export interface AssessmentSnapshotView {
+  id: string
+  engagementId: string
+  version: number
+  determination: 'FINAL_LEVEL_2' | 'CONDITIONAL_LEVEL_2' | 'NO_CMMC_STATUS'
+  capturedAt: string
+  capturedByUserId: string
+  capturedByName: string
+  parentSnapshotId: string | null
+  isCurrent: boolean
+  isFinal: boolean
+}
+
+/**
+ * ObjectiveStatusSnapshotView mirrors one objective's scoring at snapshot
+ * capture time. Read-only. `evidenceIds` / `espIds` are IDs captured from
+ * EvidenceObjectiveMapping / ObjectiveESPMapping at that moment — they
+ * remain as historical references even if the underlying mappings are later
+ * deleted.
+ */
+export interface ObjectiveStatusSnapshotView {
+  id: string
+  snapshotId: string
+  objectiveId: string
+  status: 'NOT_ASSESSED' | 'MET' | 'NOT_MET' | 'NOT_APPLICABLE'
+  assessmentNotes: string | null
+  evidenceDescription: string | null
+  inheritedStatus: string | null
+  artifactsReviewed: string | null
+  interviewees: string | null
+  examineDescription: string | null
+  testDescription: string | null
+  timeToAssessMinutes: number | null
+  policyReference: string | null
+  procedureReference: string | null
+  implementationStatement: string | null
+  responsibilityDescription: string | null
+  evidenceIds: string[]
+  espIds: string[]
+}
+
+export async function fetchSnapshots(engagementId: string, token: string): Promise<AssessmentSnapshotView[]> {
+  return apiRequest<AssessmentSnapshotView[]>(`/api/c3pao/assessments/${engagementId}/snapshots`, { token })
+}
+
+export async function fetchSnapshotObjectives(
+  engagementId: string,
+  snapshotId: string,
+  token: string,
+): Promise<ObjectiveStatusSnapshotView[]> {
+  return apiRequest<ObjectiveStatusSnapshotView[]>(
+    `/api/c3pao/assessments/${engagementId}/snapshots/${snapshotId}/objectives`,
+    { token },
+  )
+}
+
+// ---- Correction-cycle actions (lead assessor only, server-enforced) ----
+
+export async function startCorrectionOpportunity(engagementId: string, token: string): Promise<unknown> {
+  return apiRequest<unknown>(`/api/c3pao/assessments/${engagementId}/corrections/start`, {
+    method: 'POST',
+    token,
+  })
+}
+
+export async function resumeReEvaluation(engagementId: string, token: string): Promise<unknown> {
+  return apiRequest<unknown>(`/api/c3pao/assessments/${engagementId}/corrections/resume`, {
+    method: 'POST',
+    token,
+  })
+}
+
 export async function updateObjective(engagementId: string, objectiveId: string, body: Record<string, unknown>, token: string): Promise<ObjectiveView> {
   return apiRequest<ObjectiveView>(`/api/c3pao/assessments/${engagementId}/objectives/${objectiveId}`, {
     method: 'PUT',

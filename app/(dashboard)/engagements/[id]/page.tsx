@@ -7,6 +7,7 @@ import {
 } from '@/app/actions/c3pao-readiness'
 import { getEngagementSchedule } from '@/app/actions/c3pao-schedule'
 import { getEngagementPhase } from '@/app/actions/c3pao-phase'
+import { listSnapshotsAction } from '@/app/actions/engagements'
 import { EngagementDetail } from '@/components/c3pao/engagement-detail'
 import { LimitedEngagementDetail } from '@/components/c3pao/limited-engagement-detail'
 import type { AuditEntry, ReadinessChecklist } from '@/lib/readiness-types'
@@ -50,11 +51,13 @@ export default async function EngagementDetailPage({
     readinessAuditResult,
     scheduleResult,
     phaseResult,
+    snapshotsResult,
   ] = await Promise.all([
     getReadinessChecklist(id),
     getReadinessAuditLog(id),
     getEngagementSchedule(id),
     getEngagementPhase(id),
+    listSnapshotsAction(id),
   ])
 
   const initialChecklist: ReadinessChecklist =
@@ -71,6 +74,9 @@ export default async function EngagementDetailPage({
     phaseResult.success && phaseResult.data ? phaseResult.data : null
   const currentPhase: string | null = initialPhase?.currentPhase ?? null
 
+  const initialSnapshots =
+    snapshotsResult.success && snapshotsResult.data ? snapshotsResult.data : []
+
   // For read-only and assess access, show full engagement detail
   return (
     <EngagementDetail
@@ -82,6 +88,7 @@ export default async function EngagementDetailPage({
       initialSchedule={initialSchedule}
       initialPhase={initialPhase}
       currentPhase={currentPhase}
+      initialSnapshots={initialSnapshots}
     />
   )
 }

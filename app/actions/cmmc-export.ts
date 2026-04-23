@@ -5,10 +5,12 @@ import {
   fetchEMassExport,
   fetchControls,
   fetchObjectives,
+  fetchSnapshotObjectives,
   fetchSSP,
   fetchTeam,
   type ControlView,
   type ObjectiveView,
+  type ObjectiveStatusSnapshotView,
   type EMassExportData,
   type TeamMember,
 } from '@/lib/api-client'
@@ -63,8 +65,45 @@ export interface EMASSWizardData {
   }
 }
 
+/**
+ * mergeSnapshotScoring overrides scoring fields on live ObjectiveView rows
+ * with values from a snapshot. Keeps the catalog metadata (objectiveReference,
+ * description, requirementId, etc.) from the live objectives — those don't
+ * change across correction cycles — and substitutes the assessor's scoring
+ * fields with what the snapshot recorded.
+ */
+function mergeSnapshotScoring(
+  liveObjectives: ObjectiveView[],
+  snapshot: ObjectiveStatusSnapshotView[],
+): ObjectiveView[] {
+  if (snapshot.length === 0) return liveObjectives
+  const byObjectiveId = new Map<string, ObjectiveStatusSnapshotView>()
+  for (const s of snapshot) byObjectiveId.set(s.objectiveId, s)
+  return liveObjectives.map((live) => {
+    const s = byObjectiveId.get(live.objectiveId)
+    if (!s) return live
+    return {
+      ...live,
+      status: s.status,
+      assessmentNotes: s.assessmentNotes,
+      evidenceDescription: s.evidenceDescription,
+      inheritedStatus: s.inheritedStatus,
+      artifactsReviewed: s.artifactsReviewed,
+      interviewees: s.interviewees,
+      examineDescription: s.examineDescription,
+      testDescription: s.testDescription,
+      timeToAssessMinutes: s.timeToAssessMinutes,
+      policyReference: s.policyReference,
+      procedureReference: s.procedureReference,
+      implementationStatement: s.implementationStatement,
+      responsibilityDescription: s.responsibilityDescription,
+    }
+  })
+}
+
 export async function getEMASSExportData(
   engagementId: string,
+  snapshotId?: string,
 ): Promise<{ success: boolean; data?: EMASSWizardData; error?: string }> {
   try {
     const session = await requireAuth()
@@ -73,22 +112,42 @@ export async function getEMASSExportData(
     const token = session.apiToken
 
     // Fetch all data sources in parallel — failures degrade gracefully.
-    const [exportResult, controlsResult, objectivesResult, sspResult, teamResult] =
-      await Promise.allSettled([
-        fetchEMassExport(engagementId, token),
-        fetchControls(engagementId, token),
-        fetchObjectives(engagementId, token),
-        fetchSSP(engagementId, token).catch(() => null),
-        fetchTeam(engagementId, token).catch(() => []),
-      ])
+    // When snapshotId is provided, ALSO fetch the snapshot's per-objective
+    // rows; those override the scoring fields on the live objectives so the
+    // export reflects that historical moment.
+    const [
+      exportResult,
+      controlsResult,
+      objectivesResult,
+      sspResult,
+      teamResult,
+      snapshotObjectivesResult,
+    ] = await Promise.allSettled([
+      fetchEMassExport(engagementId, token),
+      fetchControls(engagementId, token),
+      fetchObjectives(engagementId, token),
+      fetchSSP(engagementId, token).catch(() => null),
+      fetchTeam(engagementId, token).catch(() => []),
+      snapshotId
+        ? fetchSnapshotObjectives(engagementId, snapshotId, token).catch(
+            () => [] as ObjectiveStatusSnapshotView[],
+          )
+        : Promise.resolve([] as ObjectiveStatusSnapshotView[]),
+    ])
 
     const exportData = exportResult.status === 'fulfilled' ? exportResult.value : null
     const controls: ControlView[] =
       controlsResult.status === 'fulfilled' ? controlsResult.value : []
-    const objectives: ObjectiveView[] =
+    const liveObjectives: ObjectiveView[] =
       objectivesResult.status === 'fulfilled' ? objectivesResult.value : []
     const ssp = sspResult.status === 'fulfilled' ? sspResult.value : null
     const team = teamResult.status === 'fulfilled' ? teamResult.value : []
+    const snapshotObjectives: ObjectiveStatusSnapshotView[] =
+      snapshotObjectivesResult.status === 'fulfilled' ? snapshotObjectivesResult.value : []
+
+    const objectives = snapshotId
+      ? mergeSnapshotScoring(liveObjectives, snapshotObjectives)
+      : liveObjectives
 
     if (!exportData) {
       return { success: false, error: 'Failed to load export data from backend' }

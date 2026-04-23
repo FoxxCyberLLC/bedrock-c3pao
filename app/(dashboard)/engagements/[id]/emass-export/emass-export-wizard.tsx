@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/table'
 import { toast } from 'sonner'
 import type { EMASSWizardData } from '@/app/actions/cmmc-export'
+import type { AssessmentSnapshotView } from '@/lib/api-client'
 
 interface EMASSExportWizardProps {
   data: EMASSWizardData
@@ -55,6 +56,10 @@ interface EMASSExportWizardProps {
     id: string
     name: string
   }
+  /** All snapshots for the engagement (chronologically). Empty when none exist. */
+  snapshots?: AssessmentSnapshotView[]
+  /** The snapshot driving the current export data. Defaults to the current snapshot. */
+  selectedSnapshotId?: string
 }
 
 type WizardStep = 'assessment' | 'requirements' | 'objectives' | 'ssp' | 'review'
@@ -67,11 +72,37 @@ const STEPS: { id: WizardStep; label: string; icon: React.ReactNode }[] = [
   { id: 'review', label: 'Review & Export', icon: <FileSpreadsheet className="h-4 w-4" /> },
 ]
 
-export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
+const determinationLabel: Record<AssessmentSnapshotView['determination'], string> = {
+  FINAL_LEVEL_2: 'Passed',
+  CONDITIONAL_LEVEL_2: 'Conditional',
+  NO_CMMC_STATUS: 'Not Met',
+}
+
+export function EMASSExportWizard({
+  data,
+  user,
+  snapshots = [],
+  selectedSnapshotId,
+}: EMASSExportWizardProps) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState<WizardStep>('assessment')
   const [isExportingXlsx, setIsExportingXlsx] = useState(false)
   const [isExportingJson, setIsExportingJson] = useState(false)
+
+  // Snapshot picker is only shown when the engagement has 2+ snapshots.
+  // Single-snapshot and no-snapshot cases default to auto-selected + hidden.
+  const showSnapshotPicker = snapshots.length >= 2
+  const sortedSnapshots = [...snapshots].sort((a, b) => b.version - a.version)
+  const selectedSnapshot = sortedSnapshots.find((s) => s.id === selectedSnapshotId) ?? null
+
+  const handleSnapshotChange = (value: string) => {
+    const sp = new URLSearchParams()
+    sp.set('snapshot', value)
+    // Re-fetch via server component by navigating to the new query string.
+    // Next.js `router.push` + search-param change re-runs the page.tsx loader
+    // so getEMASSExportData re-runs with the new snapshotId.
+    router.push(`?${sp.toString()}`)
+  }
 
   // Form state for editable fields
   const [formData, setFormData] = useState({
@@ -179,6 +210,51 @@ export function EMASSExportWizard({ data, user }: EMASSExportWizardProps) {
           CMMC Level 2 Assessment Results Template v3.8
         </p>
       </div>
+
+      {/* Snapshot picker — only when the engagement has multiple snapshots.
+          Single-snapshot exports skip this step (no meaningful choice). */}
+      {showSnapshotPicker && (
+        <Card className="mb-6 border-primary/30">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ClipboardList className="h-4 w-4" />
+              Export Snapshot
+            </CardTitle>
+            <CardDescription>
+              Choose which assessment snapshot to export. Defaults to the current snapshot.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <Select
+                value={selectedSnapshotId ?? ''}
+                onValueChange={handleSnapshotChange}
+              >
+                <SelectTrigger className="w-full sm:max-w-xs">
+                  <SelectValue placeholder="Select a snapshot" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortedSnapshots.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      v{s.version} · {determinationLabel[s.determination]}
+                      {s.isCurrent ? ' · Current' : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedSnapshot && (
+                <div className="text-xs text-muted-foreground">
+                  Captured{' '}
+                  {format(new Date(selectedSnapshot.capturedAt), 'PPp')}
+                  {selectedSnapshot.capturedByName
+                    ? ` by ${selectedSnapshot.capturedByName}`
+                    : ''}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Progress */}
       <div className="mb-8">

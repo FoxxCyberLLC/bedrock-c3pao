@@ -11,7 +11,10 @@ import {
   fetchTeam,
   fetchSTIGs,
   fetchObjectives,
+  fetchSnapshots,
   fetchC3PAOUsers,
+  startCorrectionOpportunity,
+  resumeReEvaluation,
   type EngagementSummary,
   type ControlView,
   type ObjectiveView,
@@ -19,6 +22,7 @@ import {
   type POAMView,
   type SSPView,
   type C3PAOUserItem,
+  type AssessmentSnapshotView,
 } from '@/lib/api-client'
 
 async function getToken(): Promise<string> {
@@ -524,5 +528,48 @@ export async function getSSPBundleForC3PAO(
     return { success: true, data: { ssp: sspResult.value, families } }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load SSP bundle' }
+  }
+}
+
+// ---- Snapshot + correction-cycle server actions ----
+//
+// Actions return the standard { success; data?; error? } envelope. They do
+// NOT call revalidatePath — the calling component handles refresh via
+// router.refresh() after a successful response. Single refresh point avoids
+// double invalidation.
+
+export async function listSnapshotsAction(
+  engagementId: string,
+): Promise<{ success: boolean; data?: AssessmentSnapshotView[]; error?: string }> {
+  try {
+    const token = await getToken()
+    const data = await fetchSnapshots(engagementId, token)
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to load snapshots' }
+  }
+}
+
+export async function giveCorrectionOpportunityAction(
+  engagementId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = await getToken()
+    await startCorrectionOpportunity(engagementId, token)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to start correction opportunity' }
+  }
+}
+
+export async function resumeReEvaluationAction(
+  engagementId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const token = await getToken()
+    await resumeReEvaluation(engagementId, token)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to resume re-evaluation' }
   }
 }
