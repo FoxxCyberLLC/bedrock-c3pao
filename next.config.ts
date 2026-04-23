@@ -20,15 +20,12 @@ const nextConfig: NextConfig = {
       {
         source: '/(.*)',
         headers: [
-          // Prevent clickjacking
-          { key: 'X-Frame-Options', value: 'DENY' },
-          // Prevent MIME type sniffing
+          // SAMEORIGIN allows same-origin iframes (e.g. evidence PDF preview);
+          // frame-ancestors 'self' in CSP below enforces the same at CSP layer.
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
-          // Limit referrer information to same origin
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          // Disable unused browser features
           { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-          // CSP: 'unsafe-inline' required for Next.js inline scripts and Tailwind CSS 4 styles
           {
             key: 'Content-Security-Policy',
             value: [
@@ -38,6 +35,9 @@ const nextConfig: NextConfig = {
               "img-src 'self' data: blob: https://*.s3.amazonaws.com https://*.s3.us-east-1.amazonaws.com",
               "font-src 'self' data:",
               "connect-src 'self'",
+              "frame-src 'self'",
+              "frame-ancestors 'self'",
+              "object-src 'none'",
             ].join('; '),
           },
         ],

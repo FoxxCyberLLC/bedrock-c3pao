@@ -866,6 +866,25 @@ export async function fetchProgressByDomain(engagementId: string, token: string)
 
 // ---- Objectives ----
 
+export interface EvidenceMappingItem {
+  evidenceId: string
+  fileName: string
+  fileUrl: string | null
+  mimeType: string | null
+  fileSize: number | null
+  description: string | null
+  uploadedAt: string
+}
+
+export interface ESPMappingItem {
+  id: string
+  espId: string
+  providerName: string
+  inheritanceType: string | null
+  espResponsibility: string | null
+  oscResponsibility: string | null
+}
+
 export interface ObjectiveView {
   id: string
   objectiveId: string
@@ -900,12 +919,16 @@ export interface ObjectiveView {
   editingAt: string | null
   // OSC self-assessment context
   oscStatus: string | null
+  oscInheritedStatus: string | null
   oscImplementationStatement: string | null
   oscEvidenceDescription: string | null
   oscAssessmentNotes: string | null
   oscPolicyReference: string | null
   oscProcedureReference: string | null
   oscResponsibilityDescription: string | null
+  // OSC-authored per-objective mappings (read-only on the assessor side)
+  evidenceMappings: EvidenceMappingItem[]
+  espMappings: ESPMappingItem[]
   createdAt: string
   updatedAt: string
 }
@@ -1130,6 +1153,9 @@ export interface DomainStats {
 export interface StatsResponse {
   domains: DomainStats[]
   totals: DomainStats
+  sprsScore: number
+  sprsMaxScore: number
+  pointsDeducted: number
 }
 
 export async function fetchStats(engagementId: string, token: string): Promise<StatsResponse> {
