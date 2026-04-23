@@ -303,6 +303,7 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
         // OSC self-assessment context (package-scoped)
         oscStatuses: [{
           status: o.oscStatus,
+          inheritedStatus: o.oscInheritedStatus,
           implementationStatement: o.oscImplementationStatement,
           evidenceDescription: o.oscEvidenceDescription,
           assessmentNotes: o.oscAssessmentNotes,
@@ -310,6 +311,9 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
           procedureReference: o.oscProcedureReference,
           responsibilityDescription: o.oscResponsibilityDescription,
         }],
+        // OSC-authored per-objective mappings (read-only on assessor side)
+        evidenceMappings: o.evidenceMappings ?? [],
+        espMappings: o.espMappings ?? [],
       })),
     },
     evidence: controlEvidence,

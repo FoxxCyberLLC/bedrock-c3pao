@@ -91,6 +91,26 @@ interface AssessmentObjective {
   questionsForOSC: string | null
   sortOrder: number
   statuses?: ObjectiveStatus[]
+  // OSC-authored per-objective mappings surfaced read-only on assessor side
+  evidenceMappings?: Array<{
+    evidenceId: string
+    fileName: string
+    fileUrl: string | null
+    mimeType: string | null
+    fileSize: number | null
+    description: string | null
+    uploadedAt: string
+  }>
+  espMappings?: Array<{
+    id: string
+    espId: string
+    providerName: string
+    inheritanceType: string | null
+    espResponsibility: string | null
+    oscResponsibility: string | null
+  }>
+  // OSC's own inheritance claim from the package-scoped ObjectiveStatus row
+  oscInheritedStatus?: string | null
 }
 
 interface RequirementFamily {
@@ -622,6 +642,11 @@ export function ControlDetailPage({
                         dependentESPId: objStatus.dependentESPId ?? null,
                         assessorQuestionsForOSC: objStatus.assessorQuestionsForOSC ?? null,
                       } : null}
+                      oscContext={{
+                        inheritedStatus: objective.oscInheritedStatus ?? null,
+                        evidenceMappings: objective.evidenceMappings ?? [],
+                        espMappings: objective.espMappings ?? [],
+                      }}
                       requirementEvidence={control.evidence}
                       packageESPs={engagement.atoPackage?.externalServiceProviders || []}
                       onSaved={() => router.refresh()}

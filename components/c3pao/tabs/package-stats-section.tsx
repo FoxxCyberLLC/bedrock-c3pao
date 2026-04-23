@@ -24,6 +24,12 @@ interface PackageStatsSectionProps {
   evidenceCount: number
   assetCount: number
   stigStats?: StigStats | null
+  /** DoD SPRS score (range -203..110) from the Go API. Undefined while loading. */
+  sprsScore?: number
+  /** DoD SPRS ceiling (110). Undefined while loading. */
+  sprsMaxScore?: number
+  /** Sum of points deducted from the SPRS ceiling. Undefined while loading. */
+  pointsDeducted?: number
 }
 
 export function PackageStatsSection({
@@ -31,26 +37,35 @@ export function PackageStatsSection({
   evidenceCount,
   assetCount,
   stigStats,
+  sprsScore,
+  sprsMaxScore,
+  pointsDeducted,
 }: PackageStatsSectionProps) {
-  const assessedCount =
-    controlStats.compliant + controlStats.nonCompliant + controlStats.notApplicable
-  const compliancePct =
-    assessedCount > 0 ? Math.round((controlStats.compliant / assessedCount) * 100) : 0
+  const hasSprs = sprsScore !== undefined && sprsMaxScore !== undefined
+  const sprsPct = hasSprs && sprsMaxScore! > 0
+    ? Math.max(0, Math.min(100, Math.round((sprsScore! / sprsMaxScore!) * 100)))
+    : 0
 
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
-        {/* Compliance Score */}
+        {/* SPRS Score (DoD NIST 800-171 Assessment Methodology v1.2.1) */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Compliance Score</CardTitle>
+            <CardTitle className="text-sm font-medium">SPRS Score</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-chart-1">{compliancePct}%</div>
-            <Progress value={compliancePct} className="h-2 mt-2" />
+            <div className="text-2xl font-bold text-chart-1">
+              {hasSprs ? `${sprsScore} / ${sprsMaxScore}` : '—'}
+            </div>
+            <Progress value={sprsPct} className="h-2 mt-2" />
             <p className="text-xs text-muted-foreground mt-2">
-              {controlStats.compliant} of {assessedCount} assessed
+              {hasSprs
+                ? pointsDeducted === 0
+                  ? 'No points deducted'
+                  : `${pointsDeducted} ${pointsDeducted === 1 ? 'point' : 'points'} deducted`
+                : 'Loading from API…'}
             </p>
           </CardContent>
         </Card>

@@ -1467,6 +1467,9 @@ export function EngagementDetail({
         } : controlStats}
         evidenceCount={pkg?.evidence.length || 0}
         assetCount={assetsData.length}
+        sprsScore={assessorStats?.sprsScore}
+        sprsMaxScore={assessorStats?.sprsMaxScore}
+        pointsDeducted={assessorStats?.pointsDeducted}
       />
 
       {/* Sectioned Navigation */}
