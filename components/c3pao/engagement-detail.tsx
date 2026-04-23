@@ -63,6 +63,8 @@ import { PersonnelTab } from './tabs/personnel-tab'
 import { PoliciesTab } from './tabs/policies-tab'
 import { AssetsTab } from './tabs/assets-tab'
 import { PackageStatsSection } from './tabs/package-stats-section'
+import { SnapshotTimeline } from './snapshot-timeline'
+import type { AssessmentSnapshotView } from '@/lib/api-client'
 import { determineCMMCStatus, calculateExpirationDate, CMMCStatusConfig, normalizeLegacyStatus, type CMMCStatus } from '@/lib/cmmc/status-determination'
 import { toast } from 'sonner'
 import { AssessmentControlsTable } from './assessment-controls-table'
@@ -82,6 +84,10 @@ import { AssessmentProgressTracker } from './assessment-progress-tracker'
 import { FindingsReviewQueue } from './findings-review-queue'
 import { CheckinCard } from './checkin-card'
 import { getEngagementTeam } from '@/app/actions/c3pao-team-assignment'
+import {
+  giveCorrectionOpportunityAction,
+  resumeReEvaluationAction,
+} from '@/app/actions/engagements'
 import type { AuditEntry, ReadinessChecklist } from '@/lib/readiness-types'
 import type { EngagementSchedule as EngagementScheduleData } from '@/lib/db-schedule'
 import type { EngagementPhase, EngagementSummary } from '@/lib/api-client'
@@ -323,6 +329,8 @@ interface EngagementDetailProps {
   initialSchedule: EngagementScheduleData | null
   initialPhase: EngagementPhase | null
   currentPhase: string | null
+  /** Snapshots captured across determination + correction cycles. Empty array for pre-snapshot engagements. */
+  initialSnapshots?: AssessmentSnapshotView[]
 }
 
 export function EngagementDetail({
@@ -333,6 +341,7 @@ export function EngagementDetail({
   initialSchedule,
   initialPhase,
   currentPhase,
+  initialSnapshots = [],
 }: EngagementDetailProps) {
   const router = useRouter()
   const [isUpdating, setIsUpdating] = useState(false)
@@ -350,6 +359,30 @@ export function EngagementDetail({
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [showNewAssessmentDialog, setShowNewAssessmentDialog] = useState(false)
+  // Correction-cycle confirmation dialogs.
+  const [showCorrectionStartDialog, setShowCorrectionStartDialog] = useState(false)
+  const [showResumeDialog, setShowResumeDialog] = useState(false)
+
+  // Per-engagement lead check — visibility of the correction buttons is
+  // scoped to the engagement's designated lead assessor, not the user's
+  // global isLeadAssessor flag (which is an org-admin concern).
+  const isCurrentUserEngagementLead = Boolean(
+    engagement.leadAssessor?.id && engagement.leadAssessor.id === user.id,
+  )
+
+  // A "failed" determination — any value outside FINAL_LEVEL_2 / PASSED —
+  // qualifies for a correction opportunity. Legacy values accepted alongside
+  // modern CMMC codes so this works during the transition.
+  const determinationIsFailure = (() => {
+    const r = engagement.assessmentResult
+    if (!r) return false
+    return (
+      r === 'FAILED' ||
+      r === 'CONDITIONAL' ||
+      r === 'NO_CMMC_STATUS' ||
+      r === 'CONDITIONAL_LEVEL_2'
+    )
+  })()
   const [team, setTeam] = useState<{
     id: string
     assessorId: string
@@ -621,6 +654,45 @@ export function EngagementDetail({
         router.refresh()
       } else {
         toast.error(result.error || 'Failed to send back')
+      }
+    } catch {
+      toast.error('An error occurred')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleGiveCorrectionOpportunity = async () => {
+    setIsUpdating(true)
+    try {
+      const result = await giveCorrectionOpportunityAction(engagement.id)
+      if (result.success) {
+        toast.success('Correction opportunity opened. The OSC can now update their package.')
+        setShowCorrectionStartDialog(false)
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to start correction opportunity')
+      }
+    } catch {
+      toast.error('An error occurred')
+    } finally {
+      setIsUpdating(false)
+    }
+  }
+
+  const handleResumeReEvaluation = async () => {
+    setIsUpdating(true)
+    try {
+      const result = await resumeReEvaluationAction(engagement.id)
+      if (result.success) {
+        // router.refresh triggers the server component to re-fetch all
+        // engagement data, which is how the "auto-sync with Go API" on resume
+        // actually works — no bespoke sync endpoint required.
+        toast.success('Re-evaluation resumed with the latest OSC state.')
+        setShowResumeDialog(false)
+        router.refresh()
+      } else {
+        toast.error(result.error || 'Failed to resume re-evaluation')
       }
     } catch {
       toast.error('An error occurred')
@@ -1218,7 +1290,10 @@ export function EngagementDetail({
         </div>
       </div>
 
-      {/* Assessment Mode Indicator (shown during active assessment) */}
+      {/* Assessment Mode Indicator (shown during active assessment). The
+          strict `IN_PROGRESS` gate intentionally hides the pause/continue
+          toggle during AWAITING_OSC_CORRECTIONS — resume is controlled by
+          the dedicated correction banner below. */}
       {engagement.status === 'IN_PROGRESS' && (
         <AssessmentModeIndicator
           active={engagement.assessmentModeActive}
@@ -1229,6 +1304,33 @@ export function EngagementDetail({
           isLeadAssessor={user.isLeadAssessor}
           onToggle={() => router.refresh()}
         />
+      )}
+
+      {/* Awaiting OSC Corrections banner + Resume Re-Evaluation action. */}
+      {engagement.status === 'AWAITING_OSC_CORRECTIONS' && (
+        <Card className="border-amber-500/40 bg-amber-500/5">
+          <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-6 w-6 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <h3 className="font-semibold">Awaiting OSC Corrections</h3>
+                <p className="text-sm text-muted-foreground">
+                  The OSC has regained access to update items flagged Not Met. Resume re-evaluation
+                  when they&apos;ve indicated their updates are ready.
+                </p>
+              </div>
+            </div>
+            {isCurrentUserEngagementLead && (
+              <Button
+                onClick={() => setShowResumeDialog(true)}
+                disabled={isUpdating}
+                aria-label="Resume Re-Evaluation"
+              >
+                Resume Re-Evaluation
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Check-in Card (shown during IN_PROGRESS) */}
@@ -1243,6 +1345,7 @@ export function EngagementDetail({
       {isReadOnly && (() => {
         const cmmcStatus = normalizeLegacyStatus(engagement.assessmentResult)
         const buttonLabel = cmmcStatus === 'FINAL_LEVEL_2' ? 'View Assessment Summary' : 'Start New Assessment from Record'
+        const showCorrectionAction = determinationIsFailure && isCurrentUserEngagementLead
         return (
           <Card className="bg-emerald-500/5 border-emerald-500/20">
             <CardContent className="flex items-center justify-between gap-4 pt-6 flex-wrap">
@@ -1255,10 +1358,22 @@ export function EngagementDetail({
                   </p>
                 </div>
               </div>
-              <Button variant="outline" onClick={() => setShowNewAssessmentDialog(true)}>
-                <FileDown className="h-4 w-4 mr-2" />
-                {buttonLabel}
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {showCorrectionAction && (
+                  <Button
+                    variant="default"
+                    onClick={() => setShowCorrectionStartDialog(true)}
+                    disabled={isUpdating}
+                    aria-label="Give Correction Opportunity"
+                  >
+                    Give Correction Opportunity
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setShowNewAssessmentDialog(true)}>
+                  <FileDown className="h-4 w-4 mr-2" />
+                  {buttonLabel}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )
@@ -1454,6 +1569,9 @@ export function EngagementDetail({
           </Card>
         )
       })()}
+
+      {/* Snapshot timeline — renders nothing when engagement has no captured snapshots yet. */}
+      <SnapshotTimeline snapshots={initialSnapshots} />
 
       {/* Package Stats */}
       <PackageStatsSection
@@ -1778,6 +1896,57 @@ export function EngagementDetail({
           router.refresh()
         }}
       />
+
+      {/* Give Correction Opportunity confirmation dialog */}
+      <Dialog open={showCorrectionStartDialog} onOpenChange={setShowCorrectionStartDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Give Correction Opportunity?</DialogTitle>
+            <DialogDescription>
+              This will request OSC corrections for the controls flagged Not Met. The OSC will
+              regain edit access to their package until you resume re-evaluation. A new snapshot
+              is created when you re-submit a determination.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowCorrectionStartDialog(false)}
+              disabled={isUpdating}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleGiveCorrectionOpportunity} disabled={isUpdating}>
+              {isUpdating ? 'Working…' : 'Start Correction Cycle'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resume Re-Evaluation confirmation dialog */}
+      <Dialog open={showResumeDialog} onOpenChange={setShowResumeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resume Re-Evaluation?</DialogTitle>
+            <DialogDescription>
+              The OSC package will be locked to assessors and you can continue scoring. The
+              engagement data will refresh with the latest OSC updates when you continue.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowResumeDialog(false)}
+              disabled={isUpdating}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleResumeReEvaluation} disabled={isUpdating}>
+              {isUpdating ? 'Working…' : 'Resume'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
