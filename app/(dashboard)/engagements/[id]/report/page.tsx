@@ -64,6 +64,7 @@ import {
 } from '@/app/actions/c3pao-assessment'
 import { getEngagementById } from '@/app/actions/c3pao-dashboard'
 import { normalizeLegacyStatus, CMMCStatusConfig } from '@/lib/cmmc/status-determination'
+import { DownloadCertificateButton } from '@/components/c3pao/certificates/download-certificate-button'
 
 type ReportStatus = 'DRAFT' | 'IN_REVIEW' | 'APPROVED' | 'DELIVERED'
 
@@ -750,6 +751,28 @@ export default function AssessmentReportPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {engagement.status === 'COMPLETED' &&
+              (engagement.assessmentResult === 'PASSED' ||
+                engagement.assessmentResult === 'CONDITIONAL') && (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileSignature className="h-4 w-4" />
+                      Certificate
+                    </CardTitle>
+                    <CardDescription>
+                      Generate a draft certificate PDF for review. The
+                      official certificate will be issued by the Authorized
+                      Certifying Official once backend signing support is
+                      available.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <DownloadCertificateButton engagementId={engagementId} />
+                  </CardContent>
+                </Card>
+              )}
           </div>
         </div>
       </div>

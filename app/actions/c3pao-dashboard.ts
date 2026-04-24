@@ -268,6 +268,14 @@ export async function submitAssessmentForApproval(engagementId: string, notes?: 
   }
 }
 
+/**
+ * Lead assessor sends a PENDING_APPROVAL submission back for more work.
+ *
+ * Phase intentionally NOT regressed (REPORT → ASSESS not allowed by API).
+ * The team continues work; phase advances on resubmission. The UI surfaces
+ * a "Reworking findings" banner (engagement-detail.tsx) so the IN_PROGRESS
+ * status doesn't read as a phase regression.
+ */
 export async function rejectAssessmentSubmission(engagementId: string, reason?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
