@@ -87,6 +87,20 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next()
 }
 
+// Run middleware on the Node.js runtime (not Edge). This is required so that
+// process.env mutations performed in the Node.js runtime — by instrumentation.ts
+// (loads app_config → process.env on cold start) and by completeSetup() (writes
+// INSTANCE_API_KEY etc. inline) — are visible to this middleware on subsequent
+// requests. Under the default Edge runtime, middleware executes in an isolated
+// V8 context whose process.env is a frozen snapshot that never sees those
+// mutations, which caused the /setup redirect bug (middleware saw no
+// INSTANCE_API_KEY and sent freshly-configured instances back to setup).
+//
+// c3pao is a single-container self-hosted app (Docker on a VDI; the Fargate
+// deployment is equivalent), so the Edge runtime's edge-locality benefits do
+// not apply. Node.js middleware is strictly better here.
+export const runtime = 'nodejs'
+
 export const config = {
   matcher: [
     /*
