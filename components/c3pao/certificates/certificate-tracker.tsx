@@ -20,6 +20,7 @@ import {
   daysUntil,
 } from '@/lib/certificates/classify'
 import type { PortfolioListItem } from '@/lib/api-client'
+import { DownloadCertificateButton } from '@/components/c3pao/certificates/download-certificate-button'
 
 interface CertificateTrackerProps {
   items: PortfolioListItem[]
@@ -60,6 +61,7 @@ export function CertificateTracker({ items }: CertificateTrackerProps) {
         dateColumn="certExpiresAt"
         dateLabel="Expires"
         now={now}
+        showDownload
       />
 
       {/* Conditional certificates */}
@@ -72,6 +74,7 @@ export function CertificateTracker({ items }: CertificateTrackerProps) {
         dateColumn="poamCloseoutDue"
         dateLabel="POA&M closeout"
         now={now}
+        showDownload
       />
 
       {/* Expired / No Status */}
@@ -100,6 +103,7 @@ interface CertSectionProps {
   dateLabel: string
   now: Date
   mutedRows?: boolean
+  showDownload?: boolean
 }
 
 function CertSection({
@@ -112,6 +116,7 @@ function CertSection({
   dateLabel,
   now,
   mutedRows = false,
+  showDownload = false,
 }: CertSectionProps) {
   return (
     <Card>
@@ -137,6 +142,7 @@ function CertSection({
                 <TableHead>{dateLabel}</TableHead>
                 <TableHead>Days</TableHead>
                 <TableHead>Signed By</TableHead>
+                {showDownload ? <TableHead className="text-right">Certificate</TableHead> : null}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -202,6 +208,16 @@ function CertSection({
                           shows the full ACO from the /phase endpoint */}
                       —
                     </TableCell>
+                    {showDownload ? (
+                      <TableCell className="text-right">
+                        <DownloadCertificateButton
+                          engagementId={item.id}
+                          size="sm"
+                          variant="outline"
+                          label="PDF"
+                        />
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 )
               })}
