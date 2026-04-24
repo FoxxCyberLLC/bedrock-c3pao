@@ -30,6 +30,8 @@ interface PackageStatsSectionProps {
   sprsMaxScore?: number
   /** Sum of points deducted from the SPRS ceiling. Undefined while loading. */
   pointsDeducted?: number
+  /** Tracked load state for the SPRS API call so we can distinguish loading from a failed fetch. */
+  sprsState?: 'loading' | 'ready' | 'error'
 }
 
 export function PackageStatsSection({
@@ -40,6 +42,7 @@ export function PackageStatsSection({
   sprsScore,
   sprsMaxScore,
   pointsDeducted,
+  sprsState = 'loading',
 }: PackageStatsSectionProps) {
   const hasSprs = sprsScore !== undefined && sprsMaxScore !== undefined
   const sprsPct = hasSprs && sprsMaxScore! > 0
@@ -65,7 +68,9 @@ export function PackageStatsSection({
                 ? pointsDeducted === 0
                   ? 'No points deducted'
                   : `${pointsDeducted} ${pointsDeducted === 1 ? 'point' : 'points'} deducted`
-                : 'Loading from API…'}
+                : sprsState === 'error'
+                  ? 'Score unavailable — see console'
+                  : 'Loading from API…'}
             </p>
           </CardContent>
         </Card>
