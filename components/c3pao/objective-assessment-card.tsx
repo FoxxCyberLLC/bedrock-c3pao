@@ -18,9 +18,6 @@ import {
   FileSearch,
   TestTube,
   MessageCircleQuestion,
-  Download,
-  Paperclip,
-  Inbox,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -44,7 +41,6 @@ import { toast } from 'sonner'
 import { assessorUpdateObjectiveStatus } from '@/app/actions/c3pao-dashboard'
 
 type ObjectiveComplianceStatus = 'NOT_ASSESSED' | 'MET' | 'NOT_MET' | 'NOT_APPLICABLE'
-type InheritedStatus = 'NONE' | 'PARTIAL' | 'FULL'
 
 interface Evidence {
   id: string
@@ -78,50 +74,18 @@ interface AssessorStatusData {
   examineDescription: string | null
   testDescription: string | null
   timeToAssessMinutes: number | null
-  inheritedStatus: InheritedStatus | null
   dependentESPId: string | null
   assessorQuestionsForOSC: string | null
-}
-
-// OSC-authored, read-only submission data the assessor reviews. Sourced from
-// the package-scoped ObjectiveStatus (engagementId IS NULL) and its
-// EvidenceObjectiveMapping / ObjectiveESPMapping rows. Responsibility text
-// on an ESP mapping comes from ESPRequirementMapping for this requirement.
-interface OSCContext {
-  inheritedStatus: string | null
-  evidenceMappings: Array<{
-    evidenceId: string
-    fileName: string
-    fileUrl: string | null
-    mimeType: string | null
-    fileSize: number | null
-    description: string | null
-    uploadedAt: string
-  }>
-  espMappings: Array<{
-    id: string
-    espId: string
-    providerName: string
-    inheritanceType: string | null
-    espResponsibility: string | null
-    oscResponsibility: string | null
-  }>
 }
 
 interface ObjectiveAssessmentCardProps {
   engagementId: string
   objective: ObjectiveData
   assessorStatus: AssessorStatusData | null
-  oscContext?: OSCContext
   requirementEvidence: Evidence[]
   packageESPs: ESP[]
+  locked?: boolean
   onSaved?: () => void
-}
-
-const oscInheritedBadgeClass: Record<string, string> = {
-  NONE: 'bg-gray-500/10 text-gray-600 border-gray-500/30',
-  PARTIAL: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30',
-  FULL: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30',
 }
 
 const statusOptions = [
@@ -131,19 +95,13 @@ const statusOptions = [
   { value: 'NOT_APPLICABLE', label: 'N/A', icon: AlertCircle, color: 'text-gray-400', bgColor: 'bg-gray-400/10' },
 ]
 
-const inheritedOptions = [
-  { value: 'NONE', label: 'None' },
-  { value: 'PARTIAL', label: 'Partial' },
-  { value: 'FULL', label: 'Full' },
-]
-
 export function ObjectiveAssessmentCard({
   engagementId,
   objective,
   assessorStatus,
-  oscContext,
   requirementEvidence,
   packageESPs,
+  locked = false,
   onSaved,
 }: ObjectiveAssessmentCardProps) {
   const [isPending, startTransition] = useTransition()
@@ -164,14 +122,12 @@ export function ObjectiveAssessmentCard({
   const [examineDescription, setExamineDescription] = useState(assessorStatus?.examineDescription || '')
   const [testDescription, setTestDescription] = useState(assessorStatus?.testDescription || '')
   const [timeToAssess, setTimeToAssess] = useState(assessorStatus?.timeToAssessMinutes?.toString() || '')
-  const [inheritedStatus, setInheritedStatus] = useState<InheritedStatus | ''>(
-    assessorStatus?.inheritedStatus || ''
-  )
   const [dependentESPId, setDependentESPId] = useState(assessorStatus?.dependentESPId || '__none__')
   const [assessorQuestions, setAssessorQuestions] = useState(assessorStatus?.assessorQuestionsForOSC || '')
 
   const statusConfig = statusOptions.find(s => s.value === status)
   const StatusIcon = statusConfig?.icon || Minus
+  const inputsDisabled = locked || isPending
 
   const handleArtifactToggle = (evidenceId: string) => {
     setSelectedArtifacts(prev =>
@@ -195,7 +151,6 @@ export function ObjectiveAssessmentCard({
         examineDescription: examineDescription || undefined,
         testDescription: testDescription || undefined,
         timeToAssessMinutes: timeToAssess ? parseInt(timeToAssess, 10) : undefined,
-        inheritedStatus: inheritedStatus || undefined,
         dependentESPId: dependentESPId && dependentESPId !== '__none__' ? dependentESPId : null,
         assessorQuestionsForOSC: assessorQuestions || undefined,
       })
@@ -266,87 +221,6 @@ export function ObjectiveAssessmentCard({
               </div>
             )}
 
-            {/* OSC Self-Assessment Submission — read-only context for the assessor.
-                Fields are pulled as-is from the Go API (ObjectiveView.{oscInheritedStatus,
-                espMappings, evidenceMappings}); no client-side math. */}
-            {oscContext && (oscContext.inheritedStatus || oscContext.espMappings.length > 0 || oscContext.evidenceMappings.length > 0) && (
-              <div className="bg-indigo-500/5 border border-indigo-500/20 rounded-lg p-3 space-y-3">
-                <div className="flex items-center gap-1.5 text-sm font-medium text-indigo-700 dark:text-indigo-300">
-                  <Inbox className="h-4 w-4" />
-                  OSC Self-Assessment Submission
-                </div>
-
-                {oscContext.inheritedStatus && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Inheritance claim:</span>
-                    <Badge variant="outline" className={oscInheritedBadgeClass[oscContext.inheritedStatus] ?? ''}>
-                      {oscContext.inheritedStatus}
-                    </Badge>
-                  </div>
-                )}
-
-                {oscContext.espMappings.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                      <Building2 className="h-3.5 w-3.5" />
-                      Dependent ESPs ({oscContext.espMappings.length})
-                    </div>
-                    <div className="space-y-2">
-                      {oscContext.espMappings.map((esp) => (
-                        <div key={esp.id} className="rounded-md border bg-background/60 p-2 text-xs space-y-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium">{esp.providerName}</span>
-                            {esp.inheritanceType && (
-                              <Badge variant="outline" className="text-[10px]">{esp.inheritanceType}</Badge>
-                            )}
-                          </div>
-                          {esp.espResponsibility && (
-                            <div>
-                              <span className="text-muted-foreground">ESP responsibility: </span>
-                              <span className="whitespace-pre-line">{esp.espResponsibility}</span>
-                            </div>
-                          )}
-                          {esp.oscResponsibility && (
-                            <div>
-                              <span className="text-muted-foreground">OSC responsibility: </span>
-                              <span className="whitespace-pre-line">{esp.oscResponsibility}</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {oscContext.evidenceMappings.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                      <Paperclip className="h-3.5 w-3.5" />
-                      Linked Evidence ({oscContext.evidenceMappings.length})
-                    </div>
-                    <div className="space-y-1">
-                      {oscContext.evidenceMappings.map((ev) => (
-                        <a
-                          key={ev.evidenceId}
-                          href={`/api/evidence/${engagementId}/${ev.evidenceId}/proxy`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-2 rounded-md border bg-background/60 px-2 py-1.5 text-xs hover:bg-muted/60 transition-colors"
-                          title={ev.description ?? undefined}
-                        >
-                          <Download className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="truncate flex-1">{ev.fileName}</span>
-                          {ev.mimeType && (
-                            <span className="text-[10px] text-muted-foreground">{ev.mimeType.split('/').pop()?.toUpperCase()}</span>
-                          )}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Assessor's Interview Questions (private, editable) */}
             <div className="space-y-2">
               <Label className="flex items-center gap-1">
@@ -358,6 +232,7 @@ export function ObjectiveAssessmentCard({
                 value={assessorQuestions}
                 onChange={(e) => setAssessorQuestions(e.target.value)}
                 rows={2}
+                disabled={inputsDisabled}
               />
             </div>
 
@@ -373,7 +248,7 @@ export function ObjectiveAssessmentCard({
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Score</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as ObjectiveComplianceStatus)}>
+                <Select value={status} onValueChange={(v) => setStatus(v as ObjectiveComplianceStatus)} disabled={inputsDisabled}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -401,6 +276,7 @@ export function ObjectiveAssessmentCard({
                   value={timeToAssess}
                   onChange={(e) => setTimeToAssess(e.target.value)}
                   min={1}
+                  disabled={inputsDisabled}
                 />
               </div>
             </div>
@@ -419,6 +295,7 @@ export function ObjectiveAssessmentCard({
                         id={`evidence-${evidence.id}`}
                         checked={selectedArtifacts.includes(evidence.id)}
                         onCheckedChange={() => handleArtifactToggle(evidence.id)}
+                        disabled={inputsDisabled}
                       />
                       <label
                         htmlFor={`evidence-${evidence.id}`}
@@ -443,6 +320,7 @@ export function ObjectiveAssessmentCard({
                 placeholder="John Smith; Jane Doe (semicolon-separated)"
                 value={interviewees}
                 onChange={(e) => setInterviewees(e.target.value)}
+                disabled={inputsDisabled}
               />
             </div>
 
@@ -457,6 +335,7 @@ export function ObjectiveAssessmentCard({
                 value={examineDescription}
                 onChange={(e) => setExamineDescription(e.target.value)}
                 rows={2}
+                disabled={inputsDisabled}
               />
             </div>
 
@@ -471,49 +350,32 @@ export function ObjectiveAssessmentCard({
                 value={testDescription}
                 onChange={(e) => setTestDescription(e.target.value)}
                 rows={2}
+                disabled={inputsDisabled}
               />
             </div>
 
-            {/* Inherited Status and ESP Dependency */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Dependent ESP */}
+            {packageESPs.length > 0 && (
               <div className="space-y-2">
-                <Label>Inherited Status</Label>
-                <Select value={inheritedStatus} onValueChange={(v) => setInheritedStatus(v as InheritedStatus)}>
+                <Label className="flex items-center gap-1">
+                  <Building2 className="h-3.5 w-3.5" />
+                  Dependent ESP
+                </Label>
+                <Select value={dependentESPId} onValueChange={setDependentESPId} disabled={inputsDisabled}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select..." />
+                    <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
-                    {inheritedOptions.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>
-                        {opt.label}
+                    <SelectItem value="__none__">None</SelectItem>
+                    {packageESPs.map((esp) => (
+                      <SelectItem key={esp.id} value={esp.id}>
+                        {esp.providerName}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
-              {packageESPs.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-1">
-                    <Building2 className="h-3.5 w-3.5" />
-                    Dependent ESP
-                  </Label>
-                  <Select value={dependentESPId} onValueChange={setDependentESPId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {packageESPs.map((esp) => (
-                        <SelectItem key={esp.id} value={esp.id}>
-                          {esp.providerName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-            </div>
+            )}
 
             {/* Findings */}
             <div className="space-y-2">
@@ -523,6 +385,7 @@ export function ObjectiveAssessmentCard({
                 value={findings}
                 onChange={(e) => setFindings(e.target.value)}
                 rows={3}
+                disabled={inputsDisabled}
               />
             </div>
 
@@ -533,7 +396,7 @@ export function ObjectiveAssessmentCard({
                   <>Last assessed: {safeDate(assessorStatus.officialAssessedAt)!.toLocaleDateString()}</>
                 )}
               </div>
-              <Button size="sm" onClick={handleSave} disabled={isPending}>
+              <Button size="sm" onClick={handleSave} disabled={inputsDisabled}>
                 {isPending ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (

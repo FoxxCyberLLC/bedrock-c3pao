@@ -172,6 +172,7 @@ interface ControlDetailPageProps {
     email: string
     isLeadAssessor: boolean
   }
+  currentPhase: string | null
 }
 
 const oscStatusConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string }> = {
@@ -216,7 +217,9 @@ export function ControlDetailPage({
   engagement,
   control,
   navigation,
+  currentPhase,
 }: ControlDetailPageProps) {
+  const isPhase1Locked = currentPhase === 'PRE_ASSESS'
   const router = useRouter()
   const [assessorNotes, setAssessorNotes] = useState(control.assessmentNotes || '')
   const [savingNotes, setSavingNotes] = useState(false)
@@ -440,7 +443,16 @@ export function ControlDetailPage({
             <CardContent className="space-y-3">
               {objectives.length > 0 ? (
                 objectives.map((obj) => (
-                  <OSCObjectiveCard key={obj.id} objective={obj} />
+                  <OSCObjectiveCard
+                    key={obj.id}
+                    objective={obj}
+                    engagementId={engagementId}
+                    oscContext={{
+                      inheritedStatus: obj.oscInheritedStatus ?? null,
+                      evidenceMappings: obj.evidenceMappings ?? [],
+                      espMappings: obj.espMappings ?? [],
+                    }}
+                  />
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground">
@@ -587,6 +599,11 @@ export function ControlDetailPage({
 
         {/* ═══ RIGHT COLUMN: C3PAO Assessment (editable) ═══ */}
         <div className="space-y-6">
+          {isPhase1Locked && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-3 text-sm">
+              <strong>Phase 1 — OSC Self-Assessment in progress.</strong> The C3PAO assessment opens at Phase 2 (Assess).
+            </div>
+          )}
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <Shield className="h-5 w-5 text-amber-600" />
             C3PAO Assessment
@@ -638,17 +655,12 @@ export function ControlDetailPage({
                         examineDescription: objStatus.examineDescription,
                         testDescription: objStatus.testDescription,
                         timeToAssessMinutes: objStatus.timeToAssessMinutes,
-                        inheritedStatus: objStatus.inheritedStatus,
                         dependentESPId: objStatus.dependentESPId ?? null,
                         assessorQuestionsForOSC: objStatus.assessorQuestionsForOSC ?? null,
                       } : null}
-                      oscContext={{
-                        inheritedStatus: objective.oscInheritedStatus ?? null,
-                        evidenceMappings: objective.evidenceMappings ?? [],
-                        espMappings: objective.espMappings ?? [],
-                      }}
                       requirementEvidence={control.evidence}
                       packageESPs={engagement.atoPackage?.externalServiceProviders || []}
+                      locked={isPhase1Locked}
                       onSaved={() => router.refresh()}
                     />
                   )

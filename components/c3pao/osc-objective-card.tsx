@@ -14,6 +14,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import {
+  OSCSubmissionContext,
+  type OSCSubmissionContextData,
+} from './osc-submission-context'
 
 interface OSCObjectiveStatus {
   implementationStatement: string | null
@@ -28,12 +32,30 @@ interface AssessmentObjective {
   oscStatuses?: OSCObjectiveStatus[]
 }
 
-export function OSCObjectiveCard({ objective }: { objective: AssessmentObjective }) {
+interface OSCObjectiveCardProps {
+  objective: AssessmentObjective
+  oscContext?: OSCSubmissionContextData
+  engagementId?: string
+}
+
+export function OSCObjectiveCard({
+  objective,
+  oscContext,
+  engagementId,
+}: OSCObjectiveCardProps) {
   const objStatus = objective.oscStatuses?.[0]
   const hasData = objStatus && (
     objStatus.implementationStatement ||
     objStatus.evidenceDescription ||
     objStatus.assessmentNotes
+  )
+
+  const hasSubmissionContext = !!(
+    oscContext &&
+    engagementId &&
+    (oscContext.inheritedStatus ||
+      oscContext.espMappings.length > 0 ||
+      oscContext.evidenceMappings.length > 0)
   )
 
   return (
@@ -112,6 +134,10 @@ export function OSCObjectiveCard({ objective }: { objective: AssessmentObjective
                 <StickyNote className="mx-auto h-6 w-6 text-muted-foreground/50" />
                 <p className="mt-1 text-xs text-muted-foreground">No self-assessment data provided</p>
               </div>
+            )}
+
+            {hasSubmissionContext && (
+              <OSCSubmissionContext oscContext={oscContext!} engagementId={engagementId!} />
             )}
           </div>
         </CollapsibleContent>

@@ -406,6 +406,7 @@ export function EngagementDetail({
   const [assetsData, setAssetsData] = useState<AssetView[]>([])
   const [assetsLoading, setAssetsLoading] = useState(true)
   const [assessorStats, setAssessorStats] = useState<StatsResponse | null>(null)
+  const [assessorStatsState, setAssessorStatsState] = useState<'loading' | 'ready' | 'error'>('loading')
 
   // Sectioned tab navigation
   type NavSection = 'package' | 'assessment' | 'engagement'
@@ -500,8 +501,13 @@ export function EngagementDetail({
     }
     async function loadStats() {
       const result = await getStatsForC3PAO(engagement.id)
-      if (!cancelled && result.success && result.data) {
+      if (cancelled) return
+      if (result.success && result.data) {
         setAssessorStats(result.data)
+        setAssessorStatsState('ready')
+      } else {
+        console.error('SPRS stats fetch failed:', result.error)
+        setAssessorStatsState('error')
       }
     }
     loadSSP()
@@ -608,10 +614,10 @@ export function EngagementDetail({
         setFindings('')
         router.refresh()
       } else {
-        toast.error(result.error || 'Failed to complete assessment')
+        toast.error(result.error || 'Failed to record assessment result')
       }
-    } catch {
-      toast.error('An error occurred')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setIsUpdating(false)
     }
@@ -968,8 +974,8 @@ export function EngagementDetail({
               </DialogContent>
             </Dialog>
           )}
-          {/* Export to eMASS button - visible during active assessment and after completion */}
-          {(engagement.status === 'IN_PROGRESS' || engagement.status === 'PENDING_APPROVAL' || engagement.status === 'COMPLETED') && (
+          {/* Export to eMASS button - only after the engagement is COMPLETED */}
+          {engagement.status === 'COMPLETED' && (
             <Link href={`/engagements/${engagement.id}/emass-export`}>
               <Button variant="outline">
                 <Download className="h-4 w-4 mr-2" />
@@ -1163,8 +1169,8 @@ export function EngagementDetail({
               </Button>
             </Link>
           )}
-          {/* Submit for Approval - shown when IN_PROGRESS and user is assigned */}
-          {engagement.status === 'IN_PROGRESS' && isUserAssigned && (
+          {/* Submit for Approval - shown when IN_PROGRESS and user is an assigned non-lead assessor */}
+          {engagement.status === 'IN_PROGRESS' && isUserAssigned && !user.isLeadAssessor && (
             <Dialog open={showSubmitDialog} onOpenChange={setShowSubmitDialog}>
               <DialogTrigger asChild>
                 <Button>Submit for Approval</Button>
@@ -1588,6 +1594,7 @@ export function EngagementDetail({
         sprsScore={assessorStats?.sprsScore}
         sprsMaxScore={assessorStats?.sprsMaxScore}
         pointsDeducted={assessorStats?.pointsDeducted}
+        sprsState={assessorStatsState}
       />
 
       {/* Sectioned Navigation */}

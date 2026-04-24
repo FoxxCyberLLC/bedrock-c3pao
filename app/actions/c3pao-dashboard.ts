@@ -9,6 +9,7 @@ import {
   updateProfile,
   updateEngagementStatus as apiUpdateEngagementStatus,
   toggleAssessmentMode,
+  updateEngagementPhase as apiUpdateEngagementPhase,
 
   sendProposal as apiSendProposal,
   acknowledgeIntroduction as apiAcknowledgeIntroduction,
@@ -157,11 +158,20 @@ export async function addAssessorNotes(engagementId: string, content: string): P
 /**
  * Record the final CMMC assessment result and mark the engagement as COMPLETED.
  *
- * API compatibility: The backend accepts FINAL_LEVEL_2, CONDITIONAL_LEVEL_2, and NO_CMMC_STATUS
- * as assessmentResult values. If the backend rejects these (400/422), update this function
- * to map: FINAL_LEVEL_2 → PASSED, CONDITIONAL_LEVEL_2 → PASSED, NO_CMMC_STATUS → FAILED
- * and encode the CMMC status in resultNotes as JSON.
+ * API compatibility: The Go API's `engagement_handlers.go` validates `assessmentResult` against
+ * the legacy enum (`PASSED | CONDITIONAL | FAILED`). Map the CMMC v2.0 status to the legacy enum
+ * at this boundary — the FINAL vs CONDITIONAL distinction is preserved by `PASSED` vs `CONDITIONAL`.
+ *
+ *   FINAL_LEVEL_2       → PASSED
+ *   CONDITIONAL_LEVEL_2 → CONDITIONAL
+ *   NO_CMMC_STATUS      → FAILED
  */
+const CMMC_TO_LEGACY_RESULT: Record<CMMCStatus, 'PASSED' | 'CONDITIONAL' | 'FAILED'> = {
+  FINAL_LEVEL_2: 'PASSED',
+  CONDITIONAL_LEVEL_2: 'CONDITIONAL',
+  NO_CMMC_STATUS: 'FAILED',
+}
+
 export async function recordAssessmentResult(
   engagementId: string,
   result: CMMCStatus,
@@ -175,9 +185,10 @@ export async function recordAssessmentResult(
     } catch {
       // May not be in assessment mode — swallow the error
     }
+    const legacyResult = CMMC_TO_LEGACY_RESULT[result]
     await apiUpdateEngagementStatus(engagementId, {
       status: 'COMPLETED',
-      assessmentResult: result,
+      assessmentResult: legacyResult,
       resultNotes: findings,
     }, token)
     return { success: true }
@@ -198,6 +209,13 @@ export async function startAssessment(engagementId: string): Promise<{ success: 
       // May already be IN_PROGRESS — ignore transition errors
     }
     await toggleAssessmentMode(engagementId, true, token)
+    // Advance CAP v2.0 phase to ASSESS so the phase tracker reflects the active assessment.
+    // Phase may already be ASSESS or the transition may be rejected by adjacency rules — non-fatal.
+    try {
+      await apiUpdateEngagementPhase(engagementId, 'ASSESS', token)
+    } catch {
+      // Already in ASSESS or transition rejected — assessment mode toggle has already succeeded.
+    }
     return { success: true, message: 'Assessment mode activated' }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to start assessment' }
