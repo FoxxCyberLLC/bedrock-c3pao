@@ -4,7 +4,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 
-vi.mock('@/app/actions/c3pao-readiness', () => ({
+vi.mock('@/app/actions/c3pao-readiness-artifacts', () => ({
   uploadArtifact: vi.fn(),
   removeArtifact: vi.fn(),
 }))
@@ -13,7 +13,7 @@ vi.mock('sonner', () => ({
 }))
 
 import { ArtifactUpload } from '@/components/c3pao/readiness/artifact-upload'
-import * as actions from '@/app/actions/c3pao-readiness'
+import * as actions from '@/app/actions/c3pao-readiness-artifacts'
 import { toast } from 'sonner'
 import type { ReadinessArtifact } from '@/lib/readiness-types'
 

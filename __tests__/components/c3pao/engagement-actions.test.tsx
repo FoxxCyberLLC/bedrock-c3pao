@@ -59,7 +59,7 @@ describe('EngagementActions — phase-driven visibility', () => {
     expect(screen.queryByRole('button', { name: /complete assessment/i })).not.toBeInTheDocument()
   })
 
-  it('PRE_ASSESS / ACCEPTED — shows Start Assessment and Cancel', () => {
+  it('PRE_ASSESS / ACCEPTED — Cancel only; Start Assessment lives in the readiness workspace, not the action bar', () => {
     render(
       <EngagementActions
         engagement={{ ...baseEngagement, status: 'ACCEPTED' }}
@@ -70,8 +70,8 @@ describe('EngagementActions — phase-driven visibility', () => {
         controlStats={baseStats}
       />,
     )
-    expect(screen.getByRole('button', { name: /start assessment/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /cancel engagement/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /start assessment/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /accept request/i })).not.toBeInTheDocument()
   })
 
