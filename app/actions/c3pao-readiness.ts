@@ -11,12 +11,9 @@
 import { revalidatePath } from 'next/cache'
 import { requireAuth, requireLeadAssessor } from '@/lib/auth'
 import {
-  addArtifact,
   ensureItemsSeeded,
-  getItemByKey,
   getItems,
   markItemComplete,
-  removeArtifact as dbRemoveArtifact,
   unmarkItemComplete,
   waiveItem,
   unwaiveItem,
@@ -25,7 +22,11 @@ import { appendAudit, getAuditLog } from '@/lib/db-audit'
 import {
   fetchEngagementPhase,
   updateEngagementPhase,
+  fetchEngagementDetail,
+  updateEngagementStatus as apiUpdateEngagementStatus,
+  toggleAssessmentMode,
 } from '@/lib/api-client'
+import { attestFormQad, revokeFormQad, formQadStep } from '@/lib/qa-self-attest'
 import { READINESS_ITEM_KEYS } from '@/lib/readiness-types'
 import type {
   AuditEntry,
@@ -35,18 +36,6 @@ import type {
 } from '@/lib/readiness-types'
 
 const WAIVER_REASON_MIN_LENGTH = 20
-const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024 // 50 MB
-const ALLOWED_MIME_TYPES = new Set<string>([
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/gif',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
-  'text/plain',
-  'text/csv',
-])
 
 function isValidItemKey(key: string): key is ReadinessItemKey {
   return (READINESS_ITEM_KEYS as readonly string[]).includes(key)
@@ -136,7 +125,8 @@ async function safeAppendAudit(
 }
 
 interface LeadContext {
-  session: Awaited<ReturnType<typeof requireLeadAssessor>>['session']
+  // Narrowed to non-null — resolveLead returns ok:false if session is null.
+  session: NonNullable<Awaited<ReturnType<typeof requireLeadAssessor>>['session']>
   actor: { id: string; email: string; name: string }
 }
 
@@ -173,6 +163,10 @@ function errorEnvelope<T>(error: unknown, fallback: string): ActionResult<T> {
   }
 }
 
+async function safeRollback(fn: () => Promise<unknown>, label: string): Promise<void> {
+  try { await fn() } catch (e) { console.error(`[readiness] startAssessment rollback (${label}) failed`, e) }
+}
+
 /** Lead-only: mark an item complete. */
 export async function completeItem(
   engagementId: string,
@@ -184,10 +178,17 @@ export async function completeItem(
     if (!lead.ok) return lead.response
 
     const item = await markItemComplete(engagementId, itemKey, lead.ctx.actor)
+    if (itemKey === 'form_qad') {
+      const r = await formQadStep({
+        attempt: () => attestFormQad(engagementId, lead.ctx.actor.id, lead.ctx.session.apiToken),
+        rollback: () => unmarkItemComplete(engagementId, itemKey),
+        label: 'attest', engagementId, itemId: item.id, actor: lead.ctx.actor,
+        audit: safeAppendAudit,
+      })
+      if (!r.success) return { success: false, error: r.error }
+    }
     await safeAppendAudit({
-      engagementId,
-      itemId: item.id,
-      actor: lead.ctx.actor,
+      engagementId, itemId: item.id, actor: lead.ctx.actor,
       action: 'item_completed',
       details: { itemKey, artifactCount: item.artifacts.length },
     })
@@ -209,12 +210,18 @@ export async function uncompleteItem(
     if (!lead.ok) return lead.response
 
     const item = await unmarkItemComplete(engagementId, itemKey)
+    if (itemKey === 'form_qad') {
+      const r = await formQadStep({
+        attempt: () => revokeFormQad(engagementId, lead.ctx.session.apiToken),
+        rollback: () => markItemComplete(engagementId, itemKey, lead.ctx.actor),
+        label: 'revoke', engagementId, itemId: item.id, actor: lead.ctx.actor,
+        audit: safeAppendAudit,
+      })
+      if (!r.success) return { success: false, error: r.error }
+    }
     await safeAppendAudit({
-      engagementId,
-      itemId: item.id,
-      actor: lead.ctx.actor,
-      action: 'item_uncompleted',
-      details: { itemKey },
+      engagementId, itemId: item.id, actor: lead.ctx.actor,
+      action: 'item_uncompleted', details: { itemKey },
     })
     revalidateEngagement(engagementId)
     return { success: true, data: item }
@@ -281,133 +288,9 @@ export async function revokeWaiver(
   }
 }
 
-/**
- * Upload an artifact blob to an item. Any authenticated team member can
- * upload. Enforces 50 MB max and a mime-type allowlist. Advances item
- * status to `in_progress` at the DB layer if it was `not_started`.
- */
-export async function uploadArtifact(
-  engagementId: string,
-  itemKey: ReadinessItemKey,
-  formData: FormData,
-): Promise<ActionResult<{ id: string }>> {
-  try {
-    if (!isValidItemKey(itemKey)) return { success: false, error: 'Invalid item key' }
-    const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' }
-
-    const file = formData.get('file')
-    if (!(file instanceof File)) {
-      return { success: false, error: 'File is required' }
-    }
-    if (file.size === 0) {
-      return { success: false, error: 'File is empty' }
-    }
-    if (file.size > MAX_ARTIFACT_BYTES) {
-      return {
-        success: false,
-        error: `File exceeds ${MAX_ARTIFACT_BYTES / (1024 * 1024)} MB limit`,
-      }
-    }
-    if (!ALLOWED_MIME_TYPES.has(file.type)) {
-      return { success: false, error: `Unsupported file type: ${file.type || 'unknown'}` }
-    }
-
-    const item = await getItemByKey(engagementId, itemKey)
-    if (!item) return { success: false, error: 'Readiness item not found' }
-
-    const descriptionRaw = formData.get('description')
-    const description = typeof descriptionRaw === 'string' ? descriptionRaw : null
-
-    const actor = {
-      id: session.c3paoUser.id,
-      email: session.c3paoUser.email,
-      name: session.c3paoUser.name,
-    }
-    const content = Buffer.from(await file.arrayBuffer())
-    const artifact = await addArtifact(item.id, {
-      filename: file.name,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      content,
-      description,
-      uploadedBy: actor.name,
-      uploadedByEmail: actor.email,
-    })
-
-    await safeAppendAudit({
-      engagementId,
-      itemId: item.id,
-      actor,
-      action: 'artifact_uploaded',
-      details: {
-        itemKey,
-        artifactId: artifact.id,
-        filename: artifact.filename,
-        sizeBytes: artifact.sizeBytes,
-        mimeType: artifact.mimeType,
-      },
-    })
-    revalidateEngagement(engagementId)
-    return { success: true, data: { id: artifact.id } }
-  } catch (error) {
-    return errorEnvelope(error, 'Failed to upload artifact')
-  }
-}
-
-/**
- * Remove an uploaded artifact. Any team member may remove an artifact they
- * uploaded; the lead may remove any artifact on the engagement.
- */
-export async function removeArtifact(
-  engagementId: string,
-  itemKey: ReadinessItemKey,
-  artifactId: string,
-): Promise<ActionResult<void>> {
-  try {
-    if (!isValidItemKey(itemKey)) return { success: false, error: 'Invalid item key' }
-    const session = await requireAuth()
-    if (!session) return { success: false, error: 'Unauthorized' }
-
-    const item = await getItemByKey(engagementId, itemKey)
-    if (!item) return { success: false, error: 'Readiness item not found' }
-    const artifact = item.artifacts.find((a) => a.id === artifactId)
-    if (!artifact) return { success: false, error: 'Artifact not found on this item' }
-
-    const callerEmail = session.c3paoUser.email
-    const isUploader = artifact.uploadedByEmail === callerEmail
-    let isLead = session.c3paoUser.isLeadAssessor
-    if (!isUploader && !isLead) {
-      const lead = await requireLeadAssessor(engagementId)
-      isLead = lead.isLead
-    }
-    if (!isUploader && !isLead) {
-      return { success: false, error: 'Only the uploader or a lead assessor may remove this artifact' }
-    }
-
-    await dbRemoveArtifact(artifactId)
-    await safeAppendAudit({
-      engagementId,
-      itemId: item.id,
-      actor: {
-        id: session.c3paoUser.id,
-        email: session.c3paoUser.email,
-        name: session.c3paoUser.name,
-      },
-      action: 'artifact_removed',
-      details: {
-        itemKey,
-        artifactId,
-        filename: artifact.filename,
-        removedBy: isUploader ? 'uploader' : 'lead',
-      },
-    })
-    revalidateEngagement(engagementId)
-    return { success: true }
-  } catch (error) {
-    return errorEnvelope(error, 'Failed to remove artifact')
-  }
-}
+// Artifact upload/remove actions moved to ./c3pao-readiness-artifacts.ts
+// to keep this file under the 500-line hard limit. Importers should use
+// `@/app/actions/c3pao-readiness-artifacts` directly.
 
 /**
  * Idempotent: ensures the engagement is in the `PLAN` phase. Fixes the
@@ -439,8 +322,10 @@ export async function ensureEngagementInPlanPhase(
 
 /**
  * Lead-only: start the assessment. Re-validates the full checklist server-
- * side (never trusts the client), transitions the engagement to `ASSESS`
- * via the Go API, logs a `phase_advanced` audit entry.
+ * side (never trusts the client), then performs three side effects in
+ * order — status flip → assessment-mode toggle → phase advance — with
+ * rollback of prior steps on any failure. Logs a `phase_advanced` audit
+ * entry on success.
  */
 export async function startAssessment(
   engagementId: string,
@@ -448,8 +333,7 @@ export async function startAssessment(
   try {
     const lead = await resolveLead(engagementId)
     if (!lead.ok) return lead.response
-    const session = lead.ctx.session
-    if (!session) return { success: false, error: 'Unauthorized' }
+    const token = lead.ctx.session.apiToken
 
     // Re-check canStart against DB state (server is source of truth).
     await ensureItemsSeeded(engagementId)
@@ -464,16 +348,31 @@ export async function startAssessment(
       }
     }
 
-    const current = await fetchEngagementPhase(engagementId, session.apiToken)
-    const fromPhase = current.currentPhase ?? null
+    // Capture original state for potential rollback.
+    const original = await fetchEngagementDetail(engagementId, token)
+    const originalStatus = (original.status as string | undefined) ?? 'ACCEPTED'
+    const originalMode = Boolean(original.assessmentModeActive)
+    const phaseBefore = (original.currentPhase as string | undefined) ?? null
 
-    await updateEngagementPhase(engagementId, 'ASSESS', session.apiToken)
+    let statusFlipped = false
+    let modeToggled = false
+    try {
+      await apiUpdateEngagementStatus(engagementId, { status: 'IN_PROGRESS' }, token)
+      statusFlipped = true
+      await toggleAssessmentMode(engagementId, true, token)
+      modeToggled = true
+      await updateEngagementPhase(engagementId, 'ASSESS', token)
+    } catch (err) {
+      if (modeToggled) await safeRollback(() => toggleAssessmentMode(engagementId, originalMode, token), 'mode')
+      if (statusFlipped) await safeRollback(() => apiUpdateEngagementStatus(engagementId, { status: originalStatus }, token), 'status')
+      return errorEnvelope(err, 'Failed to start assessment')
+    }
 
     await safeAppendAudit({
       engagementId,
       actor: lead.ctx.actor,
       action: 'phase_advanced',
-      details: { from: fromPhase, to: 'ASSESS' },
+      details: { from: phaseBefore, to: 'ASSESS' },
     })
     revalidateEngagement(engagementId)
     return { success: true }

@@ -26,8 +26,20 @@ vi.mock('@/lib/db-audit', () => ({
 vi.mock('@/lib/api-client', () => ({
   fetchEngagementPhase: vi.fn(),
   updateEngagementPhase: vi.fn(),
+  fetchEngagementDetail: vi.fn(),
+  updateEngagementStatus: vi.fn(),
+  toggleAssessmentMode: vi.fn(),
   fetchTeam: vi.fn(),
 }))
+
+vi.mock('@/lib/qa-self-attest', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/qa-self-attest')>()
+  return {
+    ...actual,
+    attestFormQad: vi.fn(),
+    revokeFormQad: vi.fn(),
+  }
+})
 
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
@@ -46,12 +58,21 @@ const {
   removeArtifact: dbRemoveArtifact,
 } = await import('@/lib/db-readiness')
 const { appendAudit, getAuditLog } = await import('@/lib/db-audit')
-const { fetchEngagementPhase, updateEngagementPhase } = await import(
-  '@/lib/api-client'
-)
+const {
+  fetchEngagementPhase,
+  updateEngagementPhase,
+  fetchEngagementDetail,
+  updateEngagementStatus: apiUpdateEngagementStatus,
+  toggleAssessmentMode,
+} = await import('@/lib/api-client')
+const { attestFormQad, revokeFormQad } = await import('@/lib/qa-self-attest')
 
 async function getActions() {
   return import('@/app/actions/c3pao-readiness')
+}
+
+async function getArtifactActions() {
+  return import('@/app/actions/c3pao-readiness-artifacts')
 }
 
 function sessionFixture(overrides: Record<string, unknown> = {}): unknown {
@@ -235,6 +256,72 @@ describe('completeItem', () => {
   })
 })
 
+describe('completeItem(form_qad) — self-attestation wiring', () => {
+  beforeEach(() => {
+    vi.mocked(requireLeadAssessor).mockResolvedValue(leadResult())
+    vi.mocked(markItemComplete).mockResolvedValue(
+      makeItem({ id: 'item-form-qad', itemKey: 'form_qad', status: 'complete' }),
+    )
+    vi.mocked(attestFormQad).mockResolvedValue({ success: true })
+  })
+
+  it('calls attestFormQad with the lead id and the api token', async () => {
+    const { completeItem } = await getActions()
+    const result = await completeItem('eng-1', 'form_qad')
+    expect(result.success).toBe(true)
+    expect(attestFormQad).toHaveBeenCalledTimes(1)
+    expect(attestFormQad).toHaveBeenCalledWith('eng-1', 'user-1', 'tok')
+  })
+
+  it('does NOT call attestFormQad for non-form_qad items', async () => {
+    vi.mocked(markItemComplete).mockResolvedValueOnce(
+      makeItem({ status: 'complete', itemKey: 'ssp_reviewed' }),
+    )
+    const { completeItem } = await getActions()
+    const result = await completeItem('eng-1', 'ssp_reviewed')
+    expect(result.success).toBe(true)
+    expect(attestFormQad).not.toHaveBeenCalled()
+  })
+
+  it('rolls back local completion when attestFormQad fails', async () => {
+    vi.mocked(attestFormQad).mockResolvedValueOnce({
+      success: false,
+      error: 'PRE_ASSESS → ASSESS requires an APPROVED pre-assessment form QA review',
+    })
+    vi.mocked(unmarkItemComplete).mockResolvedValueOnce(
+      makeItem({ id: 'item-form-qad', itemKey: 'form_qad', status: 'in_progress' }),
+    )
+    const { completeItem } = await getActions()
+    const result = await completeItem('eng-1', 'form_qad')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/APPROVED pre-assessment/)
+    expect(unmarkItemComplete).toHaveBeenCalledWith('eng-1', 'form_qad')
+  })
+
+  it('emits a phase_advanced rollback_failed audit when local rollback also fails', async () => {
+    vi.mocked(attestFormQad).mockResolvedValueOnce({
+      success: false,
+      error: 'gate rejected',
+    })
+    vi.mocked(unmarkItemComplete).mockRejectedValueOnce(new Error('pg lost'))
+    const { completeItem } = await getActions()
+    const result = await completeItem('eng-1', 'form_qad')
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('gate rejected')
+    // Audit entries: only the rollback_failed one (item_completed audit is
+    // skipped because we return early on failure).
+    const calls = vi.mocked(appendAudit).mock.calls
+    const rollbackEntry = calls.find(
+      ([entry]) => entry?.action === 'phase_advanced',
+    )
+    expect(rollbackEntry).toBeDefined()
+    expect(rollbackEntry?.[0].details).toEqual({
+      error: 'rollback_failed',
+      original: 'gate rejected',
+    })
+  })
+})
+
 describe('uncompleteItem', () => {
   it('denies non-lead', async () => {
     vi.mocked(requireLeadAssessor).mockResolvedValueOnce(nonLeadResult())
@@ -254,6 +341,53 @@ describe('uncompleteItem', () => {
     expect(result.success).toBe(true)
     expect(appendAudit).toHaveBeenCalledWith(
       expect.objectContaining({ action: 'item_uncompleted' }),
+    )
+  })
+})
+
+describe('uncompleteItem(form_qad) — self-attestation revoke wiring', () => {
+  beforeEach(() => {
+    vi.mocked(requireLeadAssessor).mockResolvedValue(leadResult())
+    vi.mocked(unmarkItemComplete).mockResolvedValue(
+      makeItem({ id: 'item-form-qad', itemKey: 'form_qad', status: 'in_progress' }),
+    )
+    vi.mocked(revokeFormQad).mockResolvedValue({ success: true })
+  })
+
+  it('calls revokeFormQad with the api token', async () => {
+    const { uncompleteItem } = await getActions()
+    const result = await uncompleteItem('eng-1', 'form_qad')
+    expect(result.success).toBe(true)
+    expect(revokeFormQad).toHaveBeenCalledTimes(1)
+    expect(revokeFormQad).toHaveBeenCalledWith('eng-1', 'tok')
+  })
+
+  it('does NOT call revokeFormQad for non-form_qad items', async () => {
+    vi.mocked(unmarkItemComplete).mockResolvedValueOnce(
+      makeItem({ status: 'not_started', itemKey: 'ssp_reviewed' }),
+    )
+    const { uncompleteItem } = await getActions()
+    const result = await uncompleteItem('eng-1', 'ssp_reviewed')
+    expect(result.success).toBe(true)
+    expect(revokeFormQad).not.toHaveBeenCalled()
+  })
+
+  it('rolls back the local re-open by re-marking complete when revoke fails', async () => {
+    vi.mocked(revokeFormQad).mockResolvedValueOnce({
+      success: false,
+      error: 'patch_failed',
+    })
+    vi.mocked(markItemComplete).mockResolvedValueOnce(
+      makeItem({ id: 'item-form-qad', itemKey: 'form_qad', status: 'complete' }),
+    )
+    const { uncompleteItem } = await getActions()
+    const result = await uncompleteItem('eng-1', 'form_qad')
+    expect(result.success).toBe(false)
+    expect(result.error).toBe('patch_failed')
+    expect(markItemComplete).toHaveBeenCalledWith(
+      'eng-1',
+      'form_qad',
+      expect.objectContaining({ id: 'user-1' }),
     )
   })
 })
@@ -344,7 +478,7 @@ describe('uploadArtifact', () => {
     vi.mocked(requireAuth).mockResolvedValueOnce(null)
     const fd = new FormData()
     fd.append('file', makePdfFile())
-    const { uploadArtifact } = await getActions()
+    const { uploadArtifact } = await getArtifactActions()
     const result = await uploadArtifact('eng-1', 'contract_executed', fd)
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/unauthorized/i)
@@ -353,7 +487,7 @@ describe('uploadArtifact', () => {
   it('rejects invalid item key', async () => {
     const fd = new FormData()
     fd.append('file', makePdfFile())
-    const { uploadArtifact } = await getActions()
+    const { uploadArtifact } = await getArtifactActions()
     const result = await uploadArtifact('eng-1', 'bogus' as never, fd)
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/invalid/i)
@@ -362,7 +496,7 @@ describe('uploadArtifact', () => {
   it('rejects empty file', async () => {
     const fd = new FormData()
     fd.append('file', new File([], 'empty.pdf', { type: 'application/pdf' }))
-    const { uploadArtifact } = await getActions()
+    const { uploadArtifact } = await getArtifactActions()
     const result = await uploadArtifact('eng-1', 'contract_executed', fd)
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/empty/i)
@@ -374,7 +508,7 @@ describe('uploadArtifact', () => {
     })
     const fd = new FormData()
     fd.append('file', huge)
-    const { uploadArtifact } = await getActions()
+    const { uploadArtifact } = await getArtifactActions()
     const result = await uploadArtifact('eng-1', 'contract_executed', fd)
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/50 MB/i)
@@ -383,7 +517,7 @@ describe('uploadArtifact', () => {
   it('rejects disallowed mime types', async () => {
     const fd = new FormData()
     fd.append('file', makePdfFile({ type: 'application/x-msdownload' }))
-    const { uploadArtifact } = await getActions()
+    const { uploadArtifact } = await getArtifactActions()
     const result = await uploadArtifact('eng-1', 'contract_executed', fd)
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/unsupported/i)
@@ -393,7 +527,7 @@ describe('uploadArtifact', () => {
     vi.mocked(getItemByKey).mockResolvedValueOnce(null)
     const fd = new FormData()
     fd.append('file', makePdfFile())
-    const { uploadArtifact } = await getActions()
+    const { uploadArtifact } = await getArtifactActions()
     const result = await uploadArtifact('eng-1', 'contract_executed', fd)
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/not found/i)
@@ -415,7 +549,7 @@ describe('uploadArtifact', () => {
     const fd = new FormData()
     fd.append('file', makePdfFile())
     fd.append('description', 'signed original')
-    const { uploadArtifact } = await getActions()
+    const { uploadArtifact } = await getArtifactActions()
     const result = await uploadArtifact('eng-1', 'contract_executed', fd)
     expect(result.success).toBe(true)
     expect(result.data?.id).toBe('artifact-1')
@@ -437,7 +571,7 @@ describe('uploadArtifact', () => {
 describe('removeArtifact', () => {
   it('returns unauthorized when no session', async () => {
     vi.mocked(requireAuth).mockResolvedValueOnce(null)
-    const { removeArtifact } = await getActions()
+    const { removeArtifact } = await getArtifactActions()
     const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/unauthorized/i)
@@ -445,7 +579,7 @@ describe('removeArtifact', () => {
 
   it('rejects when the readiness item does not exist', async () => {
     vi.mocked(getItemByKey).mockResolvedValueOnce(null)
-    const { removeArtifact } = await getActions()
+    const { removeArtifact } = await getArtifactActions()
     const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/not found/i)
@@ -453,7 +587,7 @@ describe('removeArtifact', () => {
 
   it('rejects when the artifact belongs to another item', async () => {
     vi.mocked(getItemByKey).mockResolvedValueOnce(makeItem({ artifacts: [] }))
-    const { removeArtifact } = await getActions()
+    const { removeArtifact } = await getArtifactActions()
     const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/artifact not found/i)
@@ -492,7 +626,7 @@ describe('removeArtifact', () => {
         ],
       }),
     )
-    const { removeArtifact } = await getActions()
+    const { removeArtifact } = await getArtifactActions()
     const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/uploader or a lead/i)
@@ -530,7 +664,7 @@ describe('removeArtifact', () => {
         ],
       }),
     )
-    const { removeArtifact } = await getActions()
+    const { removeArtifact } = await getArtifactActions()
     const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
     expect(result.success).toBe(true)
     expect(dbRemoveArtifact).toHaveBeenCalledWith('a1')
@@ -557,7 +691,7 @@ describe('removeArtifact', () => {
         ],
       }),
     )
-    const { removeArtifact } = await getActions()
+    const { removeArtifact } = await getArtifactActions()
     const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
     expect(result.success).toBe(true)
     expect(dbRemoveArtifact).toHaveBeenCalledWith('a1')
@@ -615,12 +749,25 @@ function make8ReadyItems(): ReadinessItem[] {
 }
 
 describe('startAssessment', () => {
+  beforeEach(() => {
+    vi.mocked(fetchEngagementDetail).mockResolvedValue({
+      status: 'ACCEPTED',
+      assessmentModeActive: false,
+      currentPhase: 'PRE_ASSESS',
+    })
+    vi.mocked(apiUpdateEngagementStatus).mockResolvedValue({})
+    vi.mocked(toggleAssessmentMode).mockResolvedValue({})
+    vi.mocked(updateEngagementPhase).mockResolvedValue({} as never)
+  })
+
   it('denies non-lead', async () => {
     vi.mocked(requireLeadAssessor).mockResolvedValueOnce(nonLeadResult())
     const { startAssessment } = await getActions()
     const result = await startAssessment('eng-1')
     expect(result.success).toBe(false)
     expect(updateEngagementPhase).not.toHaveBeenCalled()
+    expect(apiUpdateEngagementStatus).not.toHaveBeenCalled()
+    expect(toggleAssessmentMode).not.toHaveBeenCalled()
   })
 
   it('refuses when fewer than 8 items ready (server re-checks)', async () => {
@@ -631,17 +778,17 @@ describe('startAssessment', () => {
     expect(result.success).toBe(false)
     expect(result.error).toMatch(/1\/8/)
     expect(updateEngagementPhase).not.toHaveBeenCalled()
+    expect(apiUpdateEngagementStatus).not.toHaveBeenCalled()
   })
 
-  it('transitions to ASSESS and logs audit when 8/8 ready', async () => {
+  it('flips status, toggles mode, advances phase in order, and logs audit', async () => {
     vi.mocked(requireLeadAssessor).mockResolvedValueOnce(leadResult())
     vi.mocked(getItems).mockResolvedValueOnce(make8ReadyItems())
-    vi.mocked(fetchEngagementPhase).mockResolvedValueOnce({
-      currentPhase: 'PRE_ASSESS',
-    } as never)
     const { startAssessment } = await getActions()
     const result = await startAssessment('eng-1')
     expect(result.success).toBe(true)
+    expect(apiUpdateEngagementStatus).toHaveBeenCalledWith('eng-1', { status: 'IN_PROGRESS' }, 'tok')
+    expect(toggleAssessmentMode).toHaveBeenCalledWith('eng-1', true, 'tok')
     expect(updateEngagementPhase).toHaveBeenCalledWith('eng-1', 'ASSESS', 'tok')
     expect(appendAudit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -649,5 +796,62 @@ describe('startAssessment', () => {
         details: expect.objectContaining({ to: 'ASSESS', from: 'PRE_ASSESS' }),
       }),
     )
+  })
+
+  it('status flip failure: no rollback (nothing was changed) and returns error', async () => {
+    vi.mocked(requireLeadAssessor).mockResolvedValueOnce(leadResult())
+    vi.mocked(getItems).mockResolvedValueOnce(make8ReadyItems())
+    vi.mocked(apiUpdateEngagementStatus).mockRejectedValueOnce(new Error('status forbidden'))
+    const { startAssessment } = await getActions()
+    const result = await startAssessment('eng-1')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/status forbidden/)
+    expect(toggleAssessmentMode).not.toHaveBeenCalled()
+    expect(updateEngagementPhase).not.toHaveBeenCalled()
+  })
+
+  it('mode toggle failure: rolls back status to original and returns error', async () => {
+    vi.mocked(requireLeadAssessor).mockResolvedValueOnce(leadResult())
+    vi.mocked(getItems).mockResolvedValueOnce(make8ReadyItems())
+    vi.mocked(toggleAssessmentMode).mockRejectedValueOnce(new Error('mode broken'))
+    const { startAssessment } = await getActions()
+    const result = await startAssessment('eng-1')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/mode broken/)
+    // Original ACCEPTED should be restored
+    expect(apiUpdateEngagementStatus).toHaveBeenLastCalledWith('eng-1', { status: 'ACCEPTED' }, 'tok')
+    expect(updateEngagementPhase).not.toHaveBeenCalled()
+  })
+
+  it('phase advance failure (QA gate): rolls back mode then status with original error', async () => {
+    vi.mocked(requireLeadAssessor).mockResolvedValueOnce(leadResult())
+    vi.mocked(getItems).mockResolvedValueOnce(make8ReadyItems())
+    vi.mocked(updateEngagementPhase).mockRejectedValueOnce(
+      new Error('PRE_ASSESS → ASSESS requires an APPROVED pre-assessment form QA review'),
+    )
+    const { startAssessment } = await getActions()
+    const result = await startAssessment('eng-1')
+    expect(result.success).toBe(false)
+    expect(result.error).toMatch(/APPROVED pre-assessment form QA review/)
+    expect(toggleAssessmentMode).toHaveBeenLastCalledWith('eng-1', false, 'tok')
+    expect(apiUpdateEngagementStatus).toHaveBeenLastCalledWith('eng-1', { status: 'ACCEPTED' }, 'tok')
+  })
+
+  it('rollback failure logs but does not replace the original error message', async () => {
+    vi.mocked(requireLeadAssessor).mockResolvedValueOnce(leadResult())
+    vi.mocked(getItems).mockResolvedValueOnce(make8ReadyItems())
+    vi.mocked(updateEngagementPhase).mockRejectedValueOnce(new Error('gate rejected'))
+    vi.mocked(toggleAssessmentMode).mockImplementationOnce(async () => ({}))
+    vi.mocked(toggleAssessmentMode).mockRejectedValueOnce(new Error('mode rollback failed'))
+    vi.mocked(apiUpdateEngagementStatus).mockImplementationOnce(async () => ({}))
+    vi.mocked(apiUpdateEngagementStatus).mockRejectedValueOnce(new Error('status rollback failed'))
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { startAssessment } = await getActions()
+    const result = await startAssessment('eng-1')
+    expect(result.success).toBe(false)
+    // Original gate error survives, NOT a rollback error
+    expect(result.error).toMatch(/gate rejected/)
+    expect(consoleErr).toHaveBeenCalled()
+    consoleErr.mockRestore()
   })
 })

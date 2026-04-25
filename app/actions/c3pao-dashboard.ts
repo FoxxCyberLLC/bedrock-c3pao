@@ -9,7 +9,6 @@ import {
   updateProfile,
   updateEngagementStatus as apiUpdateEngagementStatus,
   toggleAssessmentMode,
-  updateEngagementPhase as apiUpdateEngagementPhase,
 
   sendProposal as apiSendProposal,
   acknowledgeIntroduction as apiAcknowledgeIntroduction,
@@ -198,29 +197,14 @@ export async function recordAssessmentResult(
 }
 
 // ---- Assessment Mode ----
-
-export async function startAssessment(engagementId: string): Promise<{ success: boolean; error?: string; message?: string }> {
-  try {
-    const token = await getToken()
-    // First transition to IN_PROGRESS (required before assessment mode can be toggled)
-    try {
-      await apiUpdateEngagementStatus(engagementId, { status: 'IN_PROGRESS' }, token)
-    } catch {
-      // May already be IN_PROGRESS — ignore transition errors
-    }
-    await toggleAssessmentMode(engagementId, true, token)
-    // Advance CAP v2.0 phase to ASSESS so the phase tracker reflects the active assessment.
-    // Phase may already be ASSESS or the transition may be rejected by adjacency rules — non-fatal.
-    try {
-      await apiUpdateEngagementPhase(engagementId, 'ASSESS', token)
-    } catch {
-      // Already in ASSESS or transition rejected — assessment mode toggle has already succeeded.
-    }
-    return { success: true, message: 'Assessment mode activated' }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to start assessment' }
-  }
-}
+//
+// Note: the legacy `startAssessment` action was removed (see plan
+// 2026-04-24-c3pao-phase-transition-fix.md). It silently swallowed the
+// CAP v2.0 QA-gate rejection and left engagements in an inconsistent
+// "stuck in Phase 1" state. The readiness workspace's
+// `c3pao-readiness.startAssessment` is now the single entry point and
+// handles status flip + assessment-mode toggle + phase advance with
+// proper rollback.
 
 export async function endAssessmentMode(engagementId: string): Promise<{ success: boolean; error?: string; message?: string }> {
   try {

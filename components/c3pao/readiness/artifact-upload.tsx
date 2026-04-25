@@ -18,7 +18,7 @@ import { safeDate } from '@/lib/utils'
 import {
   removeArtifact as removeArtifactAction,
   uploadArtifact as uploadArtifactAction,
-} from '@/app/actions/c3pao-readiness'
+} from '@/app/actions/c3pao-readiness-artifacts'
 import type { ReadinessArtifact, ReadinessItemKey } from '@/lib/readiness-types'
 
 const MAX_ARTIFACT_BYTES = 50 * 1024 * 1024 // 50 MB

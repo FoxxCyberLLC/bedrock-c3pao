@@ -1611,12 +1611,26 @@ export interface QAReview {
   notes: string | null
   assignedAt: string
   completedAt: string | null
+  /**
+   * True for rows created via the CAP v2.0 MVP self-attestation path
+   * (lead checks off the form_qad readiness item). Independent-reviewer
+   * rows are false. Future independent-QA UI / migration finds these via
+   * `WHERE selfAttested = true`.
+   */
+  selfAttested: boolean
 }
 
 export interface CreateQAReviewInput {
   kind: QAReviewKind
   assignedToId: string
   notes?: string
+  /**
+   * Privileged self-attestation flag. The Go API requires the requester to
+   * be the engagement's lead assessor and forces `assignedToId` to the
+   * requester's ID (any client-supplied value is overwritten). Skips the
+   * independent-reviewer team-membership check.
+   */
+  selfAttested?: boolean
 }
 
 export interface UpdateQAReviewInput {
@@ -1668,6 +1682,11 @@ export async function updateQAReview(
     token,
   })
 }
+
+// CAP v2.0 self-attestation orchestration (selfAttestPreAssessForm /
+// revokeSelfAttestPreAssessForm) lives in lib/qa-self-attest.ts so the
+// find-and-upsert logic can be unit-tested with mocked api-client primitives
+// (vitest cannot mock in-module function references).
 
 // ---- Engagement comments (Task 13a) ----
 

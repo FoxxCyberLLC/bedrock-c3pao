@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import {
-  Shield,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -43,7 +42,6 @@ import {
 import {
   updateEngagementStatus,
   recordAssessmentResult,
-  startAssessment,
   stopAssessment,
   submitAssessmentForApproval,
   rejectAssessmentSubmission,
@@ -140,7 +138,6 @@ export function EngagementActions({
 }: EngagementActionsProps) {
   const router = useRouter()
   const [isUpdating, setIsUpdating] = useState(false)
-  const [showStartAssessmentDialog, setShowStartAssessmentDialog] = useState(false)
   const [showResultDialog, setShowResultDialog] = useState(false)
   const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [showRejectDialog, setShowRejectDialog] = useState(false)
@@ -185,24 +182,6 @@ export function EngagementActions({
   const orgName = engagement.atoPackage?.organization?.name ?? 'this organization'
 
   // ---- Handlers ----
-
-  const handleStartAssessment = async () => {
-    setIsUpdating(true)
-    try {
-      const result = await startAssessment(engagement.id)
-      if (result.success) {
-        toast.success(result.message || 'Assessment started - Customer package is now read-only')
-        setShowStartAssessmentDialog(false)
-        router.refresh()
-      } else {
-        toast.error(result.error || 'Failed to start assessment')
-      }
-    } catch {
-      toast.error('An error occurred')
-    } finally {
-      setIsUpdating(false)
-    }
-  }
 
   const handleAcceptRequest = async () => {
     setIsUpdating(true)
@@ -360,52 +339,9 @@ export function EngagementActions({
     </Button>
   )
 
-  const startAssessmentButton = (
-    <Dialog open={showStartAssessmentDialog} onOpenChange={setShowStartAssessmentDialog}>
-      <DialogTrigger asChild>
-        <Button>
-          <Shield className="h-4 w-4 mr-2" />
-          Start Assessment
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Start CMMC Assessment</DialogTitle>
-          <DialogDescription>This will begin the formal assessment process</DialogDescription>
-        </DialogHeader>
-        <div className="py-4 space-y-4">
-          <div className="bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
-            <div className="flex items-start gap-3">
-              <Shield className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-              <div>
-                <p className="font-medium text-amber-900 dark:text-amber-100">
-                  Customer Package Will Be Locked
-                </p>
-                <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                  Once you start the assessment, <strong>{orgName}</strong>&apos;s package will be
-                  set to read-only mode. They will not be able to upload documents, modify assets,
-                  or make any changes until the assessment is complete.
-                </p>
-              </div>
-            </div>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            You can pause the lock temporarily if the customer needs to provide additional
-            documentation during the assessment.
-          </p>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setShowStartAssessmentDialog(false)}>
-            Cancel
-          </Button>
-          <Button onClick={handleStartAssessment} disabled={isUpdating}>
-            {isUpdating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Start Assessment
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  )
+  // Start Assessment button removed: the readiness workspace's bottom-bar
+  // button is now the single entry point for PRE_ASSESS → ASSESS. See plan
+  // docs/plans/2026-04-24-c3pao-phase-transition-fix.md.
 
   const stopAssessmentButton = (
     <Dialog open={showStopDialog} onOpenChange={setShowStopDialog}>
@@ -806,8 +742,7 @@ export function EngagementActions({
       {resolvedPhase === 'PRE_ASSESS' && (
         <>
           {engagement.status === 'REQUESTED' && acceptRequestButton}
-          {(engagement.status === 'ACCEPTED' || engagement.status === 'PROPOSAL_ACCEPTED') &&
-            startAssessmentButton}
+          {/* Start Assessment intentionally absent here — readiness workspace owns it. */}
           {cancelButton}
         </>
       )}
