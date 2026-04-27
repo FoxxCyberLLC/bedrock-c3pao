@@ -2,9 +2,17 @@
 
 import Link from 'next/link'
 import { format, formatDistanceToNow } from 'date-fns'
-import { Calendar, User } from 'lucide-react'
+import { Calendar, Moon, MoreVertical, Star, User } from 'lucide-react'
 
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { cn, safeDate } from '@/lib/utils'
 import { deriveRisk, resolvePhase } from '@/lib/portfolio/derive-risk'
@@ -17,6 +25,8 @@ import {
   type FreshnessTone,
 } from '@/lib/engagements-list/freshness'
 import type { PortfolioRow } from '@/lib/engagements-list/types'
+import type { EngagementTag } from '@/lib/personal-views-types'
+import { EngagementTagChip } from './engagement-tag-chip'
 import { LifecycleStepperMini } from './lifecycle-stepper-mini'
 
 const RISK_BORDER: Record<ReturnType<typeof deriveRisk>, string> = {
@@ -38,10 +48,20 @@ const FRESHNESS_PIP_CLASS: Record<FreshnessTone, string> = {
   unknown: 'bg-muted-foreground/40',
 }
 
+const VISIBLE_TAG_LIMIT = 4
+
 interface EngagementTableRowProps {
   item: PortfolioRow
   selected: boolean
   onToggleSelect: (id: string, selected: boolean) => void
+  pinned: boolean
+  tags: EngagementTag[]
+  /** True when the row is snoozed but still visible (Hide snoozed off). */
+  snoozed?: boolean
+  onTogglePin: (id: string) => void
+  onOpenAddTag: (id: string) => void
+  onOpenSnooze: (id: string, label: string) => void
+  onRemoveTag: (id: string, label: string) => void
   now?: Date
 }
 
@@ -61,6 +81,13 @@ export function EngagementTableRow({
   item,
   selected,
   onToggleSelect,
+  pinned,
+  tags,
+  snoozed = false,
+  onTogglePin,
+  onOpenAddTag,
+  onOpenSnooze,
+  onRemoveTag,
   now = new Date(),
 }: EngagementTableRowProps) {
   const phase = resolvePhase(item)
@@ -75,17 +102,47 @@ export function EngagementTableRow({
     ? formatDistanceToNow(updatedDate, { addSuffix: true })
     : '—'
 
+  const visibleTags = tags.slice(0, VISIBLE_TAG_LIMIT)
+  const overflowCount = tags.length - visibleTags.length
+
   return (
     <TableRow
       data-state={selected ? 'selected' : undefined}
-      className={cn('border-l-4', RISK_BORDER[risk])}
+      className={cn(
+        'border-l-4',
+        RISK_BORDER[risk],
+        snoozed && 'bg-muted/40 hover:bg-muted/40',
+      )}
     >
       <TableCell className="w-10">
-        <Checkbox
-          checked={selected}
-          onCheckedChange={(next) => onToggleSelect(item.id, next === true)}
-          aria-label={`Select ${item.organizationName}`}
-        />
+        <div className="flex items-center gap-1">
+          <Checkbox
+            checked={selected}
+            onCheckedChange={(next) => onToggleSelect(item.id, next === true)}
+            aria-label={`Select ${item.organizationName}`}
+          />
+          <button
+            type="button"
+            onClick={() => onTogglePin(item.id)}
+            aria-pressed={pinned}
+            aria-label={
+              pinned
+                ? `Unpin ${item.organizationName}`
+                : `Pin ${item.organizationName}`
+            }
+            className={cn(
+              'inline-flex h-5 w-5 items-center justify-center rounded transition-colors',
+              pinned
+                ? 'text-amber-500 hover:text-amber-600'
+                : 'text-muted-foreground/50 hover:text-foreground',
+            )}
+          >
+            <Star
+              className={cn('h-3.5 w-3.5', pinned && 'fill-current')}
+              aria-hidden="true"
+            />
+          </button>
+        </div>
       </TableCell>
 
       <TableCell className="min-w-[220px] max-w-[320px]">
@@ -93,11 +150,38 @@ export function EngagementTableRow({
           href={`/engagements/${item.id}`}
           className="block hover:underline"
         >
-          <p className="truncate text-sm font-medium">{item.organizationName}</p>
+          <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+            {snoozed && (
+              <Moon
+                className="h-3 w-3 shrink-0 text-muted-foreground"
+                aria-label="Snoozed"
+              />
+            )}
+            <span className="truncate">{item.organizationName}</span>
+          </p>
           <p className="truncate text-xs text-muted-foreground">
             {item.packageName}
           </p>
         </Link>
+        {tags.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {visibleTags.map((tag) => (
+              <EngagementTagChip
+                key={tag.label}
+                tag={tag}
+                onRemove={() => onRemoveTag(item.id, tag.label)}
+              />
+            ))}
+            {overflowCount > 0 && (
+              <Badge
+                variant="outline"
+                className="rounded-full px-1.5 py-0 text-[10px]"
+              >
+                +{overflowCount} more
+              </Badge>
+            )}
+          </div>
+        )}
         {riskLabel && (
           <p
             className={cn(
@@ -170,6 +254,32 @@ export function EngagementTableRow({
         {stat.detail && (
           <p className="text-[10px] text-muted-foreground">{stat.detail}</p>
         )}
+      </TableCell>
+
+      <TableCell className="w-10">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              aria-label={`Actions for ${item.organizationName}`}
+            >
+              <MoreVertical className="h-4 w-4" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-40">
+            <DropdownMenuItem onSelect={() => onOpenAddTag(item.id)}>
+              Add tag
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => onOpenSnooze(item.id, item.organizationName)}
+            >
+              Snooze...
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </TableCell>
     </TableRow>
   )

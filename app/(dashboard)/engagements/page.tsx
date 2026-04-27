@@ -8,8 +8,20 @@ import { EngagementsList } from '@/components/c3pao/engagements/engagements-list
 import { getPortfolioList } from '@/app/actions/c3pao-portfolio'
 import { getC3PAOEngagements } from '@/app/actions/engagements'
 import { getC3PAOTeam } from '@/app/actions/c3pao-dashboard'
+import {
+  listActiveSnoozesAction,
+  listAllTagLabels,
+  listEngagementTagsByEngagement,
+  listPinnedEngagementIds,
+  listSavedViewsAction,
+} from '@/app/actions/c3pao-personal-views'
 import { requireAuth } from '@/lib/auth'
 import type { PortfolioRow } from '@/lib/engagements-list/types'
+import type {
+  ActiveSnooze,
+  EngagementTag,
+  SavedView,
+} from '@/lib/personal-views-types'
 
 export const metadata = {
   title: 'Engagements · Bedrock C3PAO',
@@ -26,11 +38,26 @@ export default async function C3PAOEngagementsPage({
   const session = await requireAuth()
   if (!session) redirect('/login')
 
-  const [{ lead: leadParam }, listResult, assessmentsResult, teamResult] = await Promise.all([
+  const [
+    { lead: leadParam },
+    listResult,
+    assessmentsResult,
+    teamResult,
+    pinnedResult,
+    tagsByEngagementResult,
+    allTagLabelsResult,
+    snoozesResult,
+    savedViewsResult,
+  ] = await Promise.all([
     searchParams,
     getPortfolioList(),
     getC3PAOEngagements(),
     getC3PAOTeam(),
+    listPinnedEngagementIds(),
+    listEngagementTagsByEngagement(),
+    listAllTagLabels(),
+    listActiveSnoozesAction(),
+    listSavedViewsAction(),
   ])
 
   const portfolioItems =
@@ -68,6 +95,33 @@ export default async function C3PAOEngagementsPage({
   const initialLeadFilterName = initialLeadFilterId
     ? leadOptions.find(([id]) => id === initialLeadFilterId)?.[1]
     : undefined
+
+  // Personal-view state — local Postgres outage should not crash the page.
+  const initialPinnedIds: string[] = unwrapPersonal(
+    pinnedResult,
+    [] as string[],
+    'pinned engagements',
+  )
+  const initialTagsByEngagement: Record<string, EngagementTag[]> = unwrapPersonal(
+    tagsByEngagementResult,
+    {} as Record<string, EngagementTag[]>,
+    'engagement tags',
+  )
+  const initialAllTagLabels: string[] = unwrapPersonal(
+    allTagLabelsResult,
+    [] as string[],
+    'tag labels',
+  )
+  const initialActiveSnoozes: ActiveSnooze[] = unwrapPersonal(
+    snoozesResult,
+    [] as ActiveSnooze[],
+    'active snoozes',
+  )
+  const initialSavedViews: SavedView[] = unwrapPersonal(
+    savedViewsResult,
+    [] as SavedView[],
+    'saved views',
+  )
 
   return (
     <div className="space-y-6">
@@ -107,7 +161,29 @@ export default async function C3PAOEngagementsPage({
         leadOptions={leadOptions}
         initialLeadFilterId={initialLeadFilterId}
         initialLeadFilterName={initialLeadFilterName}
+        initialPinnedIds={initialPinnedIds}
+        initialTagsByEngagement={initialTagsByEngagement}
+        initialAllTagLabels={initialAllTagLabels}
+        initialActiveSnoozes={initialActiveSnoozes}
+        initialSavedViews={initialSavedViews}
       />
     </div>
   )
+}
+
+/**
+ * Unwrap an `ActionResult` from the personal-views actions, falling back
+ * to a default when the local Postgres is unavailable. Logs a warning so
+ * operators see the underlying issue without the page crashing.
+ */
+function unwrapPersonal<T>(
+  result: { success: boolean; data?: T; error?: string },
+  fallback: T,
+  label: string,
+): T {
+  if (result.success && result.data !== undefined) return result.data
+  if (result.error) {
+    console.warn(`[engagements] failed to load ${label}: ${result.error}`)
+  }
+  return fallback
 }

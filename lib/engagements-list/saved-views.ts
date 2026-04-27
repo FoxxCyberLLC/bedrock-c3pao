@@ -1,108 +1,16 @@
 /**
- * Saved views + grouping logic for the /engagements list rebuild (Task 7).
+ * Grouping logic for the /engagements list. Pure helpers so they can be
+ * unit-tested in the node vitest environment and reused wherever a
+ * `PortfolioListItem` set needs to be bucketed.
  *
- * All logic is pure so it can be unit-tested in the node vitest environment
- * and reused anywhere (engagements list page, future report exports, etc.).
+ * The legacy hard-coded saved-views (`SAVED_VIEWS`, `applySavedView`, etc.)
+ * were removed when the personal-triage layer landed — saved views now
+ * live in the local Postgres and are user-defined; the list filters use
+ * `lib/engagements-list/personal-filters.ts`.
  */
 
-import { addDays, isWithinInterval, isAfter, subDays } from 'date-fns'
 import type { PortfolioListItem } from '@/lib/api-client'
-import {
-  deriveRisk,
-  resolvePhase,
-  type Phase,
-} from '@/lib/portfolio/derive-risk'
-
-export type SavedViewId =
-  | 'my-active'
-  | 'pre-brief-this-week'
-  | 'at-risk'
-  | 'qa-queue'
-  | 'past-30-completed'
-
-export interface SavedView {
-  id: SavedViewId
-  label: string
-  description: string
-}
-
-export const SAVED_VIEWS: readonly SavedView[] = [
-  {
-    id: 'my-active',
-    label: 'My Active',
-    description: 'Engagements you lead that are not terminal',
-  },
-  {
-    id: 'pre-brief-this-week',
-    label: 'Pre-Brief This Week',
-    description: 'Scheduled start within the next 7 days',
-  },
-  {
-    id: 'at-risk',
-    label: 'At Risk',
-    description: 'Past scheduled end date or stalled > 14 days',
-  },
-  {
-    id: 'qa-queue',
-    label: 'QA Queue',
-    description: 'Pending lead assessor approval',
-  },
-  {
-    id: 'past-30-completed',
-    label: 'Past 30 Days Completed',
-    description: 'Completed within the last 30 days',
-  },
-]
-
-export function getSavedViewById(id: SavedViewId): SavedView | undefined {
-  return SAVED_VIEWS.find((v) => v.id === id)
-}
-
-export interface ApplySavedViewContext {
-  userId: string | null
-  now: Date
-}
-
-/** Filter the portfolio list down to the rows matching the given saved view. */
-export function applySavedView<T extends PortfolioListItem>(
-  items: readonly T[],
-  viewId: SavedViewId,
-  ctx: ApplySavedViewContext,
-): T[] {
-  const { userId, now } = ctx
-  const weekEnd = addDays(now, 7)
-  const thirtyDaysAgo = subDays(now, 30)
-  const terminalStatuses = new Set(['COMPLETED', 'CANCELLED'])
-
-  switch (viewId) {
-    case 'my-active':
-      return items.filter(
-        (item) =>
-          item.leadAssessorId === userId && !terminalStatuses.has(item.status),
-      )
-    case 'pre-brief-this-week':
-      return items.filter((item) => {
-        if (!item.scheduledStartDate) return false
-        const d = new Date(item.scheduledStartDate)
-        if (Number.isNaN(d.getTime())) return false
-        return isWithinInterval(d, { start: now, end: weekEnd })
-      })
-    case 'at-risk':
-      return items.filter((item) => {
-        const risk = deriveRisk(item, now)
-        return risk === 'AT_RISK' || risk === 'OVERDUE'
-      })
-    case 'qa-queue':
-      return items.filter((item) => item.status === 'PENDING_APPROVAL')
-    case 'past-30-completed':
-      return items.filter((item) => {
-        if (item.status !== 'COMPLETED') return false
-        const d = new Date(item.updatedAt)
-        if (Number.isNaN(d.getTime())) return false
-        return isAfter(d, thirtyDaysAgo)
-      })
-  }
-}
+import { resolvePhase, type Phase } from '@/lib/portfolio/derive-risk'
 
 // ---- Grouping ----
 
