@@ -26,6 +26,17 @@ vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }))
 
+vi.mock('@/app/actions/c3pao-personal-views', () => ({
+  pinEngagement: vi.fn().mockResolvedValue({ success: true }),
+  unpinEngagement: vi.fn().mockResolvedValue({ success: true }),
+  removeEngagementTag: vi.fn().mockResolvedValue({ success: true }),
+  addEngagementTag: vi.fn().mockResolvedValue({ success: true }),
+  snoozeEngagement: vi.fn().mockResolvedValue({ success: true }),
+  unsnoozeEngagement: vi.fn().mockResolvedValue({ success: true }),
+  deleteSavedViewAction: vi.fn().mockResolvedValue({ success: true }),
+  createSavedViewAction: vi.fn().mockResolvedValue({ success: true }),
+}))
+
 function buildRow(overrides: Partial<PortfolioRow>): PortfolioRow {
   return {
     id: overrides.id ?? 'r-1',
@@ -85,6 +96,11 @@ describe('<EngagementsList> lead filter', () => {
         ]}
         initialLeadFilterId="abc"
         initialLeadFilterName="Alice"
+        initialPinnedIds={[]}
+        initialTagsByEngagement={{}}
+        initialAllTagLabels={[]}
+        initialActiveSnoozes={[]}
+        initialSavedViews={[]}
       />,
     )
 
@@ -124,6 +140,11 @@ describe('<EngagementsList> lead filter', () => {
         ]}
         initialLeadFilterId="abc"
         initialLeadFilterName="Alice"
+        initialPinnedIds={[]}
+        initialTagsByEngagement={{}}
+        initialAllTagLabels={[]}
+        initialActiveSnoozes={[]}
+        initialSavedViews={[]}
       />,
     )
 
