@@ -1,7 +1,7 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
-import { fetchTeam, fetchAvailableAssessors, addTeamMember as apiAddTeam, updateTeamMemberRole, removeTeamMember, checkCOIAssignment } from '@/lib/api-client'
+import { fetchTeam, fetchAvailableAssessors, addTeamMember as apiAddTeam, updateTeamMemberRole, removeTeamMember, checkCOIAssignment, setAssessorDomains } from '@/lib/api-client'
 
 export async function getEngagementTeam(engagementId: string) {
   try {
@@ -129,10 +129,29 @@ export async function assignControlsToAssessor(engagementId: string, assessorId:
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const { setAssessorDomains } = await import('@/lib/api-client')
     await setAssessorDomains(engagementId, assessorId, familyCodes, session.apiToken)
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to assign domains' }
+  }
+}
+
+/**
+ * Replace the full set of CMMC family domains assigned to a single team
+ * member on an engagement. The Go API endpoint is a PUT (full replacement),
+ * not an incremental add/remove — pass the complete desired set.
+ */
+export async function setMemberDomains(
+  engagementId: string,
+  assessorId: string,
+  familyCodes: string[],
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    await setAssessorDomains(engagementId, assessorId, familyCodes, session.apiToken)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : 'Failed to update domains' }
   }
 }

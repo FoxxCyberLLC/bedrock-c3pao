@@ -43,6 +43,8 @@ import { safeDate } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import { getC3PAOWorkloadOverview } from '@/app/actions/c3pao-workload'
 import type { AssessorWorkloadItem, AssessorSkillItem } from '@/lib/api-client'
+import { deriveCapacity, type CapacityBand } from '@/lib/workload/capacity'
+import { CMMC_FAMILIES } from '@/lib/cmmc/families'
 
 const NIST_FAMILIES: readonly string[] = [
   'AC', 'AT', 'AU', 'CM', 'IA', 'IR', 'MA', 'MP', 'PS', 'PE', 'RA', 'CA', 'SC', 'SI',
@@ -229,10 +231,11 @@ export function WorkloadDashboard() {
                     (a.activeEngagements / DEFAULT_CAPACITY) * 100,
                   )
                   const overloaded = a.activeEngagements > DEFAULT_CAPACITY
+                  const capacity = deriveCapacity(a.activeEngagements)
                   return (
                     <TableRow key={a.assessorId}>
                       <TableCell>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           {a.isLeadAssessor && (
                             <Crown
                               className="h-3 w-3 text-amber-600"
@@ -243,9 +246,13 @@ export function WorkloadDashboard() {
                           <Badge variant="outline" className="text-xs">
                             {a.assessorType}
                           </Badge>
+                          <CapacityBandBadge band={capacity.band} label={capacity.label} title={capacity.description} />
                         </div>
                         <p className="text-xs text-muted-foreground">
                           {a.assessorEmail}
+                          <span className="ml-2">
+                            · Domains: {a.domainsAssigned} / {CMMC_FAMILIES.length}
+                          </span>
                         </p>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -411,6 +418,37 @@ function CredExpiryBadge({
         · {format(d, 'MMM yyyy')}
       </span>
     </span>
+  )
+}
+
+const CAPACITY_BAND_CLASSES: Record<CapacityBand, string> = {
+  light:
+    'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300',
+  healthy:
+    'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/40 dark:text-sky-300',
+  stretched:
+    'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300',
+  overloaded:
+    'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300',
+}
+
+function CapacityBandBadge({
+  band,
+  label,
+  title,
+}: {
+  band: CapacityBand
+  label: string
+  title: string
+}) {
+  return (
+    <Badge
+      variant="outline"
+      title={title}
+      className={cn('text-[10px]', CAPACITY_BAND_CLASSES[band])}
+    >
+      {label}
+    </Badge>
   )
 }
 

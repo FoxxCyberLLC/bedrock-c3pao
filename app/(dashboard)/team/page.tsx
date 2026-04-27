@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import {
   Users,
   Mail,
@@ -284,7 +285,16 @@ export default function C3PAOTeamPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="font-medium">{member.engagements || 0}</span>
+                      {member.engagements > 0 ? (
+                        <Link
+                          href={`/engagements?lead=${member.id}`}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {member.engagements}
+                        </Link>
+                      ) : (
+                        <span className="font-medium text-muted-foreground">0</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {getStatusBadge(member.status)}

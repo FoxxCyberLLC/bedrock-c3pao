@@ -1,8 +1,9 @@
 'use client'
 
 import { useCallback, useMemo, useState, useTransition } from 'react'
-import { ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -44,6 +45,8 @@ interface EngagementsListProps {
   initialItems: PortfolioRow[]
   currentUserId: string
   leadOptions: ReadonlyArray<readonly [string, string]>
+  initialLeadFilterId?: string
+  initialLeadFilterName?: string
 }
 
 const COLLAPSED_KEY_PREFIX = 'c3pao-engagements-group-collapsed:'
@@ -53,8 +56,11 @@ export function EngagementsList({
   initialItems,
   currentUserId,
   leadOptions,
+  initialLeadFilterId,
+  initialLeadFilterName,
 }: EngagementsListProps) {
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
 
   const [items, setItems] = useState<PortfolioRow[]>(initialItems)
   const [search, setSearch] = useState('')
@@ -62,6 +68,12 @@ export function EngagementsList({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkLeadId, setBulkLeadId] = useState<string>('')
   const [activeViewId, setActiveViewId] = useState<SavedViewId | null>(null)
+  const [leadFilterId, setLeadFilterId] = useState<string | undefined>(
+    initialLeadFilterId,
+  )
+  const [leadFilterName, setLeadFilterName] = useState<string | undefined>(
+    initialLeadFilterName,
+  )
   const [sort, setSort] = useState<SortState>({
     key: 'organization',
     direction: 'asc',
@@ -89,15 +101,26 @@ export function EngagementsList({
     })
   }, [items, activeViewId, currentUserId])
 
+  const leadFiltered = useMemo(() => {
+    if (!leadFilterId) return viewFiltered
+    return viewFiltered.filter((item) => item.leadAssessorId === leadFilterId)
+  }, [viewFiltered, leadFilterId])
+
   const searchFiltered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return viewFiltered
-    return viewFiltered.filter(
+    if (!q) return leadFiltered
+    return leadFiltered.filter(
       (item) =>
         item.organizationName.toLowerCase().includes(q) ||
         item.packageName.toLowerCase().includes(q),
     )
-  }, [viewFiltered, search])
+  }, [leadFiltered, search])
+
+  const handleClearLeadFilter = useCallback(() => {
+    setLeadFilterId(undefined)
+    setLeadFilterName(undefined)
+    router.replace('/engagements')
+  }, [router])
 
   const sorted = useMemo(
     () => sortItems(searchFiltered, sort),
@@ -217,6 +240,30 @@ export function EngagementsList({
           </Button>
         ))}
       </div>
+
+      {leadFilterId && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            data-testid="lead-filter-chip"
+            className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+          >
+            <span>
+              Filtered by lead:{' '}
+              <span className="font-semibold">
+                {leadFilterName ?? leadFilterId}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={handleClearLeadFilter}
+              aria-label="Clear lead filter"
+              className="rounded-full p-0.5 transition-colors hover:bg-primary/20"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[240px]">

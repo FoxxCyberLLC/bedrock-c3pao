@@ -16,11 +16,18 @@ export const metadata = {
   description: 'Portfolio-wide engagements list with saved views and bulk actions',
 }
 
-export default async function C3PAOEngagementsPage() {
+interface EngagementsPageProps {
+  searchParams: Promise<{ lead?: string | string[] }>
+}
+
+export default async function C3PAOEngagementsPage({
+  searchParams,
+}: EngagementsPageProps) {
   const session = await requireAuth()
   if (!session) redirect('/login')
 
-  const [listResult, assessmentsResult, teamResult] = await Promise.all([
+  const [{ lead: leadParam }, listResult, assessmentsResult, teamResult] = await Promise.all([
+    searchParams,
     getPortfolioList(),
     getC3PAOEngagements(),
     getC3PAOTeam(),
@@ -55,6 +62,12 @@ export default async function C3PAOEngagementsPage() {
     .filter((m) => m.id && m.name)
     .map((m) => [m.id, m.name] as const)
     .sort((a, b) => a[1].localeCompare(b[1]))
+
+  // Resolve the lead filter (single string only — array values are ignored).
+  const initialLeadFilterId = typeof leadParam === 'string' ? leadParam : undefined
+  const initialLeadFilterName = initialLeadFilterId
+    ? leadOptions.find(([id]) => id === initialLeadFilterId)?.[1]
+    : undefined
 
   return (
     <div className="space-y-6">
@@ -92,6 +105,8 @@ export default async function C3PAOEngagementsPage() {
         initialItems={items}
         currentUserId={session.c3paoUser.id}
         leadOptions={leadOptions}
+        initialLeadFilterId={initialLeadFilterId}
+        initialLeadFilterName={initialLeadFilterName}
       />
     </div>
   )
