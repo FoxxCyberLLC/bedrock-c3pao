@@ -88,11 +88,60 @@ interface SSPLongFormReadOnlyProps {
   engagementId?: string
 }
 
+// SSP JSON-text columns can hold legacy or partially-written values. Treat
+// parse failures as "no data" so one bad field can't take down the whole page.
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function safeJsonParse(value: unknown, fallback: any, fieldName: string): any {
+  if (typeof value !== 'string' || value.length === 0) return fallback
+  try {
+    return JSON.parse(value)
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err)
+    console.warn(`SSP.${fieldName}: malformed JSON, using fallback (${reason})`)
+    return fallback
+  }
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
+// The Go API's GenerateSSP writes poamSummary as a flat JSON array of POAM
+// rows (json_agg). The OSC's TypeScript generator writes the richer
+// {summary: {totalOpen, byCriticality}} shape. The renderer below expects the
+// rich shape; coerce the array form to it so contractors with API-generated
+// SSPs see real counts instead of zeros.
+type POAMItem = { riskLevel?: string; status?: string }
+type POAMSummary = {
+  summary: {
+    totalOpen: number
+    byCriticality: { critical: number; high: number; moderate: number; low: number }
+  }
+}
+function normalizePoamSummary(parsed: unknown): POAMSummary | null {
+  if (!parsed) return null
+  if (Array.isArray(parsed)) {
+    const items = parsed as POAMItem[]
+    const open = items.filter((p) => (p.status ?? '').toUpperCase() !== 'CLOSED')
+    const countAt = (level: string) =>
+      open.filter((p) => (p.riskLevel ?? '').toUpperCase() === level).length
+    return {
+      summary: {
+        totalOpen: open.length,
+        byCriticality: {
+          critical: countAt('CRITICAL'),
+          high: countAt('HIGH'),
+          moderate: countAt('MODERATE'),
+          low: countAt('LOW'),
+        },
+      },
+    }
+  }
+  return parsed as POAMSummary
+}
+
 export function SSPLongFormReadOnly({ ssp, families = [], atoPackage, engagementId }: SSPLongFormReadOnlyProps) {
-  const poamSummary = ssp.poamSummary ? JSON.parse(ssp.poamSummary) : null
-  const assetInventory = ssp.assetInventorySummary ? JSON.parse(ssp.assetInventorySummary) : null
-  const acronyms = ssp.acronyms ? JSON.parse(ssp.acronyms) : {}
-  const references = ssp.references ? JSON.parse(ssp.references) : []
+  const poamSummary = normalizePoamSummary(safeJsonParse(ssp.poamSummary, null, 'poamSummary'))
+  const assetInventory = safeJsonParse(ssp.assetInventorySummary, null, 'assetInventorySummary')
+  const acronyms = safeJsonParse(ssp.acronyms, {}, 'acronyms')
+  const references = safeJsonParse(ssp.references, [], 'references')
 
   const operatingModels: string[] = []
   if (ssp.operatingModelPublicCloud) operatingModels.push('Public Cloud')
