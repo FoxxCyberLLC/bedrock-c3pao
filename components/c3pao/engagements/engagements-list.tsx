@@ -1,10 +1,9 @@
 'use client'
 
 import { useCallback, useMemo, useState, useTransition } from 'react'
-import { ChevronDown, ChevronRight, Loader2, Search, UserPlus, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -15,6 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+} from '@/components/ui/table'
 import { bulkUpdateLead } from '@/app/actions/c3pao-portfolio'
 import {
   SAVED_VIEWS,
@@ -24,8 +29,16 @@ import {
   type GroupKey,
   type SavedViewId,
 } from '@/lib/engagements-list/saved-views'
+import {
+  sortItems,
+  toggleSort,
+  type SortKey,
+  type SortState,
+} from '@/lib/engagements-list/sort'
 import type { PortfolioListItem } from '@/lib/api-client'
-import { EngagementListRow } from './engagement-list-row'
+import { BulkActionsBar } from './bulk-actions-bar'
+import { EngagementTableRow } from './engagement-table-row'
+import { EngagementsTableHeader } from './engagements-table-header'
 
 interface EngagementsListProps {
   initialItems: PortfolioListItem[]
@@ -34,6 +47,7 @@ interface EngagementsListProps {
 }
 
 const COLLAPSED_KEY_PREFIX = 'c3pao-engagements-group-collapsed:'
+const COLUMN_COUNT = 7
 
 export function EngagementsList({
   initialItems,
@@ -48,10 +62,11 @@ export function EngagementsList({
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkLeadId, setBulkLeadId] = useState<string>('')
   const [activeViewId, setActiveViewId] = useState<SavedViewId | null>(null)
+  const [sort, setSort] = useState<SortState>({
+    key: 'organization',
+    direction: 'asc',
+  })
 
-  // Collapse state is read from localStorage lazily per-groupKey change.
-  // A single `collapseVersion` bumps on groupKey change to re-read storage
-  // without triggering a setState inside useEffect (which React 19 flags).
   const [collapseVersion, setCollapseVersion] = useState(0)
   const collapsedGroups = useMemo<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set()
@@ -63,11 +78,9 @@ export function EngagementsList({
     } catch {
       return new Set()
     }
-    // collapseVersion forces re-read after a user toggle
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupKey, collapseVersion])
 
-  // Derive the filtered + grouped items.
   const viewFiltered = useMemo(() => {
     if (!activeViewId) return items
     return applySavedView(items, activeViewId, {
@@ -86,32 +99,25 @@ export function EngagementsList({
     )
   }, [viewFiltered, search])
 
-  const groups = useMemo(
-    () => groupItems(searchFiltered, groupKey),
-    [searchFiltered, groupKey],
+  const sorted = useMemo(
+    () => sortItems(searchFiltered, sort),
+    [searchFiltered, sort],
   )
 
-  const allVisibleIds = useMemo(
-    () => searchFiltered.map((i) => i.id),
-    [searchFiltered],
-  )
+  const groups = useMemo(() => groupItems(sorted, groupKey), [sorted, groupKey])
 
-  const handleSwitchView = useCallback(
-    (viewId: SavedViewId | null) => {
-      setActiveViewId(viewId)
-      setSelected(new Set())
-    },
-    [],
-  )
+  const allVisibleIds = useMemo(() => sorted.map((i) => i.id), [sorted])
+
+  const handleSwitchView = useCallback((viewId: SavedViewId | null) => {
+    setActiveViewId(viewId)
+    setSelected(new Set())
+  }, [])
 
   const handleToggleSelect = useCallback((id: string, isSelected: boolean) => {
     setSelected((prev) => {
       const next = new Set(prev)
-      if (isSelected) {
-        next.add(id)
-      } else {
-        next.delete(id)
-      }
+      if (isSelected) next.add(id)
+      else next.delete(id)
       return next
     })
   }, [])
@@ -124,21 +130,19 @@ export function EngagementsList({
     }
   }, [allVisibleIds, selected.size])
 
+  const handleSort = useCallback((key: SortKey) => {
+    setSort((prev) => toggleSort(prev, key))
+  }, [])
+
   const handleToggleCollapse = useCallback(
     (key: string) => {
       if (typeof window === 'undefined') return
-      // Mutate localStorage directly then bump the version so the
-      // `collapsedGroups` memo re-reads storage on next render. This keeps
-      // the toggle outside of a setState-in-effect cycle.
       try {
         const raw = localStorage.getItem(COLLAPSED_KEY_PREFIX + groupKey)
         const current: string[] = raw ? (JSON.parse(raw) as string[]) : []
         const next = new Set(current)
-        if (next.has(key)) {
-          next.delete(key)
-        } else {
-          next.add(key)
-        }
+        if (next.has(key)) next.delete(key)
+        else next.add(key)
         localStorage.setItem(
           COLLAPSED_KEY_PREFIX + groupKey,
           JSON.stringify(Array.from(next)),
@@ -167,7 +171,6 @@ export function EngagementsList({
       } else {
         toast.success(`${result.succeeded.length} engagements re-assigned`)
       }
-      // Optimistically update locally — lead on each updated engagement.
       const newLeadName =
         leadOptions.find(([id]) => id === bulkLeadId)?.[1] ?? null
       setItems((prev) =>
@@ -186,9 +189,12 @@ export function EngagementsList({
     })
   }, [bulkLeadId, selected, leadOptions])
 
+  const allSelected =
+    allVisibleIds.length > 0 && selected.size === allVisibleIds.length
+  const someSelected = selected.size > 0 && !allSelected
+
   return (
     <div className="space-y-4">
-      {/* Saved views tabs */}
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
@@ -212,7 +218,6 @@ export function EngagementsList({
         ))}
       </div>
 
-      {/* Search + grouping */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[240px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -239,117 +244,113 @@ export function EngagementsList({
             ))}
           </SelectContent>
         </Select>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <span>{searchFiltered.length} shown</span>
-          {allVisibleIds.length > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleSelectAll}
-              className="h-7"
-            >
-              {selected.size === allVisibleIds.length
-                ? 'Deselect all'
-                : 'Select all'}
-            </Button>
-          )}
-        </div>
+        <span className="text-sm text-muted-foreground">
+          {sorted.length} shown
+        </span>
       </div>
 
-      {/* Bulk action bar */}
-      {selected.size > 0 && (
-        <Card className="border-primary/40 bg-primary/5">
-          <CardContent className="flex flex-wrap items-center gap-3 py-3">
-            <Badge variant="default">{selected.size} selected</Badge>
-            <div className="flex items-center gap-2">
-              <Select value={bulkLeadId} onValueChange={setBulkLeadId}>
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue placeholder="Re-assign lead to..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {leadOptions.map(([id, name]) => (
-                    <SelectItem key={id} value={id}>
-                      {name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleBulkAssignLead}
-                disabled={!bulkLeadId || isPending}
-              >
-                {isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <UserPlus className="h-4 w-4" />
-                )}
-                Re-assign
-              </Button>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setSelected(new Set())}
-              className="ml-auto"
-            >
-              <X className="h-4 w-4" />
-              Clear
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      <BulkActionsBar
+        selectedCount={selected.size}
+        bulkLeadId={bulkLeadId}
+        onBulkLeadIdChange={setBulkLeadId}
+        leadOptions={leadOptions}
+        onAssign={handleBulkAssignLead}
+        onClear={() => setSelected(new Set())}
+        isPending={isPending}
+      />
 
-      {/* Groups */}
-      {searchFiltered.length === 0 ? (
+      {sorted.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             No engagements match the current view.
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-4">
-          {groups.map((group) => {
-            const collapsed = groupKey !== 'none' && collapsedGroups.has(group.key)
-            return (
-              <div key={group.key || 'all'} className="space-y-2">
-                {groupKey !== 'none' && (
-                  <button
-                    type="button"
-                    onClick={() => handleToggleCollapse(group.key)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:bg-accent"
-                  >
-                    {collapsed ? (
-                      <ChevronRight className="h-3 w-3" />
-                    ) : (
-                      <ChevronDown className="h-3 w-3" />
-                    )}
-                    <span>{group.label}</span>
-                    <span className="ml-1 rounded-full bg-muted px-1.5 font-medium tabular-nums">
-                      {group.items.length}
-                    </span>
-                  </button>
-                )}
-                {!collapsed && (
-                  <div className="space-y-2">
-                    {group.items.map((item) => (
-                      <EngagementListRow
-                        key={item.id}
-                        item={item}
-                        selected={selected.has(item.id)}
-                        onToggleSelect={handleToggleSelect}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <EngagementsTableHeader
+                sort={sort}
+                onSort={handleSort}
+                selectAllState={
+                  allSelected ? true : someSelected ? 'indeterminate' : false
+                }
+                onSelectAll={handleSelectAll}
+              />
+              <TableBody>
+                {groups.map((group) => {
+                  const collapsed =
+                    groupKey !== 'none' && collapsedGroups.has(group.key)
+                  return (
+                    <GroupSection
+                      key={group.key || 'all'}
+                      group={group}
+                      grouped={groupKey !== 'none'}
+                      collapsed={collapsed}
+                      onToggleCollapse={handleToggleCollapse}
+                      selected={selected}
+                      onToggleSelect={handleToggleSelect}
+                    />
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
     </div>
+  )
+}
+
+interface GroupSectionProps {
+  group: { key: string; label: string; items: PortfolioListItem[] }
+  grouped: boolean
+  collapsed: boolean
+  onToggleCollapse: (key: string) => void
+  selected: Set<string>
+  onToggleSelect: (id: string, selected: boolean) => void
+}
+
+function GroupSection({
+  group,
+  grouped,
+  collapsed,
+  onToggleCollapse,
+  selected,
+  onToggleSelect,
+}: GroupSectionProps) {
+  return (
+    <>
+      {grouped && (
+        <TableRow className="border-b bg-muted/30 hover:bg-muted/30">
+          <TableCell colSpan={COLUMN_COUNT} className="py-1.5">
+            <button
+              type="button"
+              onClick={() => onToggleCollapse(group.key)}
+              className="flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+            >
+              {collapsed ? (
+                <ChevronRight className="h-3 w-3" />
+              ) : (
+                <ChevronDown className="h-3 w-3" />
+              )}
+              <span>{group.label}</span>
+              <span className="ml-1 rounded-full bg-muted px-1.5 font-medium tabular-nums">
+                {group.items.length}
+              </span>
+            </button>
+          </TableCell>
+        </TableRow>
+      )}
+      {!collapsed &&
+        group.items.map((item) => (
+          <EngagementTableRow
+            key={item.id}
+            item={item}
+            selected={selected.has(item.id)}
+            onToggleSelect={onToggleSelect}
+          />
+        ))}
+    </>
   )
 }
