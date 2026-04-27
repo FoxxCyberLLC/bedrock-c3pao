@@ -126,6 +126,23 @@ describe('sortItems — risk', () => {
   })
 })
 
+describe('sortItems — updated', () => {
+  it('orders by updatedAt with null pushed to the end in both directions', () => {
+    const items = [
+      mk({ id: 'mid', updatedAt: '2026-03-01T00:00:00Z' }),
+      mk({ id: 'unset', updatedAt: '' }),
+      mk({ id: 'newest', updatedAt: '2026-04-20T00:00:00Z' }),
+      mk({ id: 'oldest', updatedAt: '2026-01-01T00:00:00Z' }),
+    ]
+    expect(
+      sortItems(items, { key: 'updated', direction: 'asc' }).map((i) => i.id),
+    ).toEqual(['oldest', 'mid', 'newest', 'unset'])
+    expect(
+      sortItems(items, { key: 'updated', direction: 'desc' }).map((i) => i.id),
+    ).toEqual(['newest', 'mid', 'oldest', 'unset'])
+  })
+})
+
 describe('sortItems — stability', () => {
   it('preserves original order between equal-keyed items', () => {
     const items = [

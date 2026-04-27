@@ -98,10 +98,10 @@ function sortValue(item: PortfolioListItem, key: SortKey): number | string | nul
  * nulls pushed last, then reverses for `desc` so missing-data rows stay at
  * the bottom in both directions.
  */
-export function sortItems(
-  items: readonly PortfolioListItem[],
+export function sortItems<T extends PortfolioListItem>(
+  items: readonly T[],
   state: SortState,
-): PortfolioListItem[] {
+): T[] {
   const indexed = items.map((item, index) => ({ item, index }))
   indexed.sort((a, b) => {
     const cmp = compareWithNullsLast(
@@ -118,12 +118,12 @@ export function sortItems(
   return sorted
 }
 
-function reverseKeepingNullsLast(
-  sorted: PortfolioListItem[],
+function reverseKeepingNullsLast<T extends PortfolioListItem>(
+  sorted: T[],
   key: SortKey,
-): PortfolioListItem[] {
-  const present: PortfolioListItem[] = []
-  const missing: PortfolioListItem[] = []
+): T[] {
+  const present: T[] = []
+  const missing: T[] = []
   for (const item of sorted) {
     const v = sortValue(item, key)
     const isMissing =
