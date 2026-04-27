@@ -6,8 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EngagementsList } from '@/components/c3pao/engagements/engagements-list'
 import { getPortfolioList } from '@/app/actions/c3pao-portfolio'
+import { getC3PAOEngagements } from '@/app/actions/engagements'
 import { getC3PAOTeam } from '@/app/actions/c3pao-dashboard'
 import { requireAuth } from '@/lib/auth'
+import type { PortfolioRow } from '@/lib/engagements-list/types'
 
 export const metadata = {
   title: 'Engagements · Bedrock C3PAO',
@@ -24,13 +26,32 @@ export default async function C3PAOEngagementsPage({
   const session = await requireAuth()
   if (!session) redirect('/login')
 
-  const [{ lead: leadParam }, listResult, teamResult] = await Promise.all([
+  const [{ lead: leadParam }, listResult, assessmentsResult, teamResult] = await Promise.all([
     searchParams,
     getPortfolioList(),
+    getC3PAOEngagements(),
     getC3PAOTeam(),
   ])
 
-  const items = listResult.success && listResult.data ? listResult.data : []
+  const portfolioItems =
+    listResult.success && listResult.data ? listResult.data : []
+
+  // Build a lookup of findingsCount by engagement id so we can attach it to
+  // each portfolio row. The /portfolio-list endpoint doesn't return it, but
+  // /assessments does — fetching in parallel keeps the page server-side
+  // round-trip the same as before.
+  const findingsById = new Map<string, number | null>()
+  if (assessmentsResult.success && assessmentsResult.data) {
+    for (const summary of assessmentsResult.data) {
+      findingsById.set(summary.id, summary.findingsCount)
+    }
+  }
+
+  const items: PortfolioRow[] = portfolioItems.map((item) => ({
+    ...item,
+    findingsCount: findingsById.get(item.id) ?? null,
+  }))
+
   const team =
     teamResult.success && teamResult.data ? (teamResult.data as Array<{ id: string; name: string }>) : []
   const apiError = !listResult.success ? listResult.error : null

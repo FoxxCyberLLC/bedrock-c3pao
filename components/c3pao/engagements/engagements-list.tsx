@@ -36,13 +36,13 @@ import {
   type SortKey,
   type SortState,
 } from '@/lib/engagements-list/sort'
-import type { PortfolioListItem } from '@/lib/api-client'
+import type { PortfolioRow } from '@/lib/engagements-list/types'
 import { BulkActionsBar } from './bulk-actions-bar'
 import { EngagementTableRow } from './engagement-table-row'
 import { EngagementsTableHeader } from './engagements-table-header'
 
 interface EngagementsListProps {
-  initialItems: PortfolioListItem[]
+  initialItems: PortfolioRow[]
   currentUserId: string
   leadOptions: ReadonlyArray<readonly [string, string]>
   initialLeadFilterId?: string
@@ -62,7 +62,7 @@ export function EngagementsList({
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
-  const [items, setItems] = useState<PortfolioListItem[]>(initialItems)
+  const [items, setItems] = useState<PortfolioRow[]>(initialItems)
   const [search, setSearch] = useState('')
   const [groupKey, setGroupKey] = useState<GroupKey>('none')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -350,7 +350,7 @@ export function EngagementsList({
 }
 
 interface GroupSectionProps {
-  group: { key: string; label: string; items: PortfolioListItem[] }
+  group: { key: string; label: string; items: PortfolioRow[] }
   grouped: boolean
   collapsed: boolean
   onToggleCollapse: (key: string) => void

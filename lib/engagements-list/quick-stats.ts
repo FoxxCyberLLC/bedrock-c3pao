@@ -5,8 +5,8 @@
  * without opening every row.
  */
 
-import type { PortfolioListItem } from '@/lib/api-client'
 import { resolvePhase } from '@/lib/portfolio/derive-risk'
+import type { PortfolioRow } from '@/lib/engagements-list/types'
 
 export type StatsTone = 'neutral' | 'info' | 'success' | 'warn' | 'danger'
 
@@ -54,12 +54,19 @@ const RESULT_LABEL: Record<string, { label: string; tone: StatsTone }> = {
  * column easy to render without conditional layout per row. Phases without
  * a dominant signal (PRE_ASSESS, ASSESS) fall back to scheduled milestones
  * so the cell never feels empty.
+ *
+ * Findings count overlay: when an engagement has logged findings the cell
+ * surfaces them as the primary signal in ASSESS / REPORT / CLOSE_OUT (when
+ * no POA&M deadline is set), and appends "· N findings" to the COMPLETED
+ * detail line so the historical workload is preserved.
  */
 export function getPackageQuickStat(
-  item: PortfolioListItem,
+  item: PortfolioRow,
   now: Date = new Date(),
 ): QuickStat {
   const phase = resolvePhase(item)
+  const findings = item.findingsCount ?? 0
+  const hasFindings = findings > 0
 
   // Terminal: completed engagements show the certificate outcome.
   if (item.status === 'COMPLETED') {
@@ -68,12 +75,17 @@ export function getPackageQuickStat(
       : null
     if (result) {
       const expiry = daysUntil(item.certExpiresAt, now)
-      const detail =
+      const certDetail =
         expiry !== null
           ? expiry < 0
             ? 'cert expired'
             : `cert expires ${formatRelativeDays(expiry)}`
-          : undefined
+          : null
+      const findingsDetail = hasFindings ? `${findings} findings` : null
+      const detail =
+        certDetail && findingsDetail
+          ? `${certDetail} · ${findingsDetail}`
+          : (certDetail ?? findingsDetail ?? undefined)
       return { label: 'Result', value: result.label, tone: result.tone, detail }
     }
     return { label: 'Result', value: 'Awaiting outcome', tone: 'neutral' }
@@ -92,6 +104,9 @@ export function getPackageQuickStat(
         tone: deadlineTone(due, 14),
       }
     }
+    if (hasFindings) {
+      return { label: 'Findings', value: String(findings), tone: 'info' }
+    }
     return { label: 'Phase', value: 'Close-out', tone: 'info' }
   }
 
@@ -99,10 +114,16 @@ export function getPackageQuickStat(
     if (item.status === 'PENDING_APPROVAL') {
       return { label: 'QA', value: 'Awaiting review', tone: 'warn' }
     }
+    if (hasFindings) {
+      return { label: 'Findings', value: String(findings), tone: 'info' }
+    }
     return { label: 'Phase', value: 'Drafting report', tone: 'info' }
   }
 
   if (phase === 'ASSESS') {
+    if (hasFindings) {
+      return { label: 'Findings logged', value: String(findings), tone: 'info' }
+    }
     if (item.objectivesTotal > 0) {
       const remaining = Math.max(
         0,
