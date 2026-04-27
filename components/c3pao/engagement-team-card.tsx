@@ -33,8 +33,10 @@ import {
   ArrowUp,
   ArrowDown,
   Loader2,
+  Layers,
 } from 'lucide-react'
 import { TeamAssignmentDialog } from './team-assignment-dialog'
+import { DomainAssignmentDialog } from './domain-assignment-dialog'
 import {
   removeAssessorFromEngagement,
   updateAssessorRole,
@@ -92,6 +94,7 @@ export function EngagementTeamCard({
   const [removingId, setRemovingId] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<TeamMember | null>(null)
   const [updatingRole, setUpdatingRole] = useState<string | null>(null)
+  const [editDomainsFor, setEditDomainsFor] = useState<TeamMember | null>(null)
 
   async function handleRemove(member: TeamMember) {
     setRemovingId(member.assessorId)
@@ -189,11 +192,20 @@ export function EngagementTeamCard({
                         {config.icon}
                       </div>
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-medium">{member.name}</span>
                           <Badge variant="outline" className={`text-xs ${config.color}`}>
                             {config.label}
                           </Badge>
+                          {member.domains.map((code) => (
+                            <Badge
+                              key={code}
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0 font-mono"
+                            >
+                              {code}
+                            </Badge>
+                          ))}
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {member.jobTitle || member.email}
@@ -235,6 +247,11 @@ export function EngagementTeamCard({
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => setEditDomainsFor(member)}>
+                            <Layers className="h-4 w-4 mr-2" />
+                            Edit Domains
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-red-600"
                             onClick={() => setConfirmRemove(member)}
@@ -259,6 +276,21 @@ export function EngagementTeamCard({
         engagementId={engagementId}
         onSuccess={onTeamUpdated}
       />
+
+      {editDomainsFor && (
+        <DomainAssignmentDialog
+          key={editDomainsFor.assessorId}
+          open={!!editDomainsFor}
+          onOpenChange={(open) => {
+            if (!open) setEditDomainsFor(null)
+          }}
+          engagementId={engagementId}
+          assessorId={editDomainsFor.assessorId}
+          assessorName={editDomainsFor.name}
+          initialDomains={editDomainsFor.domains}
+          onSuccess={onTeamUpdated}
+        />
+      )}
 
       <AlertDialog open={!!confirmRemove} onOpenChange={() => setConfirmRemove(null)}>
         <AlertDialogContent>
