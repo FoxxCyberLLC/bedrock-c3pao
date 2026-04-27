@@ -1,35 +1,25 @@
 'use client'
 
 import { useCallback, useMemo, useState, useTransition } from 'react'
-import { ChevronDown, ChevronRight, Search, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 
-import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-} from '@/components/ui/table'
+import { Table, TableBody } from '@/components/ui/table'
 import { bulkUpdateLead } from '@/app/actions/c3pao-portfolio'
 import {
-  SAVED_VIEWS,
-  GROUP_OPTIONS,
-  applySavedView,
   groupItems,
   type GroupKey,
-  type SavedViewId,
 } from '@/lib/engagements-list/saved-views'
+import {
+  applyPersonalFilters,
+  hasNonDefaultFilters,
+  summarizeFilters,
+  toSavedViewFilter,
+  type PersonalFilterState,
+} from '@/lib/engagements-list/personal-filters'
+import { resolvePhase } from '@/lib/portfolio/derive-risk'
 import {
   sortItems,
   toggleSort,
@@ -37,9 +27,20 @@ import {
   type SortState,
 } from '@/lib/engagements-list/sort'
 import type { PortfolioRow } from '@/lib/engagements-list/types'
+import type {
+  ActiveSnooze,
+  EngagementTag,
+  PhaseFilter,
+  SavedView,
+} from '@/lib/personal-views-types'
+import { AddTagDialog } from './add-tag-dialog'
 import { BulkActionsBar } from './bulk-actions-bar'
-import { EngagementTableRow } from './engagement-table-row'
+import { EngagementsGroupSection } from './engagements-group-section'
 import { EngagementsTableHeader } from './engagements-table-header'
+import { EngagementsToolbar } from './engagements-toolbar'
+import { SaveViewDialog } from './save-view-dialog'
+import { SnoozeDialog } from './snooze-dialog'
+import { usePersonalViews } from './use-personal-views'
 
 interface EngagementsListProps {
   initialItems: PortfolioRow[]
@@ -47,10 +48,15 @@ interface EngagementsListProps {
   leadOptions: ReadonlyArray<readonly [string, string]>
   initialLeadFilterId?: string
   initialLeadFilterName?: string
+  initialPinnedIds: string[]
+  initialTagsByEngagement: Record<string, EngagementTag[]>
+  initialAllTagLabels: string[]
+  initialActiveSnoozes: ActiveSnooze[]
+  initialSavedViews: SavedView[]
 }
 
 const COLLAPSED_KEY_PREFIX = 'c3pao-engagements-group-collapsed:'
-const COLUMN_COUNT = 7
+const COLUMN_COUNT = 8
 
 export function EngagementsList({
   initialItems,
@@ -58,16 +64,28 @@ export function EngagementsList({
   leadOptions,
   initialLeadFilterId,
   initialLeadFilterName,
+  initialPinnedIds,
+  initialTagsByEngagement,
+  initialAllTagLabels,
+  initialActiveSnoozes,
+  initialSavedViews,
 }: EngagementsListProps) {
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+
+  const personal = usePersonalViews({
+    initialPinnedIds,
+    initialTagsByEngagement,
+    initialAllTagLabels,
+    initialActiveSnoozes,
+    initialSavedViews,
+  })
 
   const [items, setItems] = useState<PortfolioRow[]>(initialItems)
   const [search, setSearch] = useState('')
   const [groupKey, setGroupKey] = useState<GroupKey>('none')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkLeadId, setBulkLeadId] = useState<string>('')
-  const [activeViewId, setActiveViewId] = useState<SavedViewId | null>(null)
   const [leadFilterId, setLeadFilterId] = useState<string | undefined>(
     initialLeadFilterId,
   )
@@ -78,6 +96,12 @@ export function EngagementsList({
     key: 'organization',
     direction: 'asc',
   })
+
+  const [addTagFor, setAddTagFor] = useState<{ id: string } | null>(null)
+  const [snoozeFor, setSnoozeFor] = useState<{ id: string; label: string } | null>(
+    null,
+  )
+  const [showSaveViewDialog, setShowSaveViewDialog] = useState(false)
 
   const [collapseVersion, setCollapseVersion] = useState(0)
   const collapsedGroups = useMemo<Set<string>>(() => {
@@ -93,28 +117,85 @@ export function EngagementsList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupKey, collapseVersion])
 
-  const viewFiltered = useMemo(() => {
-    if (!activeViewId) return items
-    return applySavedView(items, activeViewId, {
-      userId: currentUserId,
-      now: new Date(),
-    })
-  }, [items, activeViewId, currentUserId])
+  const filterState: PersonalFilterState = useMemo(
+    () => ({
+      phase: personal.phase,
+      mineOnly: personal.mineOnly,
+      atRiskOnly: personal.atRiskOnly,
+      pinnedOnly: personal.pinnedOnly,
+      hideSnoozed: personal.hideSnoozed,
+      tagFilter: personal.tagFilter,
+      leadFilterId,
+    }),
+    [
+      personal.phase,
+      personal.mineOnly,
+      personal.atRiskOnly,
+      personal.pinnedOnly,
+      personal.hideSnoozed,
+      personal.tagFilter,
+      leadFilterId,
+    ],
+  )
 
-  const leadFiltered = useMemo(() => {
-    if (!leadFilterId) return viewFiltered
-    return viewFiltered.filter((item) => item.leadAssessorId === leadFilterId)
-  }, [viewFiltered, leadFilterId])
+  const personalFiltered = useMemo(
+    () =>
+      applyPersonalFilters(items, filterState, {
+        currentUserId,
+        pinnedIds: personal.pinnedIds,
+        snoozedIds: personal.snoozedIds,
+        tagsByEngagement: personal.tagsByEngagement,
+      }),
+    [
+      items,
+      filterState,
+      currentUserId,
+      personal.pinnedIds,
+      personal.snoozedIds,
+      personal.tagsByEngagement,
+    ],
+  )
 
   const searchFiltered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (!q) return leadFiltered
-    return leadFiltered.filter(
+    if (!q) return personalFiltered
+    return personalFiltered.filter(
       (item) =>
         item.organizationName.toLowerCase().includes(q) ||
         item.packageName.toLowerCase().includes(q),
     )
-  }, [leadFiltered, search])
+  }, [personalFiltered, search])
+
+  const sorted = useMemo(
+    () => sortItems(searchFiltered, sort),
+    [searchFiltered, sort],
+  )
+  const groups = useMemo(() => groupItems(sorted, groupKey), [sorted, groupKey])
+  const allVisibleIds = useMemo(() => sorted.map((i) => i.id), [sorted])
+
+  const phaseCounts = useMemo<Partial<Record<PhaseFilter, number>>>(() => {
+    const baseState: PersonalFilterState = { ...filterState, phase: 'all' }
+    const base = applyPersonalFilters(items, baseState, {
+      currentUserId,
+      pinnedIds: personal.pinnedIds,
+      snoozedIds: personal.snoozedIds,
+      tagsByEngagement: personal.tagsByEngagement,
+    })
+    const counts: Partial<Record<PhaseFilter, number>> = { all: base.length }
+    for (const item of base) {
+      const p = resolvePhase(item)
+      if (!p) continue
+      counts[p] = (counts[p] ?? 0) + 1
+    }
+    return counts
+  }, [
+    items,
+    filterState,
+    currentUserId,
+    personal.pinnedIds,
+    personal.snoozedIds,
+    personal.tagsByEngagement,
+  ])
 
   const handleClearLeadFilter = useCallback(() => {
     setLeadFilterId(undefined)
@@ -122,19 +203,13 @@ export function EngagementsList({
     router.replace('/engagements')
   }, [router])
 
-  const sorted = useMemo(
-    () => sortItems(searchFiltered, sort),
-    [searchFiltered, sort],
+  const handleSelectSavedView = useCallback(
+    (id: string | null) => {
+      if (id === null) personal.setActiveSavedViewId(null)
+      else personal.applySavedViewFilter(id)
+    },
+    [personal],
   )
-
-  const groups = useMemo(() => groupItems(sorted, groupKey), [sorted, groupKey])
-
-  const allVisibleIds = useMemo(() => sorted.map((i) => i.id), [sorted])
-
-  const handleSwitchView = useCallback((viewId: SavedViewId | null) => {
-    setActiveViewId(viewId)
-    setSelected(new Set())
-  }, [])
 
   const handleToggleSelect = useCallback((id: string, isSelected: boolean) => {
     setSelected((prev) => {
@@ -212,34 +287,89 @@ export function EngagementsList({
     })
   }, [bulkLeadId, selected, leadOptions])
 
+  // Wrap mutators that should clear the active saved view (since the user
+  // just edited the filter manually).
+  const onPhaseChange = useCallback(
+    (next: PhaseFilter) => {
+      personal.setPhase(next)
+      personal.setActiveSavedViewId(null)
+    },
+    [personal],
+  )
+  const onMineOnlyChange = useCallback(
+    (v: boolean) => {
+      personal.setMineOnly(v)
+      personal.setActiveSavedViewId(null)
+    },
+    [personal],
+  )
+  const onAtRiskOnlyChange = useCallback(
+    (v: boolean) => {
+      personal.setAtRiskOnly(v)
+      personal.setActiveSavedViewId(null)
+    },
+    [personal],
+  )
+  const onPinnedOnlyChange = useCallback(
+    (v: boolean) => {
+      personal.setPinnedOnly(v)
+      personal.setActiveSavedViewId(null)
+    },
+    [personal],
+  )
+  const onHideSnoozedChange = useCallback(
+    (v: boolean) => {
+      personal.setHideSnoozed(v)
+      personal.setActiveSavedViewId(null)
+    },
+    [personal],
+  )
+  const onTagFilterChange = useCallback(
+    (next: string[]) => {
+      personal.setTagFilter(next)
+      personal.setActiveSavedViewId(null)
+    },
+    [personal],
+  )
+
   const allSelected =
     allVisibleIds.length > 0 && selected.size === allVisibleIds.length
   const someSelected = selected.size > 0 && !allSelected
+  const canSaveCurrent = hasNonDefaultFilters(filterState)
+  const filterSummary = useMemo(
+    () => summarizeFilters(filterState),
+    [filterState],
+  )
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant={activeViewId === null ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => handleSwitchView(null)}
-        >
-          All
-        </Button>
-        {SAVED_VIEWS.map((view) => (
-          <Button
-            key={view.id}
-            type="button"
-            variant={activeViewId === view.id ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => handleSwitchView(view.id)}
-            title={view.description}
-          >
-            {view.label}
-          </Button>
-        ))}
-      </div>
+      <EngagementsToolbar
+        phase={personal.phase}
+        onPhaseChange={onPhaseChange}
+        phaseCounts={phaseCounts}
+        mineOnly={personal.mineOnly}
+        atRiskOnly={personal.atRiskOnly}
+        pinnedOnly={personal.pinnedOnly}
+        hideSnoozed={personal.hideSnoozed}
+        onMineOnlyChange={onMineOnlyChange}
+        onAtRiskOnlyChange={onAtRiskOnlyChange}
+        onPinnedOnlyChange={onPinnedOnlyChange}
+        onHideSnoozedChange={onHideSnoozedChange}
+        allTagLabels={personal.allTagLabels}
+        tagFilter={personal.tagFilter}
+        onTagFilterChange={onTagFilterChange}
+        search={search}
+        onSearchChange={setSearch}
+        groupKey={groupKey}
+        onGroupKeyChange={setGroupKey}
+        shownCount={sorted.length}
+        savedViews={personal.savedViews}
+        activeSavedViewId={personal.activeSavedViewId}
+        onSelectSavedView={handleSelectSavedView}
+        onDeleteSavedView={personal.deleteSavedView}
+        canSaveCurrent={canSaveCurrent}
+        onOpenSaveView={() => setShowSaveViewDialog(true)}
+      />
 
       {leadFilterId && (
         <div className="flex flex-wrap items-center gap-2">
@@ -264,37 +394,6 @@ export function EngagementsList({
           </span>
         </div>
       )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search organization or package..."
-            className="pl-9"
-          />
-        </div>
-        <Select
-          value={groupKey}
-          onValueChange={(v) => setGroupKey(v as GroupKey)}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {GROUP_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <span className="text-sm text-muted-foreground">
-          {sorted.length} shown
-        </span>
-      </div>
 
       <BulkActionsBar
         selectedCount={selected.size}
@@ -329,14 +428,22 @@ export function EngagementsList({
                   const collapsed =
                     groupKey !== 'none' && collapsedGroups.has(group.key)
                   return (
-                    <GroupSection
+                    <EngagementsGroupSection
                       key={group.key || 'all'}
                       group={group}
                       grouped={groupKey !== 'none'}
                       collapsed={collapsed}
+                      columnCount={COLUMN_COUNT}
                       onToggleCollapse={handleToggleCollapse}
                       selected={selected}
                       onToggleSelect={handleToggleSelect}
+                      pinnedIds={personal.pinnedIds}
+                      tagsByEngagement={personal.tagsByEngagement}
+                      snoozedIds={personal.snoozedIds}
+                      onTogglePin={personal.togglePin}
+                      onOpenAddTag={(id) => setAddTagFor({ id })}
+                      onOpenSnooze={(id, label) => setSnoozeFor({ id, label })}
+                      onRemoveTag={personal.removeTag}
                     />
                   )
                 })}
@@ -345,59 +452,43 @@ export function EngagementsList({
           </CardContent>
         </Card>
       )}
-    </div>
-  )
-}
 
-interface GroupSectionProps {
-  group: { key: string; label: string; items: PortfolioRow[] }
-  grouped: boolean
-  collapsed: boolean
-  onToggleCollapse: (key: string) => void
-  selected: Set<string>
-  onToggleSelect: (id: string, selected: boolean) => void
-}
-
-function GroupSection({
-  group,
-  grouped,
-  collapsed,
-  onToggleCollapse,
-  selected,
-  onToggleSelect,
-}: GroupSectionProps) {
-  return (
-    <>
-      {grouped && (
-        <TableRow className="border-b bg-muted/30 hover:bg-muted/30">
-          <TableCell colSpan={COLUMN_COUNT} className="py-1.5">
-            <button
-              type="button"
-              onClick={() => onToggleCollapse(group.key)}
-              className="flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {collapsed ? (
-                <ChevronRight className="h-3 w-3" />
-              ) : (
-                <ChevronDown className="h-3 w-3" />
-              )}
-              <span>{group.label}</span>
-              <span className="ml-1 rounded-full bg-muted px-1.5 font-medium tabular-nums">
-                {group.items.length}
-              </span>
-            </button>
-          </TableCell>
-        </TableRow>
+      {addTagFor && (
+        <AddTagDialog
+          open
+          onOpenChange={(o) => !o && setAddTagFor(null)}
+          engagementId={addTagFor.id}
+          suggestions={personal.allTagLabels}
+          onSuccess={(tag) => {
+            personal.appendTag(tag)
+            setAddTagFor(null)
+          }}
+        />
       )}
-      {!collapsed &&
-        group.items.map((item) => (
-          <EngagementTableRow
-            key={item.id}
-            item={item}
-            selected={selected.has(item.id)}
-            onToggleSelect={onToggleSelect}
-          />
-        ))}
-    </>
+      {snoozeFor && (
+        <SnoozeDialog
+          open
+          onOpenChange={(o) => !o && setSnoozeFor(null)}
+          engagementId={snoozeFor.id}
+          engagementLabel={snoozeFor.label}
+          onSuccess={() => {
+            personal.markSnoozed(snoozeFor.id)
+            setSnoozeFor(null)
+          }}
+        />
+      )}
+      {showSaveViewDialog && (
+        <SaveViewDialog
+          open
+          onOpenChange={(o) => !o && setShowSaveViewDialog(false)}
+          currentFilter={toSavedViewFilter(filterState)}
+          filterSummary={filterSummary}
+          onSuccess={(view) => {
+            personal.appendSavedView(view)
+            setShowSaveViewDialog(false)
+          }}
+        />
+      )}
+    </div>
   )
 }

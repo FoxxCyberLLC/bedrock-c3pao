@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  SAVED_VIEWS,
-  getSavedViewById,
-  applySavedView,
   groupItems,
   GROUP_OPTIONS,
-  type SavedViewId,
   type GroupKey,
 } from '@/lib/engagements-list/saved-views'
 import type { PortfolioListItem } from '@/lib/api-client'
@@ -34,108 +30,6 @@ function mk(overrides: Partial<PortfolioListItem> = {}): PortfolioListItem {
     ...overrides,
   }
 }
-
-describe('SAVED_VIEWS', () => {
-  it('exposes the 5 saved views in display order', () => {
-    expect(SAVED_VIEWS.map((v) => v.id)).toEqual<SavedViewId[]>([
-      'my-active',
-      'pre-brief-this-week',
-      'at-risk',
-      'qa-queue',
-      'past-30-completed',
-    ])
-  })
-
-  it('every saved view has a label and description', () => {
-    for (const view of SAVED_VIEWS) {
-      expect(view.label.length).toBeGreaterThan(0)
-      expect(view.description.length).toBeGreaterThan(0)
-    }
-  })
-})
-
-describe('getSavedViewById', () => {
-  it('returns the matching view', () => {
-    expect(getSavedViewById('at-risk')?.id).toBe('at-risk')
-  })
-
-  it('returns undefined for an unknown id', () => {
-    expect(getSavedViewById('bogus' as SavedViewId)).toBeUndefined()
-  })
-})
-
-describe('applySavedView', () => {
-  const now = new Date('2026-04-07T00:00:00Z')
-  const items: PortfolioListItem[] = [
-    // My active (user-1 is on the team)
-    mk({
-      id: 'a',
-      status: 'IN_PROGRESS',
-      leadAssessorId: 'user-1',
-      updatedAt: '2026-04-01T00:00:00Z',
-    }),
-    // Pre-brief this week
-    mk({
-      id: 'b',
-      status: 'ACCEPTED',
-      scheduledStartDate: '2026-04-09T00:00:00Z',
-    }),
-    // At risk (overdue)
-    mk({
-      id: 'c',
-      status: 'IN_PROGRESS',
-      scheduledEndDate: '2026-01-01T00:00:00Z',
-    }),
-    // QA queue
-    mk({ id: 'd', status: 'PENDING_APPROVAL' }),
-    // Past 30 completed
-    mk({
-      id: 'e',
-      status: 'COMPLETED',
-      updatedAt: '2026-03-20T00:00:00Z',
-    }),
-    // Old completed (> 30 days ago)
-    mk({
-      id: 'f',
-      status: 'COMPLETED',
-      updatedAt: '2026-02-01T00:00:00Z',
-    }),
-    // Cancelled
-    mk({ id: 'g', status: 'CANCELLED' }),
-  ]
-
-  it('my-active filters to engagements where user is lead and not terminal', () => {
-    const result = applySavedView(items, 'my-active', { userId: 'user-1', now })
-    expect(result.map((i) => i.id)).toEqual(['a'])
-  })
-
-  it('pre-brief-this-week filters to items with a start date in the next 7 days', () => {
-    const result = applySavedView(items, 'pre-brief-this-week', {
-      userId: 'user-1',
-      now,
-    })
-    expect(result.map((i) => i.id)).toEqual(['b'])
-  })
-
-  it('at-risk filters to overdue or stalled items', () => {
-    const result = applySavedView(items, 'at-risk', { userId: 'user-1', now })
-    expect(result.map((i) => i.id)).toContain('c')
-    expect(result.map((i) => i.id)).not.toContain('a')
-  })
-
-  it('qa-queue filters to PENDING_APPROVAL', () => {
-    const result = applySavedView(items, 'qa-queue', { userId: 'user-1', now })
-    expect(result.map((i) => i.id)).toEqual(['d'])
-  })
-
-  it('past-30-completed filters to COMPLETED within 30 days', () => {
-    const result = applySavedView(items, 'past-30-completed', {
-      userId: 'user-1',
-      now,
-    })
-    expect(result.map((i) => i.id)).toEqual(['e'])
-  })
-})
 
 describe('groupItems', () => {
   const items: PortfolioListItem[] = [

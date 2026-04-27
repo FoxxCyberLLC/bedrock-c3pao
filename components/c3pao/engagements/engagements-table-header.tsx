@@ -47,6 +47,7 @@ export function EngagementsTableHeader({
             />
           </TableHead>
         ))}
+        <TableHead className="w-10" aria-label="Row actions" />
       </TableRow>
     </TableHeader>
   )

@@ -161,6 +161,45 @@ export async function ensureSchema(): Promise<void> {
         ON readiness_audit_log(engagement_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_assessment_notes_engagement
         ON assessment_notes(engagement_id, created_at DESC);
+
+      -- Per-user pinned engagements (personal watch list).
+      CREATE TABLE IF NOT EXISTS engagement_pins (
+        user_id TEXT NOT NULL,
+        engagement_id TEXT NOT NULL,
+        pinned_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, engagement_id)
+      );
+
+      -- Engagement-level tags (team-visible labels).
+      CREATE TABLE IF NOT EXISTS engagement_tags (
+        engagement_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        color TEXT NOT NULL,
+        created_by TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (engagement_id, label)
+      );
+      CREATE INDEX IF NOT EXISTS engagement_tags_label_idx ON engagement_tags (label);
+
+      -- Per-user snoozes (hide an engagement from default view until a date).
+      CREATE TABLE IF NOT EXISTS engagement_snoozes (
+        user_id TEXT NOT NULL,
+        engagement_id TEXT NOT NULL,
+        hidden_until TIMESTAMPTZ NOT NULL,
+        reason TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (user_id, engagement_id)
+      );
+
+      -- Per-user saved custom filter views.
+      CREATE TABLE IF NOT EXISTS engagement_saved_views (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        filter JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS engagement_saved_views_user_idx ON engagement_saved_views (user_id);
     `)
   })()
 
