@@ -17,7 +17,7 @@ const COLUMNS: ReadonlyArray<{ label: string; key: SortKey }> = [
   { label: 'Lifecycle', key: 'phase' },
   { label: 'Lead', key: 'lead' },
   { label: 'Schedule', key: 'schedule' },
-  { label: 'Progress', key: 'progress' },
+  { label: 'Activity', key: 'updated' },
   { label: 'Package', key: 'risk' },
 ]
 

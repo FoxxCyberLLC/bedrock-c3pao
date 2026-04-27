@@ -64,11 +64,11 @@ export interface ApplySavedViewContext {
 }
 
 /** Filter the portfolio list down to the rows matching the given saved view. */
-export function applySavedView(
-  items: readonly PortfolioListItem[],
+export function applySavedView<T extends PortfolioListItem>(
+  items: readonly T[],
   viewId: SavedViewId,
   ctx: ApplySavedViewContext,
-): PortfolioListItem[] {
+): T[] {
   const { userId, now } = ctx
   const weekEnd = addDays(now, 7)
   const thirtyDaysAgo = subDays(now, 30)
@@ -121,12 +121,12 @@ export const GROUP_OPTIONS: readonly GroupOption[] = [
   { value: 'status', label: 'By status' },
 ]
 
-export interface EngagementGroup {
+export interface EngagementGroup<T extends PortfolioListItem = PortfolioListItem> {
   /** Machine-readable key (phase code, lead id, status enum, etc.). */
   key: string
   /** Display label for the group header. */
   label: string
-  items: PortfolioListItem[]
+  items: T[]
 }
 
 const PHASE_LABELS: Record<Phase, string> = {
@@ -146,15 +146,15 @@ const PHASE_ORDER: Record<Phase | 'UNASSIGNED', number> = {
 }
 
 /** Group engagements by the selected key and return sorted groups. */
-export function groupItems(
-  items: readonly PortfolioListItem[],
+export function groupItems<T extends PortfolioListItem>(
+  items: readonly T[],
   groupKey: GroupKey,
-): EngagementGroup[] {
+): EngagementGroup<T>[] {
   if (groupKey === 'none') {
     return [{ key: '', label: '', items: [...items] }]
   }
 
-  const buckets = new Map<string, EngagementGroup>()
+  const buckets = new Map<string, EngagementGroup<T>>()
 
   for (const item of items) {
     const [key, label] = getGroupKeyAndLabel(item, groupKey)
@@ -182,8 +182,8 @@ export function groupItems(
   return groups
 }
 
-function getGroupKeyAndLabel(
-  item: PortfolioListItem,
+function getGroupKeyAndLabel<T extends PortfolioListItem>(
+  item: T,
   groupKey: GroupKey,
 ): [string, string] {
   switch (groupKey) {

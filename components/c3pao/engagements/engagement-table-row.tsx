@@ -1,22 +1,22 @@
 'use client'
 
 import Link from 'next/link'
-import { format } from 'date-fns'
+import { format, formatDistanceToNow } from 'date-fns'
 import { Calendar, User } from 'lucide-react'
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { TableCell, TableRow } from '@/components/ui/table'
 import { cn, safeDate } from '@/lib/utils'
-import {
-  computeProgressPercent,
-  deriveRisk,
-  resolvePhase,
-} from '@/lib/portfolio/derive-risk'
+import { deriveRisk, resolvePhase } from '@/lib/portfolio/derive-risk'
 import {
   getPackageQuickStat,
   TONE_TEXT_CLASS,
 } from '@/lib/engagements-list/quick-stats'
-import type { PortfolioListItem } from '@/lib/api-client'
+import {
+  getFreshnessTone,
+  type FreshnessTone,
+} from '@/lib/engagements-list/freshness'
+import type { PortfolioRow } from '@/lib/engagements-list/types'
 import { LifecycleStepperMini } from './lifecycle-stepper-mini'
 
 const RISK_BORDER: Record<ReturnType<typeof deriveRisk>, string> = {
@@ -31,14 +31,21 @@ const RISK_LABEL: Record<ReturnType<typeof deriveRisk>, string | null> = {
   OVERDUE: 'Overdue',
 }
 
+const FRESHNESS_PIP_CLASS: Record<FreshnessTone, string> = {
+  fresh: 'bg-emerald-500',
+  aging: 'bg-amber-500',
+  stale: 'bg-rose-500',
+  unknown: 'bg-muted-foreground/40',
+}
+
 interface EngagementTableRowProps {
-  item: PortfolioListItem
+  item: PortfolioRow
   selected: boolean
   onToggleSelect: (id: string, selected: boolean) => void
   now?: Date
 }
 
-function formatScheduleRange(item: PortfolioListItem): string {
+function formatScheduleRange(item: PortfolioRow): string {
   const start = safeDate(item.scheduledStartDate)
   const end = safeDate(item.scheduledEndDate)
   if (start && end) {
@@ -58,10 +65,15 @@ export function EngagementTableRow({
 }: EngagementTableRowProps) {
   const phase = resolvePhase(item)
   const risk = deriveRisk(item, now)
-  const progressPct = computeProgressPercent(item)
   const stat = getPackageQuickStat(item, now)
   const scheduleLabel = formatScheduleRange(item)
   const riskLabel = RISK_LABEL[risk]
+
+  const updatedDate = safeDate(item.updatedAt)
+  const freshnessTone = getFreshnessTone(item.updatedAt, now)
+  const activityLabel = updatedDate
+    ? formatDistanceToNow(updatedDate, { addSuffix: true })
+    : '—'
 
   return (
     <TableRow
@@ -136,21 +148,16 @@ export function EngagementTableRow({
       </TableCell>
 
       <TableCell className="w-[140px]">
-        {item.objectivesTotal > 0 ? (
-          <div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary transition-all"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <p className="mt-1 text-[10px] text-muted-foreground tabular-nums">
-              {item.objectivesAssessed}/{item.objectivesTotal} · {progressPct}%
-            </p>
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span
+            aria-hidden="true"
+            className={cn(
+              'h-2 w-2 shrink-0 rounded-full',
+              FRESHNESS_PIP_CLASS[freshnessTone],
+            )}
+          />
+          <span className="truncate">{activityLabel}</span>
+        </div>
       </TableCell>
 
       <TableCell className="w-[180px]">
