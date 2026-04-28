@@ -10,19 +10,21 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { ChipToggles } from '@/components/c3pao/engagements/chip-toggles'
 
+type Setter = (next: boolean) => void
+
 interface Handlers {
-  onMineOnlyChange: ReturnType<typeof vi.fn>
-  onAtRiskOnlyChange: ReturnType<typeof vi.fn>
-  onPinnedOnlyChange: ReturnType<typeof vi.fn>
-  onHideSnoozedChange: ReturnType<typeof vi.fn>
+  onMineOnlyChange: ReturnType<typeof vi.fn<Setter>>
+  onAtRiskOnlyChange: ReturnType<typeof vi.fn<Setter>>
+  onPinnedOnlyChange: ReturnType<typeof vi.fn<Setter>>
+  onHideSnoozedChange: ReturnType<typeof vi.fn<Setter>>
 }
 
 function setup(state: Partial<{ mineOnly: boolean; atRiskOnly: boolean; pinnedOnly: boolean; hideSnoozed: boolean }> = {}) {
   const handlers: Handlers = {
-    onMineOnlyChange: vi.fn(),
-    onAtRiskOnlyChange: vi.fn(),
-    onPinnedOnlyChange: vi.fn(),
-    onHideSnoozedChange: vi.fn(),
+    onMineOnlyChange: vi.fn<Setter>(),
+    onAtRiskOnlyChange: vi.fn<Setter>(),
+    onPinnedOnlyChange: vi.fn<Setter>(),
+    onHideSnoozedChange: vi.fn<Setter>(),
   }
   render(
     <ChipToggles
