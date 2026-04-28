@@ -72,6 +72,7 @@ import { ReadinessWorkspace } from './readiness/readiness-workspace'
 import { NotesPanel } from './notes/notes-panel'
 import { AssessmentProgressTracker } from './assessment-progress-tracker'
 import { FindingsReviewQueue } from './findings-review-queue'
+import { OutsideEvidencePanel } from './engagement/outside-evidence-panel'
 import { CheckinCard } from './checkin-card'
 import { getEngagementTeam } from '@/app/actions/c3pao-team-assignment'
 import {
@@ -1142,6 +1143,12 @@ function EngagementDetailFull({
                 <CheckSquare className="h-4 w-4" />
                 <span className="hidden sm:inline">Review</span>
               </TabsTrigger>
+              {isOutside && (
+                <TabsTrigger value="evidence" className="gap-2">
+                  <FileText className="h-4 w-4" />
+                  <span className="hidden sm:inline">Evidence</span>
+                </TabsTrigger>
+              )}
             </>
           )}
           {section === 'engagement' && (
@@ -1239,6 +1246,13 @@ function EngagementDetailFull({
         <TabsContent value="progress">
           <AssessmentProgressTracker engagementId={engagement.id} />
         </TabsContent>
+
+        {/* Outside-engagement Evidence Tab (rendered only when isOutside) */}
+        {isOutside && (
+          <TabsContent value="evidence" className="space-y-4">
+            <OutsideEvidencePanel engagementId={engagement.id} />
+          </TabsContent>
+        )}
 
         {/* Review Tab */}
         <TabsContent value="review" className="space-y-6">

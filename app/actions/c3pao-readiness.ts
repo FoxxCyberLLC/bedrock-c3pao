@@ -27,7 +27,8 @@ import {
   toggleAssessmentMode,
 } from '@/lib/api-client'
 import { attestFormQad, revokeFormQad, formQadStep } from '@/lib/qa-self-attest'
-import { READINESS_ITEM_KEYS } from '@/lib/readiness-types'
+import { OUTSIDE_DEFAULT_ITEMS, READINESS_ITEM_KEYS } from '@/lib/readiness-types'
+import { getOutsideEngagementById } from '@/lib/db-outside-engagement'
 import type {
   AuditEntry,
   ReadinessChecklist,
@@ -68,19 +69,25 @@ export async function getReadinessChecklist(
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
 
-    await ensureItemsSeeded(engagementId)
+    // Outside engagements get their own default item set distinct from the
+    // OSC contractor-readiness flow. ensureItemsSeeded is idempotent — a
+    // second call after the first never re-seeds.
+    const isOutside = (await getOutsideEngagementById(engagementId).catch(() => null)) !== null
+    const itemKeys = isOutside ? OUTSIDE_DEFAULT_ITEMS : READINESS_ITEM_KEYS
+    await ensureItemsSeeded(engagementId, itemKeys)
     const items = await getItems(engagementId)
 
     const completedCount = items.filter(
       (i) => i.status === 'complete' || i.status === 'waived',
     ).length
 
+    const totalCount = itemKeys.length
     const checklist: ReadinessChecklist = {
       engagementId,
       items,
       completedCount,
-      totalCount: 8,
-      canStart: completedCount === 8,
+      totalCount,
+      canStart: completedCount === totalCount,
     }
     return { success: true, data: checklist }
   } catch (error) {

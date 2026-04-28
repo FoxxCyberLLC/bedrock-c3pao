@@ -97,12 +97,20 @@ function mapItem(row: ItemRow, artifacts: ReadinessArtifact[]): ReadinessItem {
   }
 }
 
-/** Seed 8 rows with status 'not_started' if none exist for this engagement. */
-export async function ensureItemsSeeded(engagementId: string): Promise<void> {
+/**
+ * Seed N rows with status 'not_started' if none exist for this engagement.
+ * @param engagementId The engagement to seed
+ * @param itemKeys The default item set. Defaults to the OSC item list. Pass
+ *                 OUTSIDE_DEFAULT_ITEMS for outside-OSC engagements.
+ */
+export async function ensureItemsSeeded(
+  engagementId: string,
+  itemKeys: ReadonlyArray<string> = READINESS_ITEM_KEYS,
+): Promise<void> {
   const values: string[] = []
   const params: unknown[] = [engagementId]
-  for (let i = 0; i < READINESS_ITEM_KEYS.length; i++) {
-    params.push(READINESS_ITEM_KEYS[i])
+  for (let i = 0; i < itemKeys.length; i++) {
+    params.push(itemKeys[i])
     values.push(`($1, $${i + 2}, 'not_started')`)
   }
   await query(

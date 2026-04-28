@@ -15,6 +15,22 @@ export const READINESS_ITEM_KEYS = [
 ] as const
 export type ReadinessItemKey = (typeof READINESS_ITEM_KEYS)[number]
 
+/**
+ * Default item set for outside-OSC engagements. Distinct from the OSC
+ * contractor-readiness flow above (no contract_executed / ssp_reviewed
+ * — those concepts don't apply when there is no contractor). The c3pao
+ * readiness server action seeds these when the engagement kind is outside.
+ */
+export const OUTSIDE_DEFAULT_ITEMS = [
+  'scope_confirmed',
+  'kickoff_scheduled',
+  'interview_list_drafted',
+  'on_site_logistics_confirmed',
+  'evidence_request_sent',
+  'ready_to_assess',
+] as const
+export type OutsideReadinessItemKey = (typeof OUTSIDE_DEFAULT_ITEMS)[number]
+
 export type ReadinessItemStatus =
   | 'not_started'
   | 'in_progress'
@@ -54,8 +70,9 @@ export interface ReadinessChecklist {
   items: ReadinessItem[]
   /** Count of items that are `complete` OR `waived`. */
   completedCount: number
-  totalCount: 8
-  /** True when `completedCount === 8`. */
+  /** Total item count. 8 for OSC engagements; OUTSIDE_DEFAULT_ITEMS.length for outside. */
+  totalCount: number
+  /** True when `completedCount === totalCount`. */
   canStart: boolean
 }
 

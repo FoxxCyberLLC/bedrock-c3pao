@@ -18,6 +18,10 @@ vi.mock('@/lib/db-readiness', () => ({
   removeArtifact: vi.fn(),
 }))
 
+vi.mock('@/lib/db-outside-engagement', () => ({
+  getOutsideEngagementById: vi.fn(async () => null),
+}))
+
 vi.mock('@/lib/db-audit', () => ({
   appendAudit: vi.fn(),
   getAuditLog: vi.fn(),
@@ -133,7 +137,7 @@ describe('getReadinessChecklist', () => {
     ])
     const { getReadinessChecklist } = await getActions()
     const result = await getReadinessChecklist('eng-1')
-    expect(ensureItemsSeeded).toHaveBeenCalledWith('eng-1')
+    expect(ensureItemsSeeded).toHaveBeenCalledWith('eng-1', expect.any(Array))
     expect(result.success).toBe(true)
     expect(result.data?.items).toHaveLength(2)
     expect(result.data?.completedCount).toBe(0)
