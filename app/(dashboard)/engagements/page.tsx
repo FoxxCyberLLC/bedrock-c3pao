@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EngagementsList } from '@/components/c3pao/engagements/engagements-list'
+import { NewOutsideEngagementDialog } from '@/components/c3pao/engagements/new-outside-engagement-dialog'
 import { getPortfolioList } from '@/app/actions/c3pao-portfolio'
 import { getC3PAOEngagements } from '@/app/actions/engagements'
 import { getC3PAOTeam } from '@/app/actions/c3pao-dashboard'
@@ -160,15 +161,18 @@ export default async function C3PAOEngagementsPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-          <FolderKanban className="h-6 w-6 text-muted-foreground" />
-          Engagements
-        </h1>
-        <p className="text-muted-foreground">
-          Portfolio-wide view of every engagement · saved views, grouping, and
-          bulk actions.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+            <FolderKanban className="h-6 w-6 text-muted-foreground" />
+            Engagements
+          </h1>
+          <p className="text-muted-foreground">
+            Portfolio-wide view of every engagement · saved views, grouping, and
+            bulk actions.
+          </p>
+        </div>
+        <NewOutsideEngagementDialog leadOptions={leadOptions.map(([id, name]) => ({ id, name }))} />
       </div>
 
       {apiError && (
