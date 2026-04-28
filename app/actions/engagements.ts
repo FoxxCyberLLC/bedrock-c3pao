@@ -1,6 +1,7 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
   fetchAssessments,
   fetchEngagementDetail,
@@ -241,126 +242,9 @@ export async function getEngagementStigs(engagementId: string): Promise<{ succes
   }
 }
 
-// Group objectives by requirementId for attachment to controls
-export function groupObjectivesByRequirement(objectives: ObjectiveView[]): Map<string, ObjectiveView[]> {
-  const map = new Map<string, ObjectiveView[]>()
-  for (const obj of objectives) {
-    const list = map.get(obj.requirementId) || []
-    list.push(obj)
-    map.set(obj.requirementId, list)
-  }
-  return map
-}
-
-type ObjectiveCompliance = 'NOT_ASSESSED' | 'MET' | 'NOT_MET' | 'NOT_APPLICABLE'
-const OBJECTIVE_COMPLIANCE_VALUES: ReadonlySet<string> = new Set([
-  'NOT_ASSESSED',
-  'MET',
-  'NOT_MET',
-  'NOT_APPLICABLE',
-])
-function narrowObjectiveStatus(s: string | null | undefined): ObjectiveCompliance {
-  if (s && OBJECTIVE_COMPLIANCE_VALUES.has(s)) return s as ObjectiveCompliance
-  return 'NOT_ASSESSED'
-}
-
-type InheritedNarrow = 'NONE' | 'PARTIAL' | 'FULL'
-const INHERITED_VALUES: ReadonlySet<string> = new Set(['NONE', 'PARTIAL', 'FULL'])
-function narrowInherited(s: string | null | undefined): InheritedNarrow | null {
-  if (!s) return null
-  return INHERITED_VALUES.has(s) ? (s as InheritedNarrow) : null
-}
-
-function toOptionalDate(value: string | null | undefined): Date | null {
-  if (!value) return null
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? null : d
-}
-
-// Helper: shape a flat ControlView into the nested RequirementStatus the UI expects.
-// Exported for outside-engagement control detail (lib/db-outside-control-detail.ts).
-export function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[]>, evidenceData?: EvidenceView[]) {
-  const objs = objectivesMap?.get(c.requirementId) || []
-  const controlEvidence = (evidenceData || [])
-    .filter(ev => (ev.requirementIds || []).includes(c.requirementId))
-    .map((ev) => ({
-      id: ev.id,
-      fileName: ev.fileName,
-      fileUrl: ev.fileUrl,
-      mimeType: ev.mimeType,
-      fileSize: ev.fileSize,
-      description: ev.description,
-      createdAt: toOptionalDate(ev.uploadedAt) ?? new Date(0),
-    }))
-  return {
-    id: c.requirementStatusId || c.id,
-    status: c.status || 'NOT_STARTED',
-    implementationNotes: c.implementationNotes,
-    implementationType: c.implementationType,
-    processOwner: c.processOwner,
-    assessmentNotes: c.assessmentNotes || null,
-    requirement: {
-      id: c.id,
-      requirementId: c.requirementId,
-      title: c.title,
-      basicRequirement: c.basicRequirement,
-      derivedRequirement: null,
-      discussion: '',
-      family: {
-        id: c.familyCode,
-        code: c.familyCode,
-        name: c.familyName,
-      },
-      objectives: objs.map(o => ({
-        id: o.id,
-        objectiveId: o.objectiveId,
-        objectiveReference: o.objectiveReference,
-        description: o.description,
-        questionsForOSC: o.nistQuestionsForOSC || null,
-        assessorQuestionsForOSC: o.assessorQuestionsForOSC || null,
-        sortOrder: 0,
-        // C3PAO assessment (engagement-scoped)
-        statuses: [{
-          id: o.id,
-          status: narrowObjectiveStatus(o.status),
-          assessmentNotes: o.assessmentNotes,
-          evidenceDescription: o.evidenceDescription,
-          implementationStatement: o.implementationStatement,
-          officialAssessment: o.officialAssessment,
-          officialAssessorId: o.officialAssessorId,
-          officialAssessedAt: toOptionalDate(o.officialAssessedAt),
-          version: o.version,
-          artifactsReviewed: o.artifactsReviewed,
-          interviewees: o.interviewees,
-          examineDescription: o.examineDescription,
-          testDescription: o.testDescription,
-          timeToAssessMinutes: o.timeToAssessMinutes,
-          inheritedStatus: narrowInherited(o.inheritedStatus),
-          // dependentESPId is UI-managed (set by the assessor in the form);
-          // backend does not currently persist it. Default to null so the
-          // ObjectiveStatus shape is complete from the start.
-          dependentESPId: null,
-          assessorQuestionsForOSC: o.assessorQuestionsForOSC || null,
-        }],
-        // OSC self-assessment context (package-scoped)
-        oscStatuses: [{
-          status: o.oscStatus,
-          inheritedStatus: o.oscInheritedStatus,
-          implementationStatement: o.oscImplementationStatement,
-          evidenceDescription: o.oscEvidenceDescription,
-          assessmentNotes: o.oscAssessmentNotes,
-          policyReference: o.oscPolicyReference,
-          procedureReference: o.oscProcedureReference,
-          responsibilityDescription: o.oscResponsibilityDescription,
-        }],
-        // OSC-authored per-objective mappings (read-only on assessor side)
-        evidenceMappings: o.evidenceMappings ?? [],
-        espMappings: o.espMappings ?? [],
-      })),
-    },
-    evidence: controlEvidence,
-  }
-}
+// shapeControl + groupObjectivesByRequirement live in lib/engagement/shape-control.ts
+// because this module has 'use server' at the top and Server Action modules
+// can only export async functions.
 
 // Helper: shape a flat EngagementSummary into the nested engagement object the UI expects
 function shapeEngagementForControl(e: EngagementSummary) {

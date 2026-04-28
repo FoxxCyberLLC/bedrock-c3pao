@@ -1,11 +1,11 @@
 /**
  * Builds the same `{ engagement, control, navigation }` shape that
  * getEngagementControlDetail returns for OSC engagements, but sourced from
- * local Postgres for outside engagements. Reuses shapeControl + groupObjectivesByRequirement
- * exported from app/actions/engagements.ts.
+ * local Postgres for outside engagements. Reuses shapeControl +
+ * groupObjectivesByRequirement from lib/engagement/shape-control.ts.
  */
 
-import { groupObjectivesByRequirement, shapeControl } from '@/app/actions/engagements'
+import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
   mergeOutsideControlsWithCatalog,
   mergeOutsideObjectivesWithCatalog,
