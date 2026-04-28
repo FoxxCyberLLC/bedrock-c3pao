@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireAuth } from '@/lib/auth'
 import { getEMASSExportData } from '@/app/actions/cmmc-export'
 import { listSnapshotsAction } from '@/app/actions/engagements'
+import { getOutsideEngagementById } from '@/lib/db-outside-engagement'
 import { EMASSExportWizard } from './emass-export-wizard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { AlertCircle } from 'lucide-react'
@@ -21,15 +22,17 @@ export default async function EMASSExportPage({
   const { id } = await params
   const { snapshot: snapshotParam } = await searchParams
 
-  // When the URL carries ?snapshot=..., the selected id is known without
-  // waiting for the snapshot list, so both fetches run in parallel. When
-  // no param is present we still need the list first to resolve the
-  // "current" snapshot as the default.
+  // Outside engagements have no snapshot history — skip the Go-API snapshot
+  // call entirely. The wizard hides the picker when snapshots.length < 2.
+  const outside = await getOutsideEngagementById(id).catch(() => null)
+
   let snapshots: Awaited<ReturnType<typeof listSnapshotsAction>>['data'] = []
   let selectedSnapshotId: string | undefined
   let result: Awaited<ReturnType<typeof getEMASSExportData>>
 
-  if (snapshotParam) {
+  if (outside) {
+    result = await getEMASSExportData(id)
+  } else if (snapshotParam) {
     selectedSnapshotId = snapshotParam
     const [snapshotsResult, dataResult] = await Promise.all([
       listSnapshotsAction(id),
