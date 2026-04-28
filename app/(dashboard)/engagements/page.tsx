@@ -8,6 +8,7 @@ import { EngagementsList } from '@/components/c3pao/engagements/engagements-list
 import { getPortfolioList } from '@/app/actions/c3pao-portfolio'
 import { getC3PAOEngagements } from '@/app/actions/engagements'
 import { getC3PAOTeam } from '@/app/actions/c3pao-dashboard'
+import { listOutsideEngagementsAction } from '@/app/actions/c3pao-outside-engagement'
 import {
   listActiveSnoozesAction,
   listAllTagLabels,
@@ -48,6 +49,7 @@ export default async function C3PAOEngagementsPage({
     allTagLabelsResult,
     snoozesResult,
     savedViewsResult,
+    outsideResult,
   ] = await Promise.all([
     searchParams,
     getPortfolioList(),
@@ -58,6 +60,7 @@ export default async function C3PAOEngagementsPage({
     listAllTagLabels(),
     listActiveSnoozesAction(),
     listSavedViewsAction(),
+    listOutsideEngagementsAction(),
   ])
 
   const portfolioItems =
@@ -74,10 +77,42 @@ export default async function C3PAOEngagementsPage({
     }
   }
 
-  const items: PortfolioRow[] = portfolioItems.map((item) => ({
+  const oscRows: PortfolioRow[] = portfolioItems.map((item) => ({
     ...item,
     findingsCount: findingsById.get(item.id) ?? null,
+    kind: 'osc' as const,
   }))
+
+  // Outside engagements live in local Postgres. Map onto the same row shape
+  // with placeholder fields where the OSC concept does not apply.
+  const outsideRows: PortfolioRow[] =
+    outsideResult.success && outsideResult.data
+      ? outsideResult.data.map((eng) => ({
+          id: eng.id,
+          packageName: eng.name,
+          organizationName: eng.clientName,
+          status: eng.status,
+          currentPhase: null,
+          leadAssessorId: eng.leadAssessorId,
+          leadAssessorName: eng.leadAssessorName,
+          scheduledStartDate: eng.scheduledStartDate,
+          scheduledEndDate: eng.scheduledEndDate,
+          daysInPhase: 0,
+          objectivesTotal: 110,
+          objectivesAssessed: 0,
+          assessmentResult: null,
+          certStatus: null,
+          certExpiresAt: null,
+          poamCloseoutDue: null,
+          reevalWindowOpenUntil: null,
+          createdAt: eng.createdAt,
+          updatedAt: eng.updatedAt,
+          findingsCount: null,
+          kind: 'outside_osc' as const,
+        }))
+      : []
+
+  const items: PortfolioRow[] = [...oscRows, ...outsideRows]
 
   const team =
     teamResult.success && teamResult.data ? (teamResult.data as Array<{ id: string; name: string }>) : []

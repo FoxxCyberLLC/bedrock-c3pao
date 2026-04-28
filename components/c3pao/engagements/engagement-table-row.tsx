@@ -158,6 +158,14 @@ export function EngagementTableRow({
               />
             )}
             <span className="truncate">{item.organizationName}</span>
+            {item.kind === 'outside_osc' && (
+              <Badge
+                variant="outline"
+                className="rounded-full px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+              >
+                Outside
+              </Badge>
+            )}
           </p>
           <p className="truncate text-xs text-muted-foreground">
             {item.packageName}
