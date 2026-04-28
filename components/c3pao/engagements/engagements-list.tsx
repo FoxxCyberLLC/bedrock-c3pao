@@ -125,6 +125,7 @@ export function EngagementsList({
       pinnedOnly: personal.pinnedOnly,
       hideSnoozed: personal.hideSnoozed,
       tagFilter: personal.tagFilter,
+      kindFilter: personal.kindFilter,
       leadFilterId,
     }),
     [
@@ -134,6 +135,7 @@ export function EngagementsList({
       personal.pinnedOnly,
       personal.hideSnoozed,
       personal.tagFilter,
+      personal.kindFilter,
       leadFilterId,
     ],
   )
@@ -355,6 +357,11 @@ export function EngagementsList({
         onAtRiskOnlyChange={onAtRiskOnlyChange}
         onPinnedOnlyChange={onPinnedOnlyChange}
         onHideSnoozedChange={onHideSnoozedChange}
+        kindFilter={personal.kindFilter}
+        onKindFilterChange={(next) => {
+          personal.setKindFilter(next)
+          personal.setActiveSavedViewId(null)
+        }}
         allTagLabels={personal.allTagLabels}
         tagFilter={personal.tagFilter}
         onTagFilterChange={onTagFilterChange}

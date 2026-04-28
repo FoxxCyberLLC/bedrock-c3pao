@@ -13,6 +13,7 @@ import { fromSavedViewFilter } from '@/lib/engagements-list/personal-filters'
 import type {
   ActiveSnooze,
   EngagementTag,
+  KindFilter,
   PhaseFilter,
   SavedView,
 } from '@/lib/personal-views-types'
@@ -39,6 +40,8 @@ export interface PersonalViewsHandle {
   setHideSnoozed: (next: boolean) => void
   tagFilter: string[]
   setTagFilter: (next: string[]) => void
+  kindFilter: KindFilter
+  setKindFilter: (next: KindFilter) => void
   activeSavedViewId: string | null
   setActiveSavedViewId: (next: string | null) => void
 
@@ -73,6 +76,7 @@ export function usePersonalViews({
   const [pinnedOnly, setPinnedOnly] = useState(false)
   const [hideSnoozed, setHideSnoozed] = useState(true)
   const [tagFilter, setTagFilter] = useState<string[]>([])
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all')
   const [activeSavedViewId, setActiveSavedViewId] = useState<string | null>(null)
 
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(
@@ -98,6 +102,7 @@ export function usePersonalViews({
       setPinnedOnly(next.pinnedOnly)
       setHideSnoozed(next.hideSnoozed)
       setTagFilter(next.tagFilter)
+      setKindFilter(next.kindFilter)
       setActiveSavedViewId(id)
     },
     [savedViews],
@@ -187,6 +192,8 @@ export function usePersonalViews({
     setHideSnoozed,
     tagFilter,
     setTagFilter,
+    kindFilter,
+    setKindFilter,
     activeSavedViewId,
     setActiveSavedViewId,
     pinnedIds,

@@ -8,6 +8,7 @@
 import { deriveRisk, resolvePhase } from '@/lib/portfolio/derive-risk'
 import type {
   EngagementTag,
+  KindFilter,
   PhaseFilter,
   SavedViewFilter,
 } from '@/lib/personal-views-types'
@@ -20,6 +21,7 @@ export interface PersonalFilterState {
   pinnedOnly: boolean
   hideSnoozed: boolean
   tagFilter: string[]
+  kindFilter: KindFilter
   leadFilterId?: string
 }
 
@@ -55,6 +57,8 @@ export function applyPersonalFilters(
     if (state.leadFilterId && item.leadAssessorId !== state.leadFilterId) {
       return false
     }
+    if (state.kindFilter === 'osc' && item.kind !== 'osc') return false
+    if (state.kindFilter === 'outside' && item.kind !== 'outside_osc') return false
     return true
   })
 }
@@ -66,10 +70,16 @@ const PHASE_LABEL: Record<Exclude<PhaseFilter, 'all'>, string> = {
   CLOSE_OUT: 'Close-Out',
 }
 
+const KIND_LABEL: Record<Exclude<KindFilter, 'all'>, string> = {
+  osc: 'OSC only',
+  outside: 'Outside only',
+}
+
 /** Build a one-line human summary of the active filters. */
 export function summarizeFilters(state: PersonalFilterState): string {
   const parts: string[] = []
   if (state.phase !== 'all') parts.push(`Phase: ${PHASE_LABEL[state.phase]}`)
+  if (state.kindFilter !== 'all') parts.push(KIND_LABEL[state.kindFilter])
   if (state.mineOnly) parts.push('Mine only')
   if (state.atRiskOnly) parts.push('At risk')
   if (state.pinnedOnly) parts.push('Pinned')
@@ -88,7 +98,8 @@ export function hasNonDefaultFilters(state: PersonalFilterState): boolean {
     state.atRiskOnly ||
     state.pinnedOnly ||
     !state.hideSnoozed ||
-    state.tagFilter.length > 0
+    state.tagFilter.length > 0 ||
+    state.kindFilter !== 'all'
   )
 }
 
@@ -102,12 +113,14 @@ export function toSavedViewFilter(state: PersonalFilterState): SavedViewFilter {
   // Persist hideSnoozed only when it differs from the default (true).
   if (!state.hideSnoozed) filter.hideSnoozed = false
   if (state.tagFilter.length > 0) filter.tags = [...state.tagFilter]
+  if (state.kindFilter !== 'all') filter.kindFilter = state.kindFilter
   return filter
 }
 
 /**
  * Apply a stored SavedViewFilter to derive the corresponding React state.
- * Defaults: hideSnoozed → true when undefined.
+ * Defaults: hideSnoozed → true when undefined; kindFilter → 'all' (backward
+ * compat with saved views created before kindFilter existed).
  */
 export function fromSavedViewFilter(
   filter: SavedViewFilter,
@@ -120,6 +133,7 @@ export function fromSavedViewFilter(
     pinnedOnly: filter.pinnedOnly ?? false,
     hideSnoozed: filter.hideSnoozed ?? true,
     tagFilter: filter.tags ? [...filter.tags] : [],
+    kindFilter: filter.kindFilter ?? 'all',
     leadFilterId: preserve.leadFilterId,
   }
 }

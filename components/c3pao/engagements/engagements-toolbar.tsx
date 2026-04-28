@@ -17,10 +17,12 @@ import {
 } from '@/lib/engagements-list/saved-views'
 import type {
   EngagementTag,
+  KindFilter,
   PhaseFilter,
   SavedView,
 } from '@/lib/personal-views-types'
 import { ChipToggles } from './chip-toggles'
+import { KindChip } from './kind-chip'
 import { PhaseTabs } from './phase-tabs'
 import { SavedViewsStrip } from './saved-views-strip'
 import { TagFilterDropdown } from './tag-filter-dropdown'
@@ -40,6 +42,10 @@ interface EngagementsToolbarProps {
   onAtRiskOnlyChange: (next: boolean) => void
   onPinnedOnlyChange: (next: boolean) => void
   onHideSnoozedChange: (next: boolean) => void
+
+  // engagement-kind tri-state filter
+  kindFilter: KindFilter
+  onKindFilterChange: (next: KindFilter) => void
 
   // tags
   allTagLabels: string[]
@@ -84,6 +90,8 @@ export function EngagementsToolbar({
   onAtRiskOnlyChange,
   onPinnedOnlyChange,
   onHideSnoozedChange,
+  kindFilter,
+  onKindFilterChange,
   allTagLabels,
   tagFilter,
   onTagFilterChange,
@@ -143,6 +151,7 @@ export function EngagementsToolbar({
           onPinnedOnlyChange={onPinnedOnlyChange}
           onHideSnoozedChange={onHideSnoozedChange}
         />
+        <KindChip value={kindFilter} onChange={onKindFilterChange} />
         <TagFilterDropdown
           allLabels={allTagLabels}
           selected={tagFilter}
