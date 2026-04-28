@@ -72,6 +72,7 @@ import { ReadinessWorkspace } from './readiness/readiness-workspace'
 import { NotesPanel } from './notes/notes-panel'
 import { AssessmentProgressTracker } from './assessment-progress-tracker'
 import { FindingsReviewQueue } from './findings-review-queue'
+import { OutsideEvidencePanel } from './engagement/outside-evidence-panel'
 import { CheckinCard } from './checkin-card'
 import { getEngagementTeam } from '@/app/actions/c3pao-team-assignment'
 import {
@@ -326,6 +327,8 @@ interface EngagementDetailProps {
   currentPhase: string | null
   /** Snapshots captured across determination + correction cycles. Empty array for pre-snapshot engagements. */
   initialSnapshots?: AssessmentSnapshotView[]
+  /** Engagement kind discriminator. Defaults to 'osc' for backward compatibility. */
+  kind?: 'osc' | 'outside_osc'
 }
 
 export function EngagementDetail({
@@ -337,6 +340,7 @@ export function EngagementDetail({
   initialPhase,
   currentPhase,
   initialSnapshots = [],
+  kind = 'osc',
 }: EngagementDetailProps) {
   // COMPLETED engagements arrive with a deliberately minimal payload from
   // getEngagementById (`{id, status, assessmentResult}` only). Bail out
@@ -356,6 +360,7 @@ export function EngagementDetail({
       initialPhase={initialPhase}
       currentPhase={currentPhase}
       initialSnapshots={initialSnapshots}
+      kind={kind}
     />
   )
 }
@@ -369,7 +374,9 @@ function EngagementDetailFull({
   initialPhase,
   currentPhase,
   initialSnapshots = [],
+  kind = 'osc',
 }: EngagementDetailProps) {
+  const isOutside = kind === 'outside_osc'
   const router = useRouter()
 
   // Resolve CAP v2.0 phase once for the section visibility migration (Task M5).
@@ -428,10 +435,11 @@ function EngagementDetailFull({
   const [assessorStats, setAssessorStats] = useState<StatsResponse | null>(null)
   const [assessorStatsState, setAssessorStatsState] = useState<'loading' | 'ready' | 'error'>('loading')
 
-  // Sectioned tab navigation
+  // Sectioned tab navigation. Outside engagements have no Package section,
+  // so we initialize on 'assessment'/'controls' for that kind.
   type NavSection = 'package' | 'assessment' | 'engagement'
-  const [section, setSection] = useState<NavSection>('package')
-  const [tabValue, setTabValue] = useState('overview')
+  const [section, setSection] = useState<NavSection>(isOutside ? 'assessment' : 'package')
+  const [tabValue, setTabValue] = useState<string>(isOutside ? 'controls' : 'overview')
 
   const handleSectionChange = (newSection: NavSection) => {
     const defaults: Record<NavSection, string> = {
@@ -1040,9 +1048,12 @@ function EngagementDetailFull({
 
       {/* Sectioned Navigation */}
       <div className="space-y-4">
-        {/* Section Switcher */}
+        {/* Section Switcher. Outside engagements hide the Package section. */}
         <div className="flex items-center gap-0.5 bg-muted/40 p-1 rounded-lg w-fit border">
-          {(['package', 'assessment', 'engagement'] as const).map((s) => (
+          {(isOutside
+            ? (['assessment', 'engagement'] as const)
+            : (['package', 'assessment', 'engagement'] as const)
+          ).map((s) => (
             <button
               key={s}
               type="button"
@@ -1132,6 +1143,12 @@ function EngagementDetailFull({
                 <CheckSquare className="h-4 w-4" />
                 <span className="hidden sm:inline">Review</span>
               </TabsTrigger>
+              {isOutside && (
+                <TabsTrigger value="evidence" className="gap-2">
+                  <FileText className="h-4 w-4" />
+                  <span className="hidden sm:inline">Evidence</span>
+                </TabsTrigger>
+              )}
             </>
           )}
           {section === 'engagement' && (
@@ -1229,6 +1246,13 @@ function EngagementDetailFull({
         <TabsContent value="progress">
           <AssessmentProgressTracker engagementId={engagement.id} />
         </TabsContent>
+
+        {/* Outside-engagement Evidence Tab (rendered only when isOutside) */}
+        {isOutside && (
+          <TabsContent value="evidence" className="space-y-4">
+            <OutsideEvidencePanel engagementId={engagement.id} />
+          </TabsContent>
+        )}
 
         {/* Review Tab */}
         <TabsContent value="review" className="space-y-6">

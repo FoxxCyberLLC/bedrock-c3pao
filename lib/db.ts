@@ -200,6 +200,94 @@ export async function ensureSchema(): Promise<void> {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
       CREATE INDEX IF NOT EXISTS engagement_saved_views_user_idx ON engagement_saved_views (user_id);
+
+      -- Outside-OSC engagements: c3pao-local engagements not represented as
+      -- ATO packages in bedrock-cmmc. Self-contained — no Go API roundtrip.
+      -- Same CMMC controls/objectives catalog as OSC engagements; assessment
+      -- status, evidence, and links live here. UUID PKs deliberately diverge
+      -- from the Go API's TEXT IDs so dispatch-by-id never collides.
+      CREATE TABLE IF NOT EXISTS outside_engagements (
+        id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name                   TEXT NOT NULL,
+        client_name            TEXT NOT NULL,
+        client_poc_name        TEXT NOT NULL,
+        client_poc_email       TEXT NOT NULL,
+        scope                  TEXT,
+        target_level           TEXT NOT NULL DEFAULT 'L2'
+                               CHECK (target_level IN ('L1', 'L2', 'L3')),
+        status                 TEXT NOT NULL DEFAULT 'PLANNING'
+                               CHECK (status IN ('PLANNING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+        lead_assessor_id       TEXT NOT NULL,
+        lead_assessor_name     TEXT NOT NULL,
+        scheduled_start_date   DATE NOT NULL,
+        scheduled_end_date     DATE NOT NULL,
+        created_by             TEXT NOT NULL,
+        created_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE TABLE IF NOT EXISTS outside_control_assessments (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        engagement_id   UUID NOT NULL REFERENCES outside_engagements(id) ON DELETE CASCADE,
+        requirement_id  TEXT NOT NULL,
+        status          TEXT NOT NULL DEFAULT 'NOT_ASSESSED'
+                        CHECK (status IN ('NOT_ASSESSED', 'MET', 'NOT_MET', 'NOT_APPLICABLE', 'IN_POAM')),
+        notes           TEXT,
+        updated_by      TEXT NOT NULL,
+        updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        version         INT NOT NULL DEFAULT 1,
+        UNIQUE (engagement_id, requirement_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_outside_control_assessments_engagement
+        ON outside_control_assessments (engagement_id);
+
+      CREATE TABLE IF NOT EXISTS outside_objective_assessments (
+        id                       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        engagement_id            UUID NOT NULL REFERENCES outside_engagements(id) ON DELETE CASCADE,
+        requirement_id           TEXT NOT NULL,
+        objective_id             TEXT NOT NULL,
+        status                   TEXT NOT NULL DEFAULT 'NOT_ASSESSED'
+                                 CHECK (status IN ('NOT_ASSESSED', 'MET', 'NOT_MET', 'NOT_APPLICABLE')),
+        assessment_notes         TEXT,
+        evidence_description     TEXT,
+        artifacts_reviewed       TEXT,
+        interviewees             TEXT,
+        examine_description      TEXT,
+        test_description         TEXT,
+        time_to_assess_minutes   INT,
+        official_assessor_id     TEXT,
+        official_assessed_at     TIMESTAMPTZ,
+        version                  INT NOT NULL DEFAULT 1,
+        updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (engagement_id, objective_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_outside_objective_assessments_engagement
+        ON outside_objective_assessments (engagement_id, requirement_id);
+
+      CREATE TABLE IF NOT EXISTS outside_evidence (
+        id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        engagement_id      UUID NOT NULL REFERENCES outside_engagements(id) ON DELETE CASCADE,
+        file_name          TEXT NOT NULL,
+        mime_type          TEXT NOT NULL,
+        size_bytes         BIGINT NOT NULL,
+        content            BYTEA NOT NULL,
+        description        TEXT,
+        uploaded_by        TEXT NOT NULL,
+        uploaded_by_email  TEXT NOT NULL,
+        uploaded_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_outside_evidence_engagement
+        ON outside_evidence (engagement_id);
+
+      CREATE TABLE IF NOT EXISTS outside_evidence_objective_links (
+        evidence_id    UUID NOT NULL REFERENCES outside_evidence(id) ON DELETE CASCADE,
+        objective_id   TEXT NOT NULL,
+        linked_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        linked_by      TEXT NOT NULL,
+        PRIMARY KEY (evidence_id, objective_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_outside_evidence_objective_links_objective
+        ON outside_evidence_objective_links (objective_id);
     `)
   })()
 

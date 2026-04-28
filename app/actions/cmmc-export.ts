@@ -14,6 +14,8 @@ import {
   type EMassExportData,
   type TeamMember,
 } from '@/lib/api-client'
+import { getOutsideEngagementById } from '@/lib/db-outside-engagement'
+import { buildOutsideEMASSExportData } from '@/lib/db-outside-emass'
 
 export interface EMASSWizardData {
   engagementId: string
@@ -108,6 +110,14 @@ export async function getEMASSExportData(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
+
+    // Dispatch by kind: outside engagements aggregate from local Postgres,
+    // OSC engagements call the Go API path below. snapshot is ignored for
+    // outside (no snapshot history in v1).
+    const outside = await getOutsideEngagementById(engagementId).catch(() => null)
+    if (outside) {
+      return await buildOutsideEMASSExportData(engagementId)
+    }
 
     const token = session.apiToken
 

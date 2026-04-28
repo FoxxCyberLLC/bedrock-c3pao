@@ -16,6 +16,8 @@ export default async function STIGsPage({
   if (!session) redirect('/login')
 
   const { id } = await params
+  const { redirectIfOutsideEngagement } = await import('@/lib/engagement/redirect-if-outside')
+  await redirectIfOutsideEngagement(id)
   const [engResult, stigsResult] = await Promise.all([
     getEngagementById(id),
     getEngagementStigs(id),

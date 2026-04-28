@@ -36,6 +36,13 @@ export type PhaseFilter =
   | 'REPORT'
   | 'CLOSE_OUT'
 
+/**
+ * Tri-state engagement-kind filter for the merged list.
+ * Missing/undefined is treated as 'all' for backward compatibility with
+ * saved views created before the kind discriminator existed.
+ */
+export type KindFilter = 'all' | 'osc' | 'outside'
+
 export interface SavedViewFilter {
   phase?: PhaseFilter
   mineOnly?: boolean
@@ -45,6 +52,8 @@ export interface SavedViewFilter {
   hideSnoozed?: boolean
   tags?: string[]
   search?: string
+  /** undefined treated as 'all' — backward compat with pre-kindFilter rows */
+  kindFilter?: KindFilter
 }
 
 export interface SavedView {

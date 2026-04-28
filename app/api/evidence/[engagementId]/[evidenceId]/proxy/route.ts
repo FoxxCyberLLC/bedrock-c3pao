@@ -1,20 +1,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth'
 import { fetchEvidenceDownloadURL } from '@/lib/api-client'
+import { PROXY_DISPLAY_ALLOWED } from '@/lib/evidence-mime-types'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
-
-// H3: Only forward Content-Types safe for browser rendering.
-// Everything else becomes application/octet-stream (forces download).
-const ALLOWED_CONTENT_TYPES = new Set([
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-])
 
 export async function GET(
   request: NextRequest,
@@ -68,9 +57,9 @@ export async function GET(
   const rawType = upstream.headers.get('content-type')?.split(';')[0].trim().toLowerCase() ?? ''
   const hintType = request.nextUrl.searchParams.get('hint')?.split(';')[0].trim().toLowerCase() ?? ''
   let contentType: string
-  if (ALLOWED_CONTENT_TYPES.has(rawType)) {
+  if (PROXY_DISPLAY_ALLOWED.has(rawType)) {
     contentType = rawType
-  } else if (hintType && ALLOWED_CONTENT_TYPES.has(hintType)) {
+  } else if (hintType && PROXY_DISPLAY_ALLOWED.has(hintType)) {
     contentType = hintType
   } else {
     contentType = 'application/octet-stream'

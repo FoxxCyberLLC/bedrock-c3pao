@@ -12,7 +12,10 @@
  */
 
 import type { PortfolioListItem } from '@/lib/api-client'
+import type { EngagementKind } from '@/lib/outside-engagement-types'
 
 export interface PortfolioRow extends PortfolioListItem {
   findingsCount: number | null
+  /** Discriminator: OSC rows come from the Go API; outside rows from local Postgres. */
+  kind: EngagementKind
 }

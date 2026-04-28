@@ -5,9 +5,11 @@ import { redirect } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EngagementsList } from '@/components/c3pao/engagements/engagements-list'
+import { NewOutsideEngagementDialog } from '@/components/c3pao/engagements/new-outside-engagement-dialog'
 import { getPortfolioList } from '@/app/actions/c3pao-portfolio'
 import { getC3PAOEngagements } from '@/app/actions/engagements'
 import { getC3PAOTeam } from '@/app/actions/c3pao-dashboard'
+import { listOutsideEngagementsAction } from '@/app/actions/c3pao-outside-engagement'
 import {
   listActiveSnoozesAction,
   listAllTagLabels,
@@ -48,6 +50,7 @@ export default async function C3PAOEngagementsPage({
     allTagLabelsResult,
     snoozesResult,
     savedViewsResult,
+    outsideResult,
   ] = await Promise.all([
     searchParams,
     getPortfolioList(),
@@ -58,6 +61,7 @@ export default async function C3PAOEngagementsPage({
     listAllTagLabels(),
     listActiveSnoozesAction(),
     listSavedViewsAction(),
+    listOutsideEngagementsAction(),
   ])
 
   const portfolioItems =
@@ -74,10 +78,42 @@ export default async function C3PAOEngagementsPage({
     }
   }
 
-  const items: PortfolioRow[] = portfolioItems.map((item) => ({
+  const oscRows: PortfolioRow[] = portfolioItems.map((item) => ({
     ...item,
     findingsCount: findingsById.get(item.id) ?? null,
+    kind: 'osc' as const,
   }))
+
+  // Outside engagements live in local Postgres. Map onto the same row shape
+  // with placeholder fields where the OSC concept does not apply.
+  const outsideRows: PortfolioRow[] =
+    outsideResult.success && outsideResult.data
+      ? outsideResult.data.map((eng) => ({
+          id: eng.id,
+          packageName: eng.name,
+          organizationName: eng.clientName,
+          status: eng.status,
+          currentPhase: null,
+          leadAssessorId: eng.leadAssessorId,
+          leadAssessorName: eng.leadAssessorName,
+          scheduledStartDate: eng.scheduledStartDate,
+          scheduledEndDate: eng.scheduledEndDate,
+          daysInPhase: 0,
+          objectivesTotal: 110,
+          objectivesAssessed: 0,
+          assessmentResult: null,
+          certStatus: null,
+          certExpiresAt: null,
+          poamCloseoutDue: null,
+          reevalWindowOpenUntil: null,
+          createdAt: eng.createdAt,
+          updatedAt: eng.updatedAt,
+          findingsCount: null,
+          kind: 'outside_osc' as const,
+        }))
+      : []
+
+  const items: PortfolioRow[] = [...oscRows, ...outsideRows]
 
   const team =
     teamResult.success && teamResult.data ? (teamResult.data as Array<{ id: string; name: string }>) : []
@@ -125,15 +161,18 @@ export default async function C3PAOEngagementsPage({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-          <FolderKanban className="h-6 w-6 text-muted-foreground" />
-          Engagements
-        </h1>
-        <p className="text-muted-foreground">
-          Portfolio-wide view of every engagement · saved views, grouping, and
-          bulk actions.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+            <FolderKanban className="h-6 w-6 text-muted-foreground" />
+            Engagements
+          </h1>
+          <p className="text-muted-foreground">
+            Portfolio-wide view of every engagement · saved views, grouping, and
+            bulk actions.
+          </p>
+        </div>
+        <NewOutsideEngagementDialog leadOptions={leadOptions.map(([id, name]) => ({ id, name }))} />
       </div>
 
       {apiError && (

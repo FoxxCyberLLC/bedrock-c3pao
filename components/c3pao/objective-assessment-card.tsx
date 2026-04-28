@@ -86,6 +86,10 @@ interface ObjectiveAssessmentCardProps {
   packageESPs: ESP[]
   locked?: boolean
   onSaved?: () => void
+  /** Engagement kind. Routes the save call to the right backend. Defaults to 'osc' for backward compatibility. */
+  engagementKind?: 'osc' | 'outside_osc'
+  /** Required when engagementKind === 'outside_osc' so the outside write can target the parent control. */
+  requirementId?: string
 }
 
 const statusOptions = [
@@ -103,6 +107,8 @@ export function ObjectiveAssessmentCard({
   packageESPs,
   locked = false,
   onSaved,
+  engagementKind = 'osc',
+  requirementId,
 }: ObjectiveAssessmentCardProps) {
   const [isPending, startTransition] = useTransition()
   const [isExpanded, setIsExpanded] = useState(false)
@@ -139,26 +145,56 @@ export function ObjectiveAssessmentCard({
 
   const handleSave = () => {
     startTransition(async () => {
-      const result = await assessorUpdateObjectiveStatus({
-        engagementId,
-        objectiveId: objective.id,
-        status,
-        assessmentNotes: findings || undefined,
-        version: assessorStatus?.version ?? 0,
-        // eMASS fields
-        artifactsReviewed: selectedArtifacts.length > 0 ? JSON.stringify(selectedArtifacts) : undefined,
-        interviewees: interviewees || undefined,
-        examineDescription: examineDescription || undefined,
-        testDescription: testDescription || undefined,
-        timeToAssessMinutes: timeToAssess ? parseInt(timeToAssess, 10) : undefined,
-        dependentESPId: dependentESPId && dependentESPId !== '__none__' ? dependentESPId : null,
-        assessorQuestionsForOSC: assessorQuestions || undefined,
-      })
+      const artifactsReviewed =
+        selectedArtifacts.length > 0 ? JSON.stringify(selectedArtifacts) : undefined
+      const timeToAssessMinutes = timeToAssess ? parseInt(timeToAssess, 10) : undefined
+
+      let result: { success: boolean; error?: string; conflict?: boolean }
+      if (engagementKind === 'outside_osc') {
+        if (!requirementId) {
+          toast.error('Cannot save outside objective: missing requirementId prop')
+          return
+        }
+        const { outsideUpdateObjectiveStatus } = await import(
+          '@/app/actions/c3pao-outside-engagement'
+        )
+        const outcome = await outsideUpdateObjectiveStatus(engagementId, objective.id, {
+          requirementId,
+          status,
+          expectedVersion: assessorStatus?.version ?? 0,
+          assessmentNotes: findings || null,
+          artifactsReviewed: artifactsReviewed ?? null,
+          interviewees: interviewees || null,
+          examineDescription: examineDescription || null,
+          testDescription: testDescription || null,
+          timeToAssessMinutes: timeToAssessMinutes ?? null,
+        })
+        result = {
+          success: outcome.success,
+          error: outcome.error,
+          conflict: outcome.error?.toLowerCase().includes('conflict'),
+        }
+      } else {
+        result = await assessorUpdateObjectiveStatus({
+          engagementId,
+          objectiveId: objective.id,
+          status,
+          assessmentNotes: findings || undefined,
+          version: assessorStatus?.version ?? 0,
+          artifactsReviewed,
+          interviewees: interviewees || undefined,
+          examineDescription: examineDescription || undefined,
+          testDescription: testDescription || undefined,
+          timeToAssessMinutes,
+          dependentESPId: dependentESPId && dependentESPId !== '__none__' ? dependentESPId : null,
+          assessorQuestionsForOSC: assessorQuestions || undefined,
+        })
+      }
 
       if (result.success) {
         toast.success('Objective assessment saved')
         onSaved?.()
-      } else if ('conflict' in result && result.conflict) {
+      } else if (result.conflict) {
         toast.error(result.error || 'Conflict detected. Please refresh.')
       } else {
         toast.error(result.error || 'Failed to save assessment')

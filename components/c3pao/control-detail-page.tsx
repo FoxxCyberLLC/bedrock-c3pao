@@ -173,6 +173,8 @@ interface ControlDetailPageProps {
     isLeadAssessor: boolean
   }
   currentPhase: string | null
+  /** Engagement kind. Forwarded to ObjectiveAssessmentCard for write dispatch. */
+  engagementKind?: 'osc' | 'outside_osc'
 }
 
 const oscStatusConfig: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string; bgColor: string }> = {
@@ -218,6 +220,7 @@ export function ControlDetailPage({
   control,
   navigation,
   currentPhase,
+  engagementKind = 'osc',
 }: ControlDetailPageProps) {
   const isPhase1Locked = currentPhase === 'PRE_ASSESS'
   const router = useRouter()
@@ -662,6 +665,8 @@ export function ControlDetailPage({
                       packageESPs={engagement.atoPackage?.externalServiceProviders || []}
                       locked={isPhase1Locked}
                       onSaved={() => router.refresh()}
+                      engagementKind={engagementKind}
+                      requirementId={control.requirement.requirementId}
                     />
                   )
                 })

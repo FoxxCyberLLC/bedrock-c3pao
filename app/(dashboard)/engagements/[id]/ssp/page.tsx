@@ -23,6 +23,8 @@ export default async function C3PAOSSPReviewPage({ params }: PageProps) {
   }
 
   const { id: engagementId } = await params
+  const { redirectIfOutsideEngagement } = await import('@/lib/engagement/redirect-if-outside')
+  await redirectIfOutsideEngagement(engagementId)
   const result = await getSSPBundleForC3PAO(engagementId)
 
   if (!result.success || !result.data) {

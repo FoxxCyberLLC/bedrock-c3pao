@@ -10,6 +10,8 @@ import { getEngagementPhase } from '@/app/actions/c3pao-phase'
 import { listSnapshotsAction } from '@/app/actions/engagements'
 import { EngagementDetail } from '@/components/c3pao/engagement-detail'
 import { LimitedEngagementDetail } from '@/components/c3pao/limited-engagement-detail'
+import { dispatchEngagementById } from '@/lib/engagement/dispatch-by-id'
+import { outsideToCommon } from '@/lib/engagement/outside-to-common'
 import type { AuditEntry, ReadinessChecklist } from '@/lib/readiness-types'
 import type { EngagementSchedule } from '@/lib/db-schedule'
 import type { EngagementPhase } from '@/lib/api-client'
@@ -33,6 +35,49 @@ export default async function EngagementDetailPage({
   }
 
   const { id } = await params
+
+  // Source dispatch: local outside engagement vs Go-API OSC.
+  const dispatch = await dispatchEngagementById(id)
+
+  if (dispatch.kind === 'outside_osc') {
+    // Outside engagements skip Go-API supplemental fetches entirely. Phase
+    // and snapshots have no outside equivalent in v1; readiness + schedule
+    // come from local Postgres and accept the outside UUID natively.
+    const [
+      readinessChecklistResult,
+      readinessAuditResult,
+      scheduleResult,
+    ] = await Promise.all([
+      getReadinessChecklist(id),
+      getReadinessAuditLog(id),
+      getEngagementSchedule(id),
+    ])
+    const initialChecklist: ReadinessChecklist =
+      readinessChecklistResult.success && readinessChecklistResult.data
+        ? readinessChecklistResult.data
+        : { ...EMPTY_CHECKLIST, engagementId: id }
+    const initialAuditEntries: AuditEntry[] =
+      readinessAuditResult.success && readinessAuditResult.data
+        ? readinessAuditResult.data
+        : []
+    const initialSchedule: EngagementSchedule | null =
+      scheduleResult.success && scheduleResult.data ? scheduleResult.data : null
+
+    return (
+      <EngagementDetail
+        engagement={outsideToCommon(dispatch.engagement)}
+        user={session.c3paoUser}
+        initialChecklist={initialChecklist}
+        initialAuditEntries={initialAuditEntries}
+        initialSchedule={initialSchedule}
+        initialPhase={null}
+        currentPhase={null}
+        initialSnapshots={[]}
+        kind="outside_osc"
+      />
+    )
+  }
+
   const result = await getEngagementById(id)
 
   if (!result.success || !result.data) {
@@ -89,6 +134,7 @@ export default async function EngagementDetailPage({
       initialPhase={initialPhase}
       currentPhase={currentPhase}
       initialSnapshots={initialSnapshots}
+      kind="osc"
     />
   )
 }
