@@ -39,6 +39,8 @@ export default async function C3PAOESPsPage({
   }
 
   const { id } = await params
+  const { redirectIfOutsideEngagement } = await import('@/lib/engagement/redirect-if-outside')
+  await redirectIfOutsideEngagement(id)
   const result = await getESPsByEngagement(id)
   const esps = result.data ?? []
 

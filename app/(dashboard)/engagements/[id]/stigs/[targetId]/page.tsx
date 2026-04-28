@@ -90,6 +90,9 @@ export default async function STIGTargetPage({ params }: PageProps) {
   const session = await requireAuth()
   if (!session) redirect('/login')
 
+  const { redirectIfOutsideEngagement } = await import('@/lib/engagement/redirect-if-outside')
+  await redirectIfOutsideEngagement(engagementId)
+
   const engResult = await getEngagementById(engagementId)
   if (!engResult.success || !engResult.data) {
     redirect('/engagements')

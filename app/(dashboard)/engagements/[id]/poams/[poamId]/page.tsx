@@ -42,6 +42,9 @@ export default async function C3PAOPOAMDetailPage({ params }: PageProps) {
     redirect('/login')
   }
 
+  const { redirectIfOutsideEngagement } = await import('@/lib/engagement/redirect-if-outside')
+  await redirectIfOutsideEngagement(engagementId)
+
   const result = await getPOAMForC3PAO(poamId, engagementId)
 
   if (!result.success || !result.data) {
