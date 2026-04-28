@@ -65,8 +65,7 @@ export default async function EngagementDetailPage({
 
     return (
       <EngagementDetail
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        engagement={outsideToCommon(dispatch.engagement) as any}
+        engagement={outsideToCommon(dispatch.engagement)}
         user={session.c3paoUser}
         initialChecklist={initialChecklist}
         initialAuditEntries={initialAuditEntries}

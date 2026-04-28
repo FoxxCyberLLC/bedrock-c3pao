@@ -242,7 +242,7 @@ export async function getEngagementStigs(engagementId: string): Promise<{ succes
 }
 
 // Group objectives by requirementId for attachment to controls
-function groupObjectivesByRequirement(objectives: ObjectiveView[]): Map<string, ObjectiveView[]> {
+export function groupObjectivesByRequirement(objectives: ObjectiveView[]): Map<string, ObjectiveView[]> {
   const map = new Map<string, ObjectiveView[]>()
   for (const obj of objectives) {
     const list = map.get(obj.requirementId) || []
@@ -252,12 +252,46 @@ function groupObjectivesByRequirement(objectives: ObjectiveView[]): Map<string, 
   return map
 }
 
-// Helper: shape a flat ControlView into the nested RequirementStatus the UI expects
-function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[]>, evidenceData?: EvidenceView[]) {
+type ObjectiveCompliance = 'NOT_ASSESSED' | 'MET' | 'NOT_MET' | 'NOT_APPLICABLE'
+const OBJECTIVE_COMPLIANCE_VALUES: ReadonlySet<string> = new Set([
+  'NOT_ASSESSED',
+  'MET',
+  'NOT_MET',
+  'NOT_APPLICABLE',
+])
+function narrowObjectiveStatus(s: string | null | undefined): ObjectiveCompliance {
+  if (s && OBJECTIVE_COMPLIANCE_VALUES.has(s)) return s as ObjectiveCompliance
+  return 'NOT_ASSESSED'
+}
+
+type InheritedNarrow = 'NONE' | 'PARTIAL' | 'FULL'
+const INHERITED_VALUES: ReadonlySet<string> = new Set(['NONE', 'PARTIAL', 'FULL'])
+function narrowInherited(s: string | null | undefined): InheritedNarrow | null {
+  if (!s) return null
+  return INHERITED_VALUES.has(s) ? (s as InheritedNarrow) : null
+}
+
+function toOptionalDate(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+// Helper: shape a flat ControlView into the nested RequirementStatus the UI expects.
+// Exported for outside-engagement control detail (lib/db-outside-control-detail.ts).
+export function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[]>, evidenceData?: EvidenceView[]) {
   const objs = objectivesMap?.get(c.requirementId) || []
-  const controlEvidence = (evidenceData || []).filter(ev =>
-    (ev.requirementIds || []).includes(c.requirementId)
-  )
+  const controlEvidence = (evidenceData || [])
+    .filter(ev => (ev.requirementIds || []).includes(c.requirementId))
+    .map((ev) => ({
+      id: ev.id,
+      fileName: ev.fileName,
+      fileUrl: ev.fileUrl,
+      mimeType: ev.mimeType,
+      fileSize: ev.fileSize,
+      description: ev.description,
+      createdAt: toOptionalDate(ev.uploadedAt) ?? new Date(0),
+    }))
   return {
     id: c.requirementStatusId || c.id,
     status: c.status || 'NOT_STARTED',
@@ -288,20 +322,24 @@ function shapeControl(c: ControlView, objectivesMap?: Map<string, ObjectiveView[
         // C3PAO assessment (engagement-scoped)
         statuses: [{
           id: o.id,
-          status: o.status || 'NOT_ASSESSED',
+          status: narrowObjectiveStatus(o.status),
           assessmentNotes: o.assessmentNotes,
           evidenceDescription: o.evidenceDescription,
           implementationStatement: o.implementationStatement,
           officialAssessment: o.officialAssessment,
           officialAssessorId: o.officialAssessorId,
-          officialAssessedAt: o.officialAssessedAt,
+          officialAssessedAt: toOptionalDate(o.officialAssessedAt),
           version: o.version,
           artifactsReviewed: o.artifactsReviewed,
           interviewees: o.interviewees,
           examineDescription: o.examineDescription,
           testDescription: o.testDescription,
           timeToAssessMinutes: o.timeToAssessMinutes,
-          inheritedStatus: o.inheritedStatus,
+          inheritedStatus: narrowInherited(o.inheritedStatus),
+          // dependentESPId is UI-managed (set by the assessor in the form);
+          // backend does not currently persist it. Default to null so the
+          // ObjectiveStatus shape is complete from the start.
+          dependentESPId: null,
           assessorQuestionsForOSC: o.assessorQuestionsForOSC || null,
         }],
         // OSC self-assessment context (package-scoped)
