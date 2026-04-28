@@ -164,3 +164,40 @@ export async function requireLeadAssessor(
     return { session, isLead: false, error: 'Failed to verify lead assessor status' }
   }
 }
+
+/**
+ * Require the lead assessor of an OUTSIDE engagement. Reads
+ * outside_engagements.lead_assessor_id directly via the local Postgres helper
+ * — never falls through to the Go API. Local admin role qualifies.
+ */
+export async function requireOutsideLeadAssessor(
+  engagementId: string,
+): Promise<RequireLeadAssessorResult> {
+  const session = await requireAuth()
+  if (!session) return { session: null, isLead: false, error: 'Unauthorized' }
+
+  if (session.isLocalAdmin) return { session, isLead: true }
+
+  try {
+    const { getOutsideEngagementLeadId } = await import('./db-outside-engagement')
+    const leadId = await getOutsideEngagementLeadId(engagementId)
+    return { session, isLead: leadId === session.c3paoUser.id }
+  } catch {
+    return {
+      session,
+      isLead: false,
+      error: 'Failed to verify outside engagement lead status',
+    }
+  }
+}
+
+/**
+ * Kind-aware lead-assessor check. Dispatches to the appropriate backend.
+ */
+export async function requireLeadAssessorByKind(
+  engagementId: string,
+  kind: import('./outside-engagement-types').EngagementKind,
+): Promise<RequireLeadAssessorResult> {
+  if (kind === 'outside_osc') return requireOutsideLeadAssessor(engagementId)
+  return requireLeadAssessor(engagementId)
+}
