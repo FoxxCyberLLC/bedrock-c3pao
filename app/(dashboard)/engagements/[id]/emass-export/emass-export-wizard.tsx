@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
@@ -78,6 +78,14 @@ const determinationLabel: Record<AssessmentSnapshotView['determination'], string
   NO_CMMC_STATUS: 'Not Met',
 }
 
+/** Convert an ISO-ish string to the YYYY-MM-DD shape an `<input type="date">` expects. */
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return ''
+  // Accept both "2026-05-20" and full ISO timestamps.
+  const slice = value.slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(slice) ? slice : ''
+}
+
 export function EMASSExportWizard({
   data,
   user,
@@ -104,13 +112,52 @@ export function EMASSExportWizard({
     router.push(`?${sp.toString()}`)
   }
 
-  // Form state for editable fields
+  // Form state for editable fields. The first four are wizard-only and were
+  // already user-editable; the last four were rendered read-only as
+  // "From System" but are now editable in-wizard so a missing or stale value
+  // doesn't dead-end a COMPLETED engagement. Edits live in the wizard session
+  // only — they override the system value for THIS export, but do not
+  // persist back to the engagement record.
   const [formData, setFormData] = useState({
     executiveSummary: data.assessment.executiveSummary || '',
     standardsAcceptance: data.assessment.standardsAcceptance || '',
     hashValue: data.assessment.hashValue || '',
     hashedDataList: data.assessment.hashedDataList || '',
+    assessmentStartDate: toDateInputValue(data.assessment.assessmentStartDate),
+    assessmentEndDate: toDateInputValue(data.assessment.assessmentEndDate),
+    leadAssessorCPN: data.assessment.leadAssessorCPN || '',
+    qaAssessorCPN: data.assessment.qaAssessorCPN || '',
   })
+
+  // Live, client-side validation that uses the user's overrides instead of
+  // the server-computed snapshot. Drives the export button + alerts so the
+  // wizard reflects what the user has just typed.
+  const liveValidation = useMemo(() => {
+    const errors: string[] = []
+    const warnings: string[] = []
+    if (!formData.assessmentStartDate) {
+      errors.push('Assessment start date is required.')
+    }
+    if (!formData.leadAssessorCPN.trim()) {
+      errors.push('Lead assessor CPN is required.')
+    }
+    if (!formData.hashValue.trim()) {
+      errors.push('Hash value is required.')
+    }
+    if (!formData.hashedDataList.trim()) {
+      errors.push('Hashed data list filename is required.')
+    }
+    if (!formData.executiveSummary.trim()) {
+      errors.push('C3PAO Executive Summary is required.')
+    }
+    if (!formData.assessmentEndDate) {
+      warnings.push('Assessment end date is not set — recommended before submission.')
+    }
+    if (!formData.qaAssessorCPN.trim()) {
+      warnings.push('QA assessor CPN not set — recommended before submission.')
+    }
+    return { errors, warnings, isValid: errors.length === 0 }
+  }, [formData])
 
   const currentStepIndex = STEPS.findIndex((s) => s.id === currentStep)
   const progress = ((currentStepIndex + 1) / STEPS.length) * 100
@@ -147,7 +194,13 @@ export function EMASSExportWizard({
       const buffer = await buildEMASSWorkbook({
         controls: data.rawData.controls,
         objectives: data.rawData.objectives,
-        exportData: data.rawData.exportData,
+        // Apply the wizard's date overrides at the export-data level so the
+        // workbook sheet uses what the user typed, not the locked engagement value.
+        exportData: {
+          ...data.rawData.exportData,
+          assessmentStartDate: formData.assessmentStartDate || data.rawData.exportData.assessmentStartDate,
+          assessmentEndDate: formData.assessmentEndDate || data.rawData.exportData.assessmentEndDate,
+        },
         team: data.rawData.team,
         ssp: data.ssp,
         wizardFields: formData,
@@ -171,6 +224,10 @@ export function EMASSExportWizard({
     try {
       const enriched = {
         ...data.rawData.exportData,
+        // Apply wizard overrides for the system-derived fields so the JSON
+        // payload matches what the user sees in the wizard.
+        assessmentStartDate: formData.assessmentStartDate || data.rawData.exportData.assessmentStartDate,
+        assessmentEndDate: formData.assessmentEndDate || data.rawData.exportData.assessmentEndDate,
         wizardFields: formData,
         controls: [...data.rawData.controls].sort((a, b) => a.sortOrder - b.sortOrder),
         objectives: data.rawData.objectives,
@@ -291,14 +348,14 @@ export function EMASSExportWizard({
         <Progress value={progress} className="h-2" />
       </div>
 
-      {/* Validation Alerts */}
-      {data.validation.errors.length > 0 && (
-        <Alert variant="destructive" className="mb-4">
+      {/* Validation Alerts (driven by liveValidation so wizard edits clear them in real time) */}
+      {liveValidation.errors.length > 0 && (
+        <Alert variant="destructive" className="mb-4" data-testid="export-validation-errors">
           <XCircle className="h-4 w-4" />
           <AlertTitle>Required Fields Missing</AlertTitle>
           <AlertDescription>
             <ul className="list-disc list-inside mt-2">
-              {data.validation.errors.map((error: string, i: number) => (
+              {liveValidation.errors.map((error: string, i: number) => (
                 <li key={i}>{error}</li>
               ))}
             </ul>
@@ -306,13 +363,13 @@ export function EMASSExportWizard({
         </Alert>
       )}
 
-      {data.validation.warnings.length > 0 && currentStep === 'review' && (
+      {liveValidation.warnings.length > 0 && currentStep === 'review' && (
         <Alert className="mb-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-950">
           <AlertTriangle className="h-4 w-4 text-yellow-600" />
           <AlertTitle className="text-yellow-800 dark:text-yellow-200">Warnings</AlertTitle>
           <AlertDescription className="text-yellow-700 dark:text-yellow-300">
             <ul className="list-disc list-inside mt-2">
-              {data.validation.warnings.map((warning: string, i: number) => (
+              {liveValidation.warnings.map((warning: string, i: number) => (
                 <li key={i}>{warning}</li>
               ))}
             </ul>
@@ -349,97 +406,72 @@ export function EMASSExportWizard({
                   </div>
 
                   <div>
-                    <Label className="text-muted-foreground">
+                    <Label htmlFor="assessmentStartDate">
                       Assessment Start Date <Badge variant="destructive" className="ml-2">Required</Badge>
                     </Label>
-                    <div className="mt-1 p-2 bg-muted rounded-md flex items-center gap-2">
-                      {data.assessment.assessmentStartDate ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          {formatDate(data.assessment.assessmentStartDate)}
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-4 w-4 text-destructive" />
-                          <span className="text-destructive">Not set</span>
-                        </>
-                      )}
-                    </div>
+                    <Input
+                      id="assessmentStartDate"
+                      type="date"
+                      className="mt-1"
+                      value={formData.assessmentStartDate}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, assessmentStartDate: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Defaults to the system value. Override here if it&apos;s
+                      missing or wrong — the override applies to this export only.
+                    </p>
                   </div>
 
                   <div>
-                    <Label className="text-muted-foreground">
-                      Assessment End Date <Badge variant="destructive" className="ml-2">Required</Badge>
-                    </Label>
-                    <div className="mt-1 p-2 bg-muted rounded-md flex items-center gap-2">
-                      {data.assessment.assessmentEndDate ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          {formatDate(data.assessment.assessmentEndDate)}
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                          <span className="text-yellow-600">Set when assessment is completed</span>
-                        </>
-                      )}
-                    </div>
+                    <Label htmlFor="assessmentEndDate">Assessment End Date</Label>
+                    <Input
+                      id="assessmentEndDate"
+                      type="date"
+                      className="mt-1"
+                      value={formData.assessmentEndDate}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, assessmentEndDate: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Set by the system on completion. Edit here to correct.
+                    </p>
                   </div>
 
                   <div>
-                    <Label className="text-muted-foreground">
+                    <Label htmlFor="leadAssessorCPN">
                       Lead Assessor CPN <Badge variant="destructive" className="ml-2">Required</Badge>
                     </Label>
-                    <div className="mt-1 p-2 bg-muted rounded-md flex items-center gap-2">
-                      {data.assessment.leadAssessorCPN ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          {data.assessment.leadAssessorCPN}
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-4 w-4 text-destructive" />
-                          <span className="text-destructive">Not set</span>
-                        </>
-                      )}
-                    </div>
+                    <Input
+                      id="leadAssessorCPN"
+                      className="mt-1"
+                      placeholder="e.g., CP-1234"
+                      value={formData.leadAssessorCPN}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, leadAssessorCPN: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Pulled from the lead assessor&apos;s job title. Override if
+                      it&apos;s missing or you want a different CPN on this export.
+                    </p>
                   </div>
 
                   <div>
-                    <Label className="text-muted-foreground">
-                      QA Assessor CPN <Badge variant="destructive" className="ml-2">Required</Badge>
-                    </Label>
-                    <div className="mt-1 p-2 bg-muted rounded-md flex items-center gap-2">
-                      {data.assessment.qaAssessorCPN ? (
-                        <>
-                          <CheckCircle2 className="h-4 w-4 text-green-600" />
-                          {data.assessment.qaAssessorCPN}
-                        </>
-                      ) : (
-                        <>
-                          <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                          <span className="text-yellow-600">Not set (recommended)</span>
-                        </>
-                      )}
-                    </div>
+                    <Label htmlFor="qaAssessorCPN">QA Assessor CPN</Label>
+                    <Input
+                      id="qaAssessorCPN"
+                      className="mt-1"
+                      placeholder="e.g., CP-5678"
+                      value={formData.qaAssessorCPN}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, qaAssessorCPN: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Recommended, not required.</p>
                   </div>
-
-                  {/* Help text for missing system fields */}
-                  {(!data.assessment.assessmentStartDate || !data.assessment.assessmentEndDate || !data.assessment.leadAssessorCPN) && (
-                    <Alert className="mt-4">
-                      <Info className="h-4 w-4" />
-                      <AlertDescription className="text-sm">
-                        Missing fields above must be set in the{' '}
-                        <Link
-                          href={`/engagements/${data.engagementId}`}
-                          className="underline font-medium"
-                        >
-                          engagement settings
-                        </Link>
-                        {' '}before export.
-                      </AlertDescription>
-                    </Alert>
-                  )}
                 </div>
 
                 {/* Editable fields */}
@@ -855,19 +887,19 @@ export function EMASSExportWizard({
                 </div>
 
                 <Alert
-                  variant={data.validation.isValid ? 'default' : 'destructive'}
-                  className={data.validation.isValid ? 'border-green-500 bg-green-50 dark:bg-green-950' : ''}
+                  variant={liveValidation.isValid ? 'default' : 'destructive'}
+                  className={liveValidation.isValid ? 'border-green-500 bg-green-50 dark:bg-green-950' : ''}
                 >
-                  {data.validation.isValid ? (
+                  {liveValidation.isValid ? (
                     <CheckCircle2 className="h-4 w-4 text-green-600" />
                   ) : (
                     <XCircle className="h-4 w-4" />
                   )}
                   <AlertTitle>
-                    {data.validation.isValid ? 'Ready to Export' : 'Cannot Export'}
+                    {liveValidation.isValid ? 'Ready to Export' : 'Cannot Export'}
                   </AlertTitle>
                   <AlertDescription>
-                    {data.validation.isValid
+                    {liveValidation.isValid
                       ? 'All required fields are complete. Your workbook is ready for download.'
                       : 'Please address the required fields before exporting.'}
                   </AlertDescription>
@@ -877,7 +909,7 @@ export function EMASSExportWizard({
                   <Button
                     size="lg"
                     onClick={handleExportXlsx}
-                    disabled={!data.validation.isValid || isExportingXlsx || isExportingJson}
+                    disabled={!liveValidation.isValid || isExportingXlsx || isExportingJson}
                     className="gap-2"
                   >
                     <FileSpreadsheet className="h-5 w-5" />
@@ -887,7 +919,7 @@ export function EMASSExportWizard({
                     size="lg"
                     variant="outline"
                     onClick={handleExportJson}
-                    disabled={!data.validation.isValid || isExportingXlsx || isExportingJson}
+                    disabled={!liveValidation.isValid || isExportingXlsx || isExportingJson}
                     className="gap-2"
                   >
                     <Download className="h-5 w-5" />

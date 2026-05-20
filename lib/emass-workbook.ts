@@ -14,6 +14,11 @@ export interface EMASSWorkbookInput {
     standardsAcceptance: string
     hashValue: string
     hashedDataList: string
+    /** Optional overrides for fields that come from the engagement record. When
+     * present and non-empty, take precedence over team.jobTitle / exportData
+     * so a wizard fix surfaces in the workbook without re-opening the engagement. */
+    leadAssessorCPN?: string
+    qaAssessorCPN?: string
   }
 }
 
@@ -79,8 +84,12 @@ export async function buildEMASSWorkbook(input: EMASSWorkbookInput): Promise<Arr
   ws1.addRow(['Assessment End Date', fmtDate(input.exportData.assessmentEndDate)])
   ws1.addRow([])
   ws1.addRow(['Assessor Information'])
-  ws1.addRow(['Lead Assessor CPN', sanitizeForExcel(leadAssessor?.jobTitle)])
-  ws1.addRow(['QA Assessor CPN', sanitizeForExcel(qaAssessor?.jobTitle)])
+  const leadCpnForExport =
+    input.wizardFields.leadAssessorCPN?.trim() || leadAssessor?.jobTitle || ''
+  const qaCpnForExport =
+    input.wizardFields.qaAssessorCPN?.trim() || qaAssessor?.jobTitle || ''
+  ws1.addRow(['Lead Assessor CPN', sanitizeForExcel(leadCpnForExport)])
+  ws1.addRow(['QA Assessor CPN', sanitizeForExcel(qaCpnForExport)])
   ws1.addRow([])
   ws1.addRow(['Assessment Summary'])
   ws1.addRow(['Total Requirements', input.controls.length])

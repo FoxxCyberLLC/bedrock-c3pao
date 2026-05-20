@@ -1,7 +1,24 @@
 import { describe, it, expect } from 'vitest'
 import { buildEMASSWorkbook } from '@/lib/emass-workbook'
 import type { EMASSWorkbookInput } from '@/lib/emass-workbook'
+import type { TeamMember } from '@/lib/api-client'
 import ExcelJS from 'exceljs'
+
+/** Build a minimal TeamMember for tests where only role + jobTitle matter. */
+function makeTeamMember(overrides: Partial<TeamMember>): TeamMember {
+  return {
+    id: 'tm-1',
+    assessorId: 'a-1',
+    name: 'Test Assessor',
+    email: 'a@example.com',
+    role: 'LEAD',
+    assessorType: 'C3PAO',
+    jobTitle: null,
+    assignedAt: '2026-01-01T00:00:00Z',
+    domains: [],
+    ...overrides,
+  }
+}
 
 // Minimal mock input
 const mockInput: EMASSWorkbookInput = {
@@ -154,5 +171,60 @@ describe('buildEMASSWorkbook', () => {
     const reqSheet = workbook.getWorksheet('Requirements')!
     // Row 1 = header, rows 2+ = data
     expect(reqSheet.rowCount).toBe(3) // header + 2 controls
+  })
+
+  describe('wizard CPN overrides', () => {
+    it('uses leadAssessorCPN override when provided, ignoring team.jobTitle', async () => {
+      const input: EMASSWorkbookInput = {
+        ...mockInput,
+        team: [makeTeamMember({ role: 'LEAD', jobTitle: 'STALE-FROM-PROFILE' })],
+        wizardFields: {
+          ...mockInput.wizardFields,
+          leadAssessorCPN: 'CP-OVERRIDE-9999',
+        },
+      }
+      const result = await buildEMASSWorkbook(input)
+      const values = await getCellValues(result, 'Assessment Results')
+      expect(values).toContain('CP-OVERRIDE-9999')
+      expect(values).not.toContain('STALE-FROM-PROFILE')
+    })
+
+    it('falls back to team.jobTitle when leadAssessorCPN override is empty', async () => {
+      const input: EMASSWorkbookInput = {
+        ...mockInput,
+        wizardFields: { ...mockInput.wizardFields, leadAssessorCPN: '' },
+      }
+      const result = await buildEMASSWorkbook(input)
+      const values = await getCellValues(result, 'Assessment Results')
+      expect(values).toContain('CCA-12345')
+    })
+
+    it('treats whitespace-only override as empty and falls back', async () => {
+      const input: EMASSWorkbookInput = {
+        ...mockInput,
+        wizardFields: { ...mockInput.wizardFields, leadAssessorCPN: '   ' },
+      }
+      const result = await buildEMASSWorkbook(input)
+      const values = await getCellValues(result, 'Assessment Results')
+      expect(values).toContain('CCA-12345')
+    })
+
+    it('uses qaAssessorCPN override when provided', async () => {
+      const input: EMASSWorkbookInput = {
+        ...mockInput,
+        team: [
+          makeTeamMember({ id: 'tm-lead', role: 'LEAD', jobTitle: 'CCA-12345' }),
+          makeTeamMember({ id: 'tm-qa', role: 'QA', jobTitle: 'qa-from-profile' }),
+        ],
+        wizardFields: {
+          ...mockInput.wizardFields,
+          qaAssessorCPN: 'CP-QA-OVERRIDE',
+        },
+      }
+      const result = await buildEMASSWorkbook(input)
+      const values = await getCellValues(result, 'Assessment Results')
+      expect(values).toContain('CP-QA-OVERRIDE')
+      expect(values).not.toContain('qa-from-profile')
+    })
   })
 })
