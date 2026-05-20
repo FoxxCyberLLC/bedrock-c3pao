@@ -145,4 +145,36 @@ describe('ReadinessWorkspace', () => {
       'contract_executed',
     )
   })
+
+  it('shows the load-error banner when loadFailed=true', async () => {
+    render(
+      <ReadinessWorkspace
+        engagementId="eng-1"
+        initialChecklist={buildChecklist()}
+        initialAuditEntries={[]}
+        isLead
+        currentUserEmail="me@x.com"
+        loadFailed
+      />,
+    )
+    await act(async () => {})
+    expect(screen.getByTestId('readiness-load-error')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Couldn't load readiness data/i),
+    ).toBeInTheDocument()
+  })
+
+  it('omits the load-error banner when loadFailed is false (default)', async () => {
+    render(
+      <ReadinessWorkspace
+        engagementId="eng-1"
+        initialChecklist={buildChecklist()}
+        initialAuditEntries={[]}
+        isLead
+        currentUserEmail="me@x.com"
+      />,
+    )
+    await act(async () => {})
+    expect(screen.queryByTestId('readiness-load-error')).toBeNull()
+  })
 })

@@ -79,7 +79,11 @@ import {
   giveCorrectionOpportunityAction,
 } from '@/app/actions/engagements'
 import { derivePhaseFromStatus, type Phase } from '@/lib/portfolio/derive-risk'
-import type { AuditEntry, ReadinessChecklist } from '@/lib/readiness-types'
+import type {
+  AssessmentNote,
+  AuditEntry,
+  ReadinessChecklist,
+} from '@/lib/readiness-types'
 import type { EngagementSchedule as EngagementScheduleData } from '@/lib/db-schedule'
 import type { EngagementPhase, EngagementSummary } from '@/lib/api-client'
 
@@ -327,6 +331,10 @@ interface EngagementDetailProps {
   currentPhase: string | null
   /** Snapshots captured across determination + correction cycles. Empty array for pre-snapshot engagements. */
   initialSnapshots?: AssessmentSnapshotView[]
+  /** Server-fetched living notes. Skips client refetch flicker on first render. */
+  initialNotes?: AssessmentNote[]
+  /** True when the readiness checklist or audit log failed to load server-side. Drives a banner so users don't mistake a failed load for an empty checklist. */
+  readinessLoadFailed?: boolean
   /** Engagement kind discriminator. Defaults to 'osc' for backward compatibility. */
   kind?: 'osc' | 'outside_osc'
 }
@@ -340,6 +348,8 @@ export function EngagementDetail({
   initialPhase,
   currentPhase,
   initialSnapshots = [],
+  initialNotes = [],
+  readinessLoadFailed = false,
   kind = 'osc',
 }: EngagementDetailProps) {
   // COMPLETED engagements arrive with a deliberately minimal payload from
@@ -360,6 +370,8 @@ export function EngagementDetail({
       initialPhase={initialPhase}
       currentPhase={currentPhase}
       initialSnapshots={initialSnapshots}
+      initialNotes={initialNotes}
+      readinessLoadFailed={readinessLoadFailed}
       kind={kind}
     />
   )
@@ -374,6 +386,8 @@ function EngagementDetailFull({
   initialPhase,
   currentPhase,
   initialSnapshots = [],
+  initialNotes = [],
+  readinessLoadFailed = false,
   kind = 'osc',
 }: EngagementDetailProps) {
   const isOutside = kind === 'outside_osc'
@@ -1220,6 +1234,7 @@ function EngagementDetailFull({
             initialAuditEntries={initialAuditEntries}
             isLead={user.isLeadAssessor}
             currentUserEmail={user.email}
+            loadFailed={readinessLoadFailed}
           />
           {loadingTeam ? (
             <Card>
@@ -1264,6 +1279,7 @@ function EngagementDetailFull({
             engagementId={engagement.id}
             currentUserId={user.id}
             leadAssessorId={engagement.leadAssessor?.id ?? null}
+            initialNotes={initialNotes}
           />
         </TabsContent>
 

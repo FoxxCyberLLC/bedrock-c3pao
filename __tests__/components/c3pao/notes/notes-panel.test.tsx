@@ -17,6 +17,7 @@ vi.mock('sonner', () => ({
 
 import { NotesPanel } from '@/components/c3pao/notes/notes-panel'
 import * as actions from '@/app/actions/c3pao-notes'
+import { toast } from 'sonner'
 import type { AssessmentNote } from '@/lib/readiness-types'
 
 function makeNote(overrides: Partial<AssessmentNote> = {}): AssessmentNote {
@@ -105,5 +106,41 @@ describe('NotesPanel', () => {
       if (dialogSubmit) fireEvent.click(dialogSubmit)
     })
     expect(actions.createNote).toHaveBeenCalledWith('eng-1', 'fresh')
+  })
+
+  it('toasts an error when listNotes fails on mount', async () => {
+    vi.mocked(toast.error).mockClear()
+    vi.mocked(actions.listNotes).mockResolvedValue({
+      success: false,
+      error: 'DB connection lost',
+    })
+    render(
+      <NotesPanel engagementId="eng-1" currentUserId="u1" initialNotes={[]} />,
+    )
+    await act(async () => {})
+    expect(toast.error).toHaveBeenCalledWith('DB connection lost')
+  })
+
+  it('shows a loading skeleton when no initialNotes are seeded and fetch is pending', () => {
+    // Never-resolving promise: the load is still pending when we assert.
+    vi.mocked(actions.listNotes).mockReturnValue(new Promise(() => {}))
+    render(
+      <NotesPanel engagementId="eng-1" currentUserId="u1" initialNotes={[]} />,
+    )
+    expect(screen.getByTestId('notes-loading')).toBeInTheDocument()
+  })
+
+  it('skips the loading skeleton when server-seeded initialNotes are present', async () => {
+    vi.mocked(actions.listNotes).mockResolvedValue({ success: true, data: [makeNote()] })
+    render(
+      <NotesPanel
+        engagementId="eng-1"
+        currentUserId="u1"
+        initialNotes={[makeNote({ id: 'seed', body: 'seed body' })]}
+      />,
+    )
+    expect(screen.queryByTestId('notes-loading')).toBeNull()
+    expect(screen.getByText('seed body')).toBeInTheDocument()
+    await act(async () => {})
   })
 })

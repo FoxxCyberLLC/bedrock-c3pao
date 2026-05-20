@@ -12,6 +12,7 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   createNote,
   deleteNote,
@@ -46,6 +47,10 @@ export function NotesPanel({
   const [editor, setEditor] = useState<EditorState>({ mode: 'closed' })
   const [historyNoteId, setHistoryNoteId] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
+  // Only show a loading skeleton on the very first fetch when we have no
+  // server-seeded notes to render. Subsequent refreshes after mutations
+  // keep the existing list visible to avoid layout thrash.
+  const [isInitialLoading, setIsInitialLoading] = useState(initialNotes.length === 0)
 
   useEffect(() => {
     // Re-fetch on mount so freshly mounted client pages see latest notes.
@@ -53,7 +58,12 @@ export function NotesPanel({
     async function load(): Promise<void> {
       const result = await listNotes(engagementId)
       if (cancelled) return
-      if (result.success && result.data) setNotes(result.data)
+      if (result.success && result.data) {
+        setNotes(result.data)
+      } else if (!result.success) {
+        toast.error(result.error ?? 'Failed to load notes')
+      }
+      setIsInitialLoading(false)
     }
     load()
     return () => {
@@ -63,7 +73,11 @@ export function NotesPanel({
 
   async function refresh(): Promise<void> {
     const result = await listNotes(engagementId)
-    if (result.success && result.data) setNotes(result.data)
+    if (result.success && result.data) {
+      setNotes(result.data)
+    } else if (!result.success) {
+      toast.error(result.error ?? 'Failed to refresh notes')
+    }
   }
 
   function handleSubmit(body: string): void {
@@ -132,7 +146,15 @@ export function NotesPanel({
         </Button>
       </div>
 
-      {notes.length === 0 ? (
+      {isInitialLoading && notes.length === 0 ? (
+        <Card data-testid="notes-loading">
+          <CardContent className="space-y-3 py-6">
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-5/6" />
+          </CardContent>
+        </Card>
+      ) : notes.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
             No notes yet. Add the first one to start the record.
