@@ -8,8 +8,11 @@
  */
 
 import { useEffect, useState, useTransition } from 'react'
+import { AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import {
   completeItem,
   ensureEngagementInPlanPhase,
@@ -37,6 +40,8 @@ export interface ReadinessWorkspaceProps {
   initialAuditEntries: AuditEntry[]
   isLead: boolean
   currentUserEmail: string
+  /** Server-side load failed for the checklist or audit log. Shows a banner so an empty list isn't mistaken for a fresh engagement. */
+  loadFailed?: boolean
 }
 
 export function ReadinessWorkspace({
@@ -45,7 +50,9 @@ export function ReadinessWorkspace({
   initialAuditEntries,
   isLead,
   currentUserEmail,
+  loadFailed = false,
 }: ReadinessWorkspaceProps): React.ReactElement {
+  const [hasLoadError, setHasLoadError] = useState(loadFailed)
   const [checklist, setChecklist] = useState<ReadinessChecklist>(initialChecklist)
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>(initialAuditEntries)
   const [selectedKey, setSelectedKey] = useState<ReadinessItemKey>(
@@ -71,8 +78,14 @@ export function ReadinessWorkspace({
       getReadinessChecklist(engagementId),
       getReadinessAuditLog(engagementId),
     ])
+    const anyFailed = !c.success || !a.success
     if (c.success && c.data) setChecklist(c.data)
     if (a.success && a.data) setAuditEntries(a.data)
+    setHasLoadError(anyFailed)
+    if (anyFailed) {
+      const msg = (!c.success && c.error) || (!a.success && a.error) || 'Failed to refresh readiness'
+      toast.error(msg)
+    }
   }
 
   function runAction(
@@ -136,6 +149,32 @@ export function ReadinessWorkspace({
           Every change is captured in the audit trail.
         </p>
       </header>
+
+      {hasLoadError && (
+        <Alert variant="destructive" data-testid="readiness-load-error">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Couldn&apos;t load readiness data</AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>
+              The checklist or audit log failed to load. What you see below may
+              be incomplete.
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                startTransition(() => {
+                  void refresh()
+                })
+              }}
+              disabled={pending}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid gap-6 md:grid-cols-[minmax(18rem,22rem)_1fr]">
         <aside className="md:sticky md:top-4 md:self-start">

@@ -5,6 +5,7 @@ import {
   getReadinessAuditLog,
   getReadinessChecklist,
 } from '@/app/actions/c3pao-readiness'
+import { listNotes } from '@/app/actions/c3pao-notes'
 import { getEngagementSchedule } from '@/app/actions/c3pao-schedule'
 import { getEngagementPhase } from '@/app/actions/c3pao-phase'
 import { listSnapshotsAction } from '@/app/actions/engagements'
@@ -12,7 +13,11 @@ import { EngagementDetail } from '@/components/c3pao/engagement-detail'
 import { LimitedEngagementDetail } from '@/components/c3pao/limited-engagement-detail'
 import { dispatchEngagementById } from '@/lib/engagement/dispatch-by-id'
 import { outsideToCommon } from '@/lib/engagement/outside-to-common'
-import type { AuditEntry, ReadinessChecklist } from '@/lib/readiness-types'
+import type {
+  AssessmentNote,
+  AuditEntry,
+  ReadinessChecklist,
+} from '@/lib/readiness-types'
 import type { EngagementSchedule } from '@/lib/db-schedule'
 import type { EngagementPhase } from '@/lib/api-client'
 
@@ -47,11 +52,15 @@ export default async function EngagementDetailPage({
       readinessChecklistResult,
       readinessAuditResult,
       scheduleResult,
+      notesResult,
     ] = await Promise.all([
       getReadinessChecklist(id),
       getReadinessAuditLog(id),
       getEngagementSchedule(id),
+      listNotes(id),
     ])
+    const readinessLoadFailed =
+      !readinessChecklistResult.success || !readinessAuditResult.success
     const initialChecklist: ReadinessChecklist =
       readinessChecklistResult.success && readinessChecklistResult.data
         ? readinessChecklistResult.data
@@ -62,6 +71,8 @@ export default async function EngagementDetailPage({
         : []
     const initialSchedule: EngagementSchedule | null =
       scheduleResult.success && scheduleResult.data ? scheduleResult.data : null
+    const initialNotes: AssessmentNote[] =
+      notesResult.success && notesResult.data ? notesResult.data : []
 
     return (
       <EngagementDetail
@@ -73,6 +84,8 @@ export default async function EngagementDetailPage({
         initialPhase={null}
         currentPhase={null}
         initialSnapshots={[]}
+        initialNotes={initialNotes}
+        readinessLoadFailed={readinessLoadFailed}
         kind="outside_osc"
       />
     )
@@ -97,14 +110,18 @@ export default async function EngagementDetailPage({
     scheduleResult,
     phaseResult,
     snapshotsResult,
+    notesResult,
   ] = await Promise.all([
     getReadinessChecklist(id),
     getReadinessAuditLog(id),
     getEngagementSchedule(id),
     getEngagementPhase(id),
     listSnapshotsAction(id),
+    listNotes(id),
   ])
 
+  const readinessLoadFailed =
+    !readinessChecklistResult.success || !readinessAuditResult.success
   const initialChecklist: ReadinessChecklist =
     readinessChecklistResult.success && readinessChecklistResult.data
       ? readinessChecklistResult.data
@@ -121,6 +138,8 @@ export default async function EngagementDetailPage({
 
   const initialSnapshots =
     snapshotsResult.success && snapshotsResult.data ? snapshotsResult.data : []
+  const initialNotes: AssessmentNote[] =
+    notesResult.success && notesResult.data ? notesResult.data : []
 
   // For read-only and assess access, show full engagement detail
   return (
@@ -134,6 +153,8 @@ export default async function EngagementDetailPage({
       initialPhase={initialPhase}
       currentPhase={currentPhase}
       initialSnapshots={initialSnapshots}
+      initialNotes={initialNotes}
+      readinessLoadFailed={readinessLoadFailed}
       kind="osc"
     />
   )
