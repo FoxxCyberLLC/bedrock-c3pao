@@ -29,12 +29,29 @@ Open https://localhost:3001 (HTTPS, self-signed cert).
 
 ## Docker
 
+The container needs a PostgreSQL database (local config, admin users, and
+assessment data such as readiness checklists, notes, and outside-OSC
+engagements). Use Compose, which starts Postgres alongside the app:
+
 ```bash
-docker build -t bedrock-c3pao .
-docker run -p 3001:3001 -v c3pao-data:/app/data bedrock-c3pao
+docker compose up -d --build
+```
+
+Then open https://localhost:3001 and complete the setup wizard.
+
+For a pre-built image (e.g. a test VPS), use the deploy compose file:
+
+```bash
+cd deploy
+cp .env.example .env        # set C3PAO_DB_PASSWORD
+docker compose up -d
 ```
 
 ## Environment Variables
+
+The only variable the container requires is `DATABASE_URL`, which Compose wires
+in automatically. Everything else is created by the first-run setup wizard and
+persisted to the `app_config` table:
 
 ```env
 BEDROCK_API_URL=http://go-api:8080
@@ -45,15 +62,19 @@ C3PAO_NAME=<org name>
 FORCE_HTTPS=true
 ```
 
-Or configure via the setup wizard on first run (stored encrypted in SQLite).
+For a standalone container (no Compose), point `DATABASE_URL` at any reachable
+Postgres — the schema bootstraps itself on first boot.
 
 ## Architecture
 
-All assessment data lives in the Go API backend (`bedrock-cmmc-api`). This app is a pure frontend/BFF client. Local SQLite stores only instance configuration and local admin users.
+Most assessment data lives in the Go API backend (`bedrock-cmmc-api`); this app
+is primarily a frontend/BFF client. A local PostgreSQL database stores instance
+configuration, local admin users, and c3pao-local data (pre-assessment
+readiness, internal notes/reviews, and self-contained outside-OSC engagements).
 
 ## Tech Stack
 
-Next.js 16 | React 19 | TypeScript 5 | Tailwind CSS 4 | Shadcn/UI | better-sqlite3 | Vitest
+Next.js 16 | React 19 | TypeScript 5 | Tailwind CSS 4 | Shadcn/UI | PostgreSQL (pg) | Vitest
 
 ## License
 

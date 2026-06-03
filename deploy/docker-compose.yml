@@ -1,9 +1,34 @@
 services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: c3pao
+      POSTGRES_PASSWORD: ${C3PAO_DB_PASSWORD:-c3pao}
+      POSTGRES_DB: c3pao
+    volumes:
+      - c3pao_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U c3pao -d c3pao"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   c3pao:
     image: ghcr.io/foxxcyberllc/bedrock-c3pao:latest
     # Always pull on `docker compose up`. Without this, Compose reuses the
     # locally-cached image even when a newer :latest exists upstream.
     pull_policy: always
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Local config + assessment data live in the bundled Postgres above.
+      # Everything else (AUTH_SECRET, BEDROCK_API_URL, INSTANCE_API_KEY, C3PAO
+      # identity) is created by the first-run setup wizard and persisted to the
+      # app_config table — no other env vars are required.
+      DATABASE_URL: postgres://c3pao:${C3PAO_DB_PASSWORD:-c3pao}@db:5432/c3pao
     ports:
       - "3001:3001"
     volumes:
@@ -18,3 +43,4 @@ services:
 
 volumes:
   c3pao_data:
+  c3pao_pgdata:
