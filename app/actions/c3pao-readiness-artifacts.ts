@@ -9,7 +9,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { requireAuth, requireLeadAssessor } from '@/lib/auth'
+import { requireAssessor, requireLeadAssessor } from '@/lib/auth'
 import {
   addArtifact,
   getItemByKey,
@@ -65,7 +65,7 @@ export async function uploadArtifact(
 ): Promise<ActionResult<{ id: string }>> {
   try {
     if (!isValidItemKey(itemKey)) return { success: false, error: 'Invalid item key' }
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
 
     const file = formData.get('file')
@@ -131,7 +131,7 @@ export async function removeArtifact(
 ): Promise<ActionResult<void>> {
   try {
     if (!isValidItemKey(itemKey)) return { success: false, error: 'Invalid item key' }
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
 
     const item = await getItemByKey(engagementId, itemKey)

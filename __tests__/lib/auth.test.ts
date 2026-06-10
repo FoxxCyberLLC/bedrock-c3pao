@@ -36,6 +36,34 @@ async function buildValidSessionCookie(payload: Partial<C3PAOSessionPayload>): P
   return encryptSession(full as unknown as Record<string, unknown>)
 }
 
+describe('requireAssessor', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns null when there is no session', async () => {
+    mockCookiesGet.mockReturnValue(undefined)
+    const { requireAssessor } = await import('@/lib/auth')
+    expect(await requireAssessor()).toBeNull()
+  })
+
+  it('rejects a local-admin session (operator is not an assessor)', async () => {
+    const cookie = await buildValidSessionCookie({ isLocalAdmin: true })
+    mockCookiesGet.mockReturnValue({ value: cookie })
+    const { requireAssessor } = await import('@/lib/auth')
+    expect(await requireAssessor()).toBeNull()
+  })
+
+  it('returns the session for a non-admin assessor', async () => {
+    const cookie = await buildValidSessionCookie({ isLocalAdmin: false })
+    mockCookiesGet.mockReturnValue({ value: cookie })
+    const { requireAssessor } = await import('@/lib/auth')
+    const result = await requireAssessor()
+    expect(result).not.toBeNull()
+    expect(result?.c3paoUser.id).toBe('user-1')
+  })
+})
+
 describe('requireLeadAssessor', () => {
   beforeEach(() => {
     vi.clearAllMocks()

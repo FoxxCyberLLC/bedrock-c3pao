@@ -9,7 +9,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { requireAuth, requireLeadAssessor } from '@/lib/auth'
+import { requireAssessor, requireLeadAssessor } from '@/lib/auth'
 import {
   ensureItemsSeeded,
   getItems,
@@ -66,7 +66,7 @@ export async function getReadinessChecklist(
   engagementId: string,
 ): Promise<ActionResult<ReadinessChecklist>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
 
     // Outside engagements get their own default item set distinct from the
@@ -106,7 +106,7 @@ export async function getReadinessAuditLog(
   engagementId: string,
 ): Promise<ActionResult<AuditEntry[]>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
 
     const entries = await getAuditLog(engagementId, { limit: 200 })
@@ -309,7 +309,7 @@ export async function ensureEngagementInPlanPhase(
   engagementId: string,
 ): Promise<ActionResult<void>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
 
     const current = await fetchEngagementPhase(engagementId, session.apiToken)

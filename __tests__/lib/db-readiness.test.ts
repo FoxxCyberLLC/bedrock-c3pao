@@ -24,6 +24,7 @@ const {
   addArtifact,
   removeArtifact,
   getArtifactContent,
+  getArtifactEngagementId,
 } = await import('@/lib/db-readiness')
 
 const ACTOR = { id: 'u1', email: 'u1@c3pao.test', name: 'Unit One' }
@@ -365,16 +366,31 @@ describe('db-readiness', () => {
       expect(out).toBeNull()
     })
 
-    it('returns filename, mimetype, and buffer content', async () => {
+    it('returns engagementId, filename, mimetype, and buffer content', async () => {
       const buf = Buffer.from('binary data')
       mockQuery.mockResolvedValueOnce({
-        rows: [{ filename: 'f.pdf', mime_type: 'application/pdf', content: buf }],
+        rows: [
+          { filename: 'f.pdf', mime_type: 'application/pdf', content: buf, engagement_id: 'eng-1' },
+        ],
         rowCount: 1,
       })
 
       const out = await getArtifactContent('a-1')
 
-      expect(out).toEqual({ filename: 'f.pdf', mimeType: 'application/pdf', content: buf })
+      expect(out).toEqual({
+        engagementId: 'eng-1',
+        filename: 'f.pdf',
+        mimeType: 'application/pdf',
+        content: buf,
+      })
+    })
+
+    it('joins through the checklist item to scope the artifact to an engagement', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ engagement_id: 'eng-9' }], rowCount: 1 })
+      const eng = await getArtifactEngagementId('a-1')
+      expect(eng).toBe('eng-9')
+      const sql = mockQuery.mock.calls[0][0] as string
+      expect(sql).toContain('JOIN readiness_checklist_items')
     })
   })
 })
