@@ -16,13 +16,47 @@ import { getRequirementValue } from './requirement-values'
 /** The three possible CMMC Level 2 assessment outcomes */
 export type CMMCStatus = 'FINAL_LEVEL_2' | 'CONDITIONAL_LEVEL_2' | 'NO_CMMC_STATUS'
 
-/** Objective-level status from the assessment */
+/**
+ * Objective-level status from the assessment.
+ *
+ * Note: `IN_POAM` is intentionally NOT a member. IN_POAM is a *control-level*
+ * status (a NOT_MET requirement with a planned remediation) — objectives never
+ * carry it. For determination, a control's IN_POAM maps to NOT_MET (see
+ * `mapRequirementStatusToObjective`) and the separately supplied POA&M list
+ * drives CONDITIONAL_LEVEL_2. This keeps the three enum definitions (control
+ * CHECK includes IN_POAM, objective CHECK excludes it, this TS type excludes it)
+ * intentionally consistent-by-level rather than identical.
+ */
 export type ObjectiveStatus = 'MET' | 'NOT_MET' | 'NOT_ASSESSED' | 'NOT_APPLICABLE'
 
 /** Input entry mapping a requirement ID to its assessed objective status */
 export interface ObjectiveStatusEntry {
   requirementId: string
   status: ObjectiveStatus
+}
+
+/**
+ * Map a requirement/control status (as stored by the Go API or the outside
+ * catalog) to the objective-level status `determineCMMCStatus` consumes.
+ * COMPLIANT/MET → MET; NON_COMPLIANT/NOT_MET/IN_POAM → NOT_MET (IN_POAM is a
+ * not-met-with-remediation status — the POA&M list, passed separately, drives
+ * the Conditional outcome); NOT_APPLICABLE → NOT_APPLICABLE; anything else →
+ * NOT_ASSESSED.
+ */
+export function mapRequirementStatusToObjective(status: string): ObjectiveStatus {
+  switch (status) {
+    case 'COMPLIANT':
+    case 'MET':
+      return 'MET'
+    case 'NON_COMPLIANT':
+    case 'NOT_MET':
+    case 'IN_POAM':
+      return 'NOT_MET'
+    case 'NOT_APPLICABLE':
+      return 'NOT_APPLICABLE'
+    default:
+      return 'NOT_ASSESSED'
+  }
 }
 
 /** Minimal POA&M shape needed for status determination */
