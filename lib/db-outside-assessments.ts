@@ -14,7 +14,8 @@
  * to mirror the full NIST 800-171A objective set.
  */
 
-import { query } from './db'
+import type { QueryResult } from 'pg'
+import { query, getClient } from './db'
 import { cmmcRequirementValues } from './cmmc/requirement-values'
 import { CMMC_FAMILIES } from './cmmc/families'
 import type {
@@ -276,12 +277,20 @@ export interface ObjectiveUpdateResult {
  * Caller passes `expectedVersion = 0` for first writes; subsequent writes pass
  * the version returned by the prior call.
  */
+/**
+ * Runs a parameterized statement. Defaults to the pooled `query`; callers
+ * inside a transaction pass the dedicated client's query so the objective
+ * write and control recompute commit (or roll back) atomically.
+ */
+type Runner = (text: string, params?: unknown[]) => Promise<QueryResult>
+
 export async function outsideUpdateObjectiveStatus(
   engagementId: string,
   objectiveId: string,
   input: ObjectiveStatusUpdateInput,
+  run: Runner = query,
 ): Promise<ObjectiveUpdateResult> {
-  const updateResult = await query(
+  const updateResult = await run(
     `UPDATE outside_objective_assessments
         SET status = $4,
             assessment_notes = $5,
@@ -325,7 +334,7 @@ export async function outsideUpdateObjectiveStatus(
   // row exists with a different version (conflict). INSERT with ON CONFLICT
   // DO NOTHING distinguishes the two: insert succeeds → 'inserted'; conflict
   // means a row exists with a different version.
-  const insertResult = await query(
+  const insertResult = await run(
     `INSERT INTO outside_objective_assessments (
        engagement_id, requirement_id, objective_id, status,
        assessment_notes, evidence_description, artifacts_reviewed, interviewees,
@@ -378,8 +387,9 @@ export async function recomputeControlStatus(
   engagementId: string,
   requirementId: string,
   updatedBy: string,
+  run: Runner = query,
 ): Promise<string> {
-  const objResult = await query(
+  const objResult = await run(
     `SELECT status FROM outside_objective_assessments
       WHERE engagement_id = $1 AND requirement_id = $2`,
     [engagementId, requirementId],
@@ -399,7 +409,7 @@ export async function recomputeControlStatus(
     derived = 'MET'
   }
 
-  const upsertResult = await query(
+  const upsertResult = await run(
     `INSERT INTO outside_control_assessments (engagement_id, requirement_id, status, updated_by)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (engagement_id, requirement_id)
@@ -416,6 +426,64 @@ export async function recomputeControlStatus(
 
   const persisted = (upsertResult.rows[0] as { status: string } | undefined)?.status
   return persisted ?? derived
+}
+
+/** An objective update plus the recomputed parent-control status. */
+export interface ObjectiveAndControlResult extends ObjectiveUpdateResult {
+  controlStatus?: string
+}
+
+/**
+ * Atomically update an objective's status and recompute its parent control,
+ * in a single transaction. Without this, a crash between the two writes (or two
+ * concurrent edits) could leave a MET control over a NOT_MET objective.
+ *
+ * The control row is locked `FOR UPDATE` first, so concurrent edits to
+ * different objectives of the same control serialize (correctness over
+ * throughput). An optimistic-lock conflict on the objective is a normal no-op
+ * outcome — the transaction still COMMITs and returns `{status:'conflict'}`;
+ * only a genuine error rolls back.
+ */
+export async function outsideUpdateObjectiveAndRecompute(
+  engagementId: string,
+  objectiveId: string,
+  input: ObjectiveStatusUpdateInput,
+  updatedBy: string,
+): Promise<ObjectiveAndControlResult> {
+  const client = await getClient()
+  const run: Runner = (text, params) => client.query(text, params)
+  try {
+    await client.query('BEGIN')
+
+    // Lock the control row (if it exists) to serialize concurrent objective edits.
+    await run(
+      `SELECT id FROM outside_control_assessments
+        WHERE engagement_id = $1 AND requirement_id = $2 FOR UPDATE`,
+      [engagementId, input.requirementId],
+    )
+
+    const result = await outsideUpdateObjectiveStatus(engagementId, objectiveId, input, run)
+
+    if (result.status === 'conflict') {
+      // No-op outcome — commit the (empty) transaction; do NOT recompute.
+      await client.query('COMMIT')
+      return result
+    }
+
+    const controlStatus = await recomputeControlStatus(
+      engagementId,
+      input.requirementId,
+      updatedBy,
+      run,
+    )
+    await client.query('COMMIT')
+    return { ...result, controlStatus }
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
 }
 
 // ─── Evidence helpers ──────────────────────────────────────────────────────

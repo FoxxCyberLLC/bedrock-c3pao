@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockQuery = vi.fn()
+const mockGetClient = vi.fn()
 
 vi.mock('@/lib/db', () => ({
   query: mockQuery,
-  getClient: vi.fn(),
+  getClient: mockGetClient,
 }))
 
 const {
   mergeOutsideControlsWithCatalog,
   mergeOutsideObjectivesWithCatalog,
   outsideUpdateObjectiveStatus,
+  outsideUpdateObjectiveAndRecompute,
   recomputeControlStatus,
   uploadOutsideEvidence,
   listOutsideEvidence,
@@ -265,6 +267,100 @@ describe('recomputeControlStatus', () => {
     expect(upsertSql).toContain('INSERT INTO outside_control_assessments')
     expect(upsertSql).toContain('ON CONFLICT (engagement_id, requirement_id)')
     expect(upsertSql).toContain('DO UPDATE')
+  })
+})
+
+describe('outsideUpdateObjectiveAndRecompute (transactional)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function makeClient() {
+    const clientQuery = vi.fn()
+    const release = vi.fn()
+    return { client: { query: clientQuery, release }, clientQuery, release }
+  }
+
+  const sqlsOf = (clientQuery: ReturnType<typeof vi.fn>) =>
+    clientQuery.mock.calls.map((c: unknown[]) => c[0] as string)
+
+  it('runs the objective write and control recompute in one transaction (BEGIN…COMMIT, FOR UPDATE)', async () => {
+    const { client, clientQuery, release } = makeClient()
+    mockGetClient.mockResolvedValueOnce(client)
+    clientQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SELECT ... FOR UPDATE (control lock)
+      .mockResolvedValueOnce({ rows: [{ version: 2 }], rowCount: 1 }) // UPDATE objective → updated
+      .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 }) // SELECT objective statuses
+      .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 }) // UPSERT control RETURNING
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // COMMIT
+
+    const result = await outsideUpdateObjectiveAndRecompute(
+      ENG,
+      'AC.L2-3.1.1.a',
+      { requirementId: 'AC.L2-3.1.1', status: 'MET', expectedVersion: 1 },
+      'lead-1',
+    )
+
+    const sqls = sqlsOf(clientQuery)
+    expect(sqls[0]).toBe('BEGIN')
+    expect(sqls[sqls.length - 1]).toBe('COMMIT')
+    expect(sqls.some((s) => s.includes('FOR UPDATE'))).toBe(true)
+    expect(sqls).not.toContain('ROLLBACK')
+    expect(result.status).toBe('updated')
+    expect(result.controlStatus).toBe('MET')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('rolls back the objective write when recompute throws (no partial commit)', async () => {
+    const { client, clientQuery, release } = makeClient()
+    mockGetClient.mockResolvedValueOnce(client)
+    clientQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // FOR UPDATE
+      .mockResolvedValueOnce({ rows: [{ version: 2 }], rowCount: 1 }) // UPDATE objective → updated
+      .mockRejectedValueOnce(new Error('recompute boom')) // SELECT statuses throws
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // ROLLBACK
+
+    await expect(
+      outsideUpdateObjectiveAndRecompute(
+        ENG,
+        'AC.L2-3.1.1.a',
+        { requirementId: 'AC.L2-3.1.1', status: 'MET', expectedVersion: 1 },
+        'lead-1',
+      ),
+    ).rejects.toThrow('recompute boom')
+
+    const sqls = sqlsOf(clientQuery)
+    expect(sqls).toContain('ROLLBACK')
+    expect(sqls).not.toContain('COMMIT')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('commits and returns conflict on an optimistic-lock conflict (no rollback, no recompute)', async () => {
+    const { client, clientQuery, release } = makeClient()
+    mockGetClient.mockResolvedValueOnce(client)
+    clientQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // FOR UPDATE
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // UPDATE objective → no row
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // INSERT ON CONFLICT DO NOTHING → conflict
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // COMMIT
+
+    const result = await outsideUpdateObjectiveAndRecompute(
+      ENG,
+      'AC.L2-3.1.1.a',
+      { requirementId: 'AC.L2-3.1.1', status: 'MET', expectedVersion: 5 },
+      'lead-1',
+    )
+
+    expect(result.status).toBe('conflict')
+    const sqls = sqlsOf(clientQuery)
+    expect(sqls).toContain('COMMIT')
+    expect(sqls).not.toContain('ROLLBACK')
+    // recompute UPSERT must NOT run on conflict
+    expect(sqls.some((s) => s.includes('INSERT INTO outside_control_assessments'))).toBe(false)
+    expect(release).toHaveBeenCalledOnce()
   })
 })
 
