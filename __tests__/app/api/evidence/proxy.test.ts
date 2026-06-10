@@ -81,6 +81,17 @@ describe('evidence proxy', () => {
     expect(res.headers.get('content-type')).toBe('application/octet-stream')
   })
 
+  it('passes an AbortSignal timeout to the upstream fetch (B-MEDIUM)', async () => {
+    vi.mocked(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      upstreamResponse('%PDF-1.4', 'application/pdf'),
+    )
+    const GET = await getHandler()
+    await GET(makeRequest(), { params: Promise.resolve({ engagementId: 'eng1', evidenceId: 'ev1' }) })
+    const fetchMock = global.fetch as ReturnType<typeof vi.fn>
+    const [, opts] = fetchMock.mock.calls[0]
+    expect(opts?.signal).toBeInstanceOf(AbortSignal)
+  })
+
   it('passes through image/png Content-Type', async () => {
     vi.mocked(global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       upstreamResponse(new Uint8Array([0x89, 0x50, 0x4e, 0x47]), 'image/png'),

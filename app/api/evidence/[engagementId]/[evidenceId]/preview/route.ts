@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
 const MAX_PREVIEW_ROWS = 1000
+const UPSTREAM_TIMEOUT_MS = 30_000 // abort a hung S3/Go-API fetch after 30s
 
 function cellToString(v: ExcelJS.CellValue): string | null {
   if (v === null || v === undefined) return null
@@ -47,7 +48,7 @@ export async function GET(
 
   let upstream: Response
   try {
-    upstream = await fetch(downloadUrl)
+    upstream = await fetch(downloadUrl, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
     if (!upstream.ok) {
       return NextResponse.json({ error: `Upstream returned ${upstream.status}` }, { status: 502 })
     }

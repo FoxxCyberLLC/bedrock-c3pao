@@ -4,6 +4,7 @@ import { fetchEvidenceDownloadURL } from '@/lib/api-client'
 import { PROXY_DISPLAY_ALLOWED } from '@/lib/evidence-mime-types'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
+const UPSTREAM_TIMEOUT_MS = 30_000 // abort a hung S3/Go-API fetch after 30s
 
 export async function GET(
   request: NextRequest,
@@ -29,7 +30,7 @@ export async function GET(
   // Step 2: Fetch the actual file from the download URL
   let upstream: Response
   try {
-    upstream = await fetch(downloadUrl)
+    upstream = await fetch(downloadUrl, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
     if (!upstream.ok) {
       return NextResponse.json(
         { error: `Upstream returned ${upstream.status}` },
