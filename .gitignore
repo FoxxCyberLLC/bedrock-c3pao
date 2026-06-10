@@ -35,7 +35,8 @@ yarn-error.log*
 # ...but ship the deploy template so a fresh clone can configure the stack.
 !deploy/.env.example
 
-# instance data (SQLite config, runtime state, encryption key)
+# instance data (self-signed TLS certs, runtime state). Config lives in
+# Postgres; the config encryption key comes from CONFIG_ENCRYPTION_KEY (env).
 /data/
 
 # vercel
