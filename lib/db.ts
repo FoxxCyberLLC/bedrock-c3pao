@@ -94,6 +94,14 @@ export async function ensureSchema(): Promise<void> {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
 
+      -- Failed-login throttling, keyed by identity (email). Lock auto-expires.
+      CREATE TABLE IF NOT EXISTS login_attempts (
+        email        TEXT PRIMARY KEY,
+        failed_count INT NOT NULL DEFAULT 0,
+        locked_until TIMESTAMPTZ,
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
       -- C3PAO-internal reviews and comments on evidence/diagrams.
       -- Per CAP v2.0, the C3PAO only provides MET/NOT_MET verdicts to the OSC —
       -- no remediation guidance. These notes stay local to the container and are
