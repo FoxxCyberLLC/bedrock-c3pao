@@ -489,33 +489,42 @@ describe('evidence-objective links', () => {
     vi.clearAllMocks()
   })
 
-  it('linkEvidenceToObjective uses ON CONFLICT DO NOTHING (idempotent)', async () => {
+  it('linkEvidenceToObjective is idempotent AND scoped to the engagement (L2)', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
-    await linkEvidenceToObjective('ev-1', 'AC.L2-3.1.1.a', 'lead-1')
-    const sql = mockQuery.mock.calls[0][0] as string
+    await linkEvidenceToObjective(ENG, 'ev-1', 'AC.L2-3.1.1.a', 'lead-1')
+    const [sql, params] = mockQuery.mock.calls[0]
     expect(sql).toContain('INSERT INTO outside_evidence_objective_links')
-    expect(sql).toContain('ON CONFLICT')
     expect(sql).toContain('DO NOTHING')
+    // Only links evidence that belongs to the asserted engagement.
+    expect(sql).toContain('outside_evidence')
+    expect(sql).toContain('engagement_id')
+    expect(params).toContain(ENG)
   })
 
-  it('unlinkEvidenceFromObjective returns true when a link was deleted', async () => {
+  it('unlinkEvidenceFromObjective returns true when a link was deleted, scoped to engagement (L2)', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
-    const ok = await unlinkEvidenceFromObjective('ev-1', 'AC.L2-3.1.1.a')
+    const ok = await unlinkEvidenceFromObjective(ENG, 'ev-1', 'AC.L2-3.1.1.a')
     expect(ok).toBe(true)
+    const [sql, params] = mockQuery.mock.calls[0]
+    expect(sql).toContain('engagement_id')
+    expect(params).toContain(ENG)
   })
 
   it('unlinkEvidenceFromObjective returns false when no link existed', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
-    expect(await unlinkEvidenceFromObjective('ev-1', 'missing')).toBe(false)
+    expect(await unlinkEvidenceFromObjective(ENG, 'ev-1', 'missing')).toBe(false)
   })
 
-  it('listObjectivesForEvidence returns objective_id strings', async () => {
+  it('listObjectivesForEvidence returns objective_id strings scoped to engagement (L3)', async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ objective_id: 'AC.L2-3.1.1.a' }, { objective_id: 'AT.L2-3.2.1.a' }],
       rowCount: 2,
     })
-    const result = await listObjectivesForEvidence('ev-1')
+    const result = await listObjectivesForEvidence(ENG, 'ev-1')
     expect(result).toEqual(['AC.L2-3.1.1.a', 'AT.L2-3.2.1.a'])
+    const [sql, params] = mockQuery.mock.calls[0]
+    expect(sql).toContain('engagement_id')
+    expect(params).toContain(ENG)
   })
 
   it('listEvidenceForObjective joins evidence + links', async () => {

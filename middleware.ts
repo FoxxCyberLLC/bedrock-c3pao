@@ -32,16 +32,13 @@ export async function middleware(request: NextRequest) {
   const isSetupRoute = path.startsWith('/setup')
   const isAdminRoute = path.startsWith('/admin')
 
-  // Check if instance has been configured. After cold start, instrumentation.ts
-  // loads config from PostgreSQL into process.env. For first-time setup within
-  // a single container life, completeSetup() sets process.env in the Server
-  // Action context but the Edge middleware can't see those changes — so we
-  // also accept the bedrock_instance_configured cookie set by completeSetup.
-  // Forging the cookie only lets a user skip the /setup page (they still hit
-  // /login which requires real auth), so it's safe as a UX gate.
-  const isConfigured =
-    !!process.env.INSTANCE_API_KEY ||
-    request.cookies.get('bedrock_instance_configured')?.value === 'true'
+  // Instance is configured iff the server holds the instance API key. After cold
+  // start instrumentation.ts loads it into process.env; completeSetup() sets it
+  // inline. Because this middleware runs on the Node.js runtime (see below) it
+  // sees those mutations, so we rely on server state ONLY (L4): a forgeable
+  // client cookie must never create a "configured" state, which could otherwise
+  // be used to block a legitimate first-run /setup by bouncing it to /login.
+  const isConfigured = !!process.env.INSTANCE_API_KEY
 
   // If not configured and not on setup page → redirect to setup
   if (!isConfigured && !isSetupRoute) {

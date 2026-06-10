@@ -623,36 +623,49 @@ export async function getOutsideEvidenceContent(
 // ─── Evidence ↔ Objective links ────────────────────────────────────────────
 
 export async function linkEvidenceToObjective(
+  engagementId: string,
   evidenceId: string,
   objectiveId: string,
   linkedBy: string,
 ): Promise<void> {
+  // L2: only link evidence that belongs to the asserted engagement, so a lead
+  // of one engagement can't attach another engagement's evidence by id.
   await query(
     `INSERT INTO outside_evidence_objective_links (evidence_id, objective_id, linked_by)
-     VALUES ($1, $2, $3)
+     SELECT $1, $2, $3
+      WHERE EXISTS (SELECT 1 FROM outside_evidence WHERE id = $1 AND engagement_id = $4)
      ON CONFLICT (evidence_id, objective_id) DO NOTHING`,
-    [evidenceId, objectiveId, linkedBy],
+    [evidenceId, objectiveId, linkedBy, engagementId],
   )
 }
 
 export async function unlinkEvidenceFromObjective(
+  engagementId: string,
   evidenceId: string,
   objectiveId: string,
 ): Promise<boolean> {
+  // L2: scope the delete to the engagement that owns the evidence.
   const result = await query(
-    `DELETE FROM outside_evidence_objective_links
-      WHERE evidence_id = $1 AND objective_id = $2`,
-    [evidenceId, objectiveId],
+    `DELETE FROM outside_evidence_objective_links l
+      USING outside_evidence e
+      WHERE l.evidence_id = $1 AND l.objective_id = $2
+        AND e.id = l.evidence_id AND e.engagement_id = $3`,
+    [evidenceId, objectiveId, engagementId],
   )
   return (result.rowCount ?? 0) > 0
 }
 
 export async function listObjectivesForEvidence(
+  engagementId: string,
   evidenceId: string,
 ): Promise<string[]> {
+  // L3: scope the read to the engagement that owns the evidence.
   const result = await query(
-    `SELECT objective_id FROM outside_evidence_objective_links WHERE evidence_id = $1`,
-    [evidenceId],
+    `SELECT l.objective_id
+       FROM outside_evidence_objective_links l
+       JOIN outside_evidence e ON e.id = l.evidence_id
+      WHERE l.evidence_id = $1 AND e.engagement_id = $2`,
+    [evidenceId, engagementId],
   )
   return (result.rows as Array<{ objective_id: string }>).map((r) => r.objective_id)
 }

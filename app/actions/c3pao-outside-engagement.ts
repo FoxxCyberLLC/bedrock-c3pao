@@ -337,7 +337,7 @@ export async function linkOutsideEvidenceToObjective(
   }
 
   try {
-    await dbLinkEvidence(evidenceId, objectiveId, auth.session.c3paoUser.id)
+    await dbLinkEvidence(engagementId, evidenceId, objectiveId, auth.session.c3paoUser.id)
     revalidatePath(`/engagements/${engagementId}`)
     return { success: true, data: true }
   } catch (err) {
@@ -357,7 +357,7 @@ export async function unlinkOutsideEvidenceFromObjective(
   }
 
   try {
-    await dbUnlinkEvidence(evidenceId, objectiveId)
+    await dbUnlinkEvidence(engagementId, evidenceId, objectiveId)
     revalidatePath(`/engagements/${engagementId}`)
     return { success: true, data: true }
   } catch (err) {
@@ -373,7 +373,7 @@ export async function listOutsideObjectivesForEvidenceAction(
   if (!session) return { success: false, error: 'Unauthorized' }
 
   try {
-    const list = await dbListObjectivesForEvidence(evidenceId)
+    const list = await dbListObjectivesForEvidence(engagementId, evidenceId)
     return { success: true, data: list }
   } catch (err) {
     return errorEnvelope(err, 'Failed to list objectives for evidence')
