@@ -3,21 +3,54 @@ import { Pool, type QueryResult } from 'pg'
 let _pool: Pool | null = null
 let _schemaPromise: Promise<void> | null = null
 
+/** Verified-TLS config passed to pg's `ssl` option. */
+export interface DbSslConfig {
+  ca: string
+  rejectUnauthorized: true
+}
+
+/**
+ * Build the pg SSL config from the connection URL and an optional CA cert.
+ *
+ * - No `sslmode=` in the URL → SSL disabled (undefined): the bundled local DB
+ *   runs on an internal/loopback network where TLS isn't used.
+ * - `sslmode=` present → SSL is required AND the server certificate is verified
+ *   against the supplied CA (`rejectUnauthorized: true`). If no CA is provided
+ *   we fail closed (throw) rather than silently disabling verification with
+ *   `rejectUnauthorized: false` — an unverified TLS connection is open to MITM.
+ *
+ * Mirror this logic in `start.js` (CommonJS) if it changes.
+ */
+export function buildSslConfig(
+  databaseUrl: string | undefined,
+  caCert: string | undefined
+): DbSslConfig | undefined {
+  if (!databaseUrl || !databaseUrl.includes('sslmode=')) {
+    return undefined
+  }
+  if (!caCert || caCert.trim() === '') {
+    throw new Error(
+      'DATABASE_URL requests SSL (sslmode=) but DATABASE_CA_CERT is not set. ' +
+        'Provide the server CA certificate (PEM) so the connection can be verified, ' +
+        'or remove sslmode from DATABASE_URL for an unencrypted internal connection.'
+    )
+  }
+  return { ca: caCert, rejectUnauthorized: true }
+}
+
 export function getPool(): Pool {
   if (_pool) return _pool
 
-  // Strip sslmode from URL and configure SSL separately — pg-connection-string
-  // parses sslmode=require as verify-full, which fails without the RDS CA bundle.
-  // Aurora traffic is already encrypted in transit within the VPC.
+  // Strip sslmode from the URL and configure SSL separately — pg-connection-string
+  // would otherwise parse sslmode itself. When sslmode is present we require a
+  // verified TLS connection (DATABASE_CA_CERT); see buildSslConfig.
   const connStr = (process.env.DATABASE_URL || '').replace(/[?&]sslmode=[^&]*/g, '')
   _pool = new Pool({
     connectionString: connStr,
     max: 3,
     connectionTimeoutMillis: 15000,
     idleTimeoutMillis: 30000,
-    ssl: process.env.DATABASE_URL?.includes('sslmode=')
-      ? { rejectUnauthorized: false }
-      : undefined,
+    ssl: buildSslConfig(process.env.DATABASE_URL, process.env.DATABASE_CA_CERT),
   })
 
   _pool.on('error', (err) => {

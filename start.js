@@ -55,6 +55,26 @@ function decryptConfigValue(blob) {
   ]).toString('utf8')
 }
 
+/**
+ * Build the pg SSL config from the connection URL and an optional CA cert.
+ * Mirror of lib/db.ts buildSslConfig (CommonJS — keep both in sync):
+ * no sslmode → undefined (internal DB); sslmode + CA → verified TLS;
+ * sslmode without a CA → throw (fail closed, never rejectUnauthorized:false).
+ */
+function buildSslConfig(databaseUrl, caCert) {
+  if (!databaseUrl || !databaseUrl.includes('sslmode=')) {
+    return undefined
+  }
+  if (!caCert || caCert.trim() === '') {
+    throw new Error(
+      'DATABASE_URL requests SSL (sslmode=) but DATABASE_CA_CERT is not set. ' +
+        'Provide the server CA certificate (PEM) so the connection can be verified, ' +
+        'or remove sslmode from DATABASE_URL for an unencrypted internal connection.'
+    )
+  }
+  return { ca: caCert, rejectUnauthorized: true }
+}
+
 const CERT_DIR = path.join(__dirname, 'data', 'certs')
 const TLS_CERT = path.join(CERT_DIR, 'cert.pem')
 const TLS_KEY = path.join(CERT_DIR, 'key.pem')
@@ -177,9 +197,7 @@ async function loadConfig() {
     connectionString: connStr,
     max: 1,
     connectionTimeoutMillis: 15000,
-    ssl: databaseUrl.includes('sslmode=')
-      ? { rejectUnauthorized: false }
-      : undefined,
+    ssl: buildSslConfig(databaseUrl, process.env.DATABASE_CA_CERT),
   })
 
   let rows
@@ -249,4 +267,4 @@ if (require.main === module) {
   bootstrap()
 }
 
-module.exports = { decryptConfigValue }
+module.exports = { decryptConfigValue, buildSslConfig }

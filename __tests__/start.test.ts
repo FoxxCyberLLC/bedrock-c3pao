@@ -6,8 +6,12 @@ import { createRequire } from 'node:module'
 // running `node start.js`) means require.main !== module, so bootstrap() does
 // NOT run — only the exported helpers are loaded.
 const nodeRequire = createRequire(import.meta.url)
-const { decryptConfigValue } = nodeRequire('../start.js') as {
+const { decryptConfigValue, buildSslConfig } = nodeRequire('../start.js') as {
   decryptConfigValue: (blob: string) => string
+  buildSslConfig: (
+    databaseUrl: string | undefined,
+    caCert: string | undefined
+  ) => { ca: string; rejectUnauthorized: true } | undefined
 }
 
 const { encryptValue } = await import('@/lib/crypto')
@@ -49,5 +53,24 @@ describe('start.js decryptConfigValue (CommonJS, cross-compatible with lib/crypt
     const blob = encryptValue('x')
     delete process.env.CONFIG_ENCRYPTION_KEY
     expect(() => decryptConfigValue(blob)).toThrow(/CONFIG_ENCRYPTION_KEY/)
+  })
+})
+
+describe('start.js buildSslConfig (mirrors lib/db.buildSslConfig)', () => {
+  it('returns verified TLS config when sslmode is present and a CA is provided', () => {
+    expect(buildSslConfig('postgres://h/db?sslmode=require', 'CA-PEM')).toEqual({
+      ca: 'CA-PEM',
+      rejectUnauthorized: true,
+    })
+  })
+
+  it('throws (fail-closed) when sslmode is present but no CA', () => {
+    expect(() => buildSslConfig('postgres://h/db?sslmode=require', undefined)).toThrow(
+      /DATABASE_CA_CERT/
+    )
+  })
+
+  it('returns undefined when the URL has no sslmode', () => {
+    expect(buildSslConfig('postgres://h/db', 'CA-PEM')).toBeUndefined()
   })
 })

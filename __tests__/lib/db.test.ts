@@ -53,6 +53,36 @@ describe('lib/db', () => {
     })
   })
 
+  describe('buildSslConfig()', () => {
+    const CA = '-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----'
+
+    it('returns verified TLS config when sslmode is present and a CA is provided', async () => {
+      const { buildSslConfig } = await import('@/lib/db')
+      const cfg = buildSslConfig('postgres://h/db?sslmode=require', CA)
+      expect(cfg).toEqual({ ca: CA, rejectUnauthorized: true })
+    })
+
+    it('throws (fail-closed) when sslmode is present but no CA — never rejectUnauthorized:false', async () => {
+      const { buildSslConfig } = await import('@/lib/db')
+      expect(() => buildSslConfig('postgres://h/db?sslmode=require', undefined)).toThrow(
+        /DATABASE_CA_CERT/
+      )
+    })
+
+    it('throws when sslmode is present and the CA is empty/whitespace', async () => {
+      const { buildSslConfig } = await import('@/lib/db')
+      expect(() => buildSslConfig('postgres://h/db?sslmode=verify-full', '   ')).toThrow(
+        /DATABASE_CA_CERT/
+      )
+    })
+
+    it('returns undefined when the URL has no sslmode (internal bundled DB)', async () => {
+      const { buildSslConfig } = await import('@/lib/db')
+      expect(buildSslConfig('postgres://h/db', CA)).toBeUndefined()
+      expect(buildSslConfig(undefined, undefined)).toBeUndefined()
+    })
+  })
+
   describe('getPool()', () => {
     it('should return a pool with query method', async () => {
       const { getPool } = await import('@/lib/db')
