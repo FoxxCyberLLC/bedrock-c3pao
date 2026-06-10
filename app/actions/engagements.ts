@@ -24,6 +24,7 @@ import {
   type SSPView,
   type C3PAOUserItem,
   type AssessmentSnapshotView,
+  type STIGData,
 } from '@/lib/api-client'
 
 async function getToken(): Promise<string> {
@@ -64,7 +65,7 @@ export async function getC3PAOEngagements(): Promise<{ success: boolean; data?: 
 export async function getEngagementById(id: string): Promise<{ success: boolean; data?: any; accessLevel?: string; error?: string }> {
   try {
     const token = await getToken()
-    const detail = await fetchEngagementDetail(id, token) as Record<string, any>
+    const detail = await fetchEngagementDetail(id, token)
 
     // Short-circuit for COMPLETED: the layout will redirect before this page renders,
     // but if called directly return minimal data to avoid 5 failing parallel fetches.
@@ -137,7 +138,7 @@ export async function getEngagementById(id: string): Promise<{ success: boolean;
     return {
       success: true,
       data: shaped,
-      accessLevel: detail.accessLevel,
+      accessLevel: detail.accessLevel as string | undefined,
     }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load engagement' }
@@ -231,8 +232,7 @@ export async function getEngagementTeam(engagementId: string): Promise<{ success
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getEngagementStigs(engagementId: string): Promise<{ success: boolean; data?: any; error?: string }> {
+export async function getEngagementStigs(engagementId: string): Promise<{ success: boolean; data?: STIGData; error?: string }> {
   try {
     const token = await getToken()
     const stigs = await fetchSTIGs(engagementId, token)
@@ -265,12 +265,11 @@ function shapeEngagementForControl(e: EngagementSummary) {
 }
 
 // Control detail for individual assessment page
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getEngagementControlDetail(engagementId: string, controlId: string): Promise<{
   success: boolean
   data?: {
-    engagement: any
-    control: any
+    engagement: ReturnType<typeof shapeEngagementForControl>
+    control: ReturnType<typeof shapeControl>
     navigation: { prevId: string | null; prevName: string | null; nextId: string | null; nextName: string | null; currentIndex: number; total: number }
   }
   error?: string

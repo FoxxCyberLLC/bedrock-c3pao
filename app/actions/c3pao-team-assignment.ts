@@ -14,13 +14,12 @@ export async function getEngagementTeam(engagementId: string) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function getAvailableAssessors(engagementId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
+export async function getAvailableAssessors(engagementId: string): Promise<{ success: boolean; data?: Record<string, unknown>[]; error?: string }> {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
     const assessors = await fetchAvailableAssessors(engagementId, session.apiToken)
-    return { success: true, data: assessors as any[] }
+    return { success: true, data: assessors }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load assessors' }
   }

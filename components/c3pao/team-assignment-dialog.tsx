@@ -87,7 +87,9 @@ export function TeamAssignmentDialog({
     try {
       const result = await getAvailableAssessors(engagementId)
       if (result.success && result.data) {
-        setAvailableAssessors(result.data)
+        // The Go API returns loosely-typed assessor rows; narrow to the local
+        // Assessor shape the dialog renders.
+        setAvailableAssessors(result.data as unknown as Assessor[])
       } else {
         toast.error(result.error || 'Failed to load assessors')
       }
