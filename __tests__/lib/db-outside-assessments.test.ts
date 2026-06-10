@@ -190,7 +190,7 @@ describe('recomputeControlStatus', () => {
   it('returns NOT_ASSESSED when there are no objective rows', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SELECT statuses
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // UPSERT
+      .mockResolvedValueOnce({ rows: [{ status: 'NOT_ASSESSED' }], rowCount: 1 }) // UPSERT RETURNING
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('NOT_ASSESSED')
   })
@@ -201,7 +201,7 @@ describe('recomputeControlStatus', () => {
         rows: [{ status: 'MET' }, { status: 'NOT_MET' }, { status: 'MET' }],
         rowCount: 3,
       })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'NOT_MET' }], rowCount: 1 })
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('NOT_MET')
   })
@@ -212,7 +212,7 @@ describe('recomputeControlStatus', () => {
         rows: [{ status: 'MET' }, { status: 'NOT_ASSESSED' }],
         rowCount: 2,
       })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'NOT_ASSESSED' }], rowCount: 1 })
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('NOT_ASSESSED')
   })
@@ -223,7 +223,7 @@ describe('recomputeControlStatus', () => {
         rows: [{ status: 'MET' }, { status: 'MET' }],
         rowCount: 2,
       })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 })
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('MET')
   })
@@ -234,15 +234,32 @@ describe('recomputeControlStatus', () => {
         rows: [{ status: 'NOT_APPLICABLE' }, { status: 'NOT_APPLICABLE' }],
         rowCount: 2,
       })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'NOT_APPLICABLE' }], rowCount: 1 })
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('NOT_APPLICABLE')
+  })
+
+  it('preserves a manually-set IN_POAM control instead of overwriting it with the derived status (B-HIGH-2)', async () => {
+    // Objectives recompute to NOT_MET, but the control was deliberately set
+    // IN_POAM by the lead assessor. Outside engagements have no POA&M table, so
+    // IN_POAM is a manual control-level status that recompute must preserve.
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{ status: 'MET' }, { status: 'NOT_MET' }],
+        rowCount: 2,
+      }) // SELECT statuses → derived NOT_MET
+      .mockResolvedValueOnce({ rows: [{ status: 'IN_POAM' }], rowCount: 1 }) // UPSERT preserves IN_POAM
+    const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
+    expect(result).toBe('IN_POAM')
+    const upsertSql = mockQuery.mock.calls[1][0] as string
+    expect(upsertSql).toContain("outside_control_assessments.status = 'IN_POAM'")
+    expect(upsertSql).toContain('RETURNING status')
   })
 
   it('UPSERTs the derived status into outside_control_assessments', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 })
     await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     const upsertSql = mockQuery.mock.calls[1][0] as string
     expect(upsertSql).toContain('INSERT INTO outside_control_assessments')

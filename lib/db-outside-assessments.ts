@@ -364,6 +364,15 @@ export async function outsideUpdateObjectiveStatus(
  * objectives. CMMC convention: control is MET only when all assessed
  * objectives are MET; NOT_MET if any objective is NOT_MET; NOT_ASSESSED if
  * none are assessed; NOT_APPLICABLE if all are NOT_APPLICABLE.
+ *
+ * IN_POAM preservation: outside engagements have no POA&M table, so IN_POAM is
+ * a deliberate, manual control-level status the lead assessor sets. If the
+ * stored control is already IN_POAM, the upsert preserves it rather than
+ * clobbering it with the derived NOT_MET — the CASE clause keeps IN_POAM and
+ * RETURNING reports the status actually persisted.
+ *
+ * Returns the persisted control status (which may be the preserved IN_POAM
+ * rather than the freshly derived value).
  */
 export async function recomputeControlStatus(
   engagementId: string,
@@ -390,18 +399,23 @@ export async function recomputeControlStatus(
     derived = 'MET'
   }
 
-  await query(
+  const upsertResult = await query(
     `INSERT INTO outside_control_assessments (engagement_id, requirement_id, status, updated_by)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (engagement_id, requirement_id)
-     DO UPDATE SET status = EXCLUDED.status,
+     DO UPDATE SET status = CASE
+                              WHEN outside_control_assessments.status = 'IN_POAM' THEN 'IN_POAM'
+                              ELSE EXCLUDED.status
+                            END,
                    updated_by = EXCLUDED.updated_by,
                    updated_at = NOW(),
-                   version = outside_control_assessments.version + 1`,
+                   version = outside_control_assessments.version + 1
+     RETURNING status`,
     [engagementId, requirementId, derived, updatedBy],
   )
 
-  return derived
+  const persisted = (upsertResult.rows[0] as { status: string } | undefined)?.status
+  return persisted ?? derived
 }
 
 // ─── Evidence helpers ──────────────────────────────────────────────────────
