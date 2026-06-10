@@ -68,6 +68,21 @@ describe('mergeOutsideControlsWithCatalog', () => {
     expect(sample.familyName).toBeTruthy()
     expect(typeof sample.sortOrder).toBe('number')
   })
+
+  it('maps NIST families to the correct CMMC family code: 03.09=PS, 03.10=PE (not swapped)', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+    const result = await mergeOutsideControlsWithCatalog(ENG)
+    const byReq = (id: string) => result.find((c) => c.requirementId === id)
+
+    // NIST 800-171 R3: 03.09 = Personnel Security (PS), 03.10 = Physical Protection (PE).
+    expect(byReq('PS.L2-3.9.1')?.familyCode).toBe('PS')
+    expect(byReq('PS.L2-3.9.2')?.familyCode).toBe('PS')
+    expect(byReq('PE.L2-3.10.1')?.familyCode).toBe('PE')
+    expect(byReq('PE.L2-3.10.2')?.familyCode).toBe('PE')
+    // The historical swap must NOT be present.
+    expect(byReq('PE.L2-3.9.1')).toBeUndefined()
+    expect(byReq('PS.L2-3.10.1')).toBeUndefined()
+  })
 })
 
 describe('mergeOutsideObjectivesWithCatalog', () => {

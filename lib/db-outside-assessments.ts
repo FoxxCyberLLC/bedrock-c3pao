@@ -42,11 +42,13 @@ function nistToCmmcDisplayId(nistId: string): string {
 function familyCodeFromNistId(nistId: string): string {
   // NIST IDs follow "03.<family-num>.<seq>" where family-num maps to:
   //   01: AC, 02: AT, 03: AU, 04: CM, 05: IA, 06: IR, 07: MA,
-  //   08: MP, 09: PE, 10: PS, 11: RA, 12: CA, 13: SC, 14: SI
+  //   08: MP, 09: PS, 10: PE, 11: RA, 12: CA, 13: SC, 14: SI
+  // (03.09 = Personnel Security (PS), 03.10 = Physical Protection (PE) —
+  //  matches nistFamilyToCmmc in lib/cmmc/requirement-values.ts.)
   const familyNum = parseInt(nistId.split('.')[1] ?? '0', 10)
   const ORDER: ReadonlyArray<string> = [
     'AC', 'AT', 'AU', 'CM', 'IA', 'IR', 'MA',
-    'MP', 'PE', 'PS', 'RA', 'CA', 'SC', 'SI',
+    'MP', 'PS', 'PE', 'RA', 'CA', 'SC', 'SI',
   ]
   return ORDER[familyNum - 1] ?? 'AC'
 }
