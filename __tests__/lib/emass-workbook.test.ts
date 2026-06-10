@@ -1,8 +1,23 @@
 import { describe, it, expect } from 'vitest'
-import { buildEMASSWorkbook } from '@/lib/emass-workbook'
+import { buildEMASSWorkbook, fmtDate } from '@/lib/emass-workbook'
 import type { EMASSWorkbookInput } from '@/lib/emass-workbook'
 import type { TeamMember } from '@/lib/api-client'
 import ExcelJS from 'exceljs'
+
+describe('fmtDate timezone handling (B-MEDIUM)', () => {
+  it('formats a date-only string as the same calendar day in any timezone', () => {
+    // Under a negative-offset TZ (run with TZ=America/New_York) the old
+    // new Date('2026-06-09') parsed UTC midnight and shifted to 08-Jun.
+    expect(fmtDate('2026-06-09')).toBe('09-Jun-2026')
+    expect(fmtDate('2026-01-01')).toBe('01-Jan-2026')
+  })
+
+  it('returns empty string for null/undefined/blank', () => {
+    expect(fmtDate(null)).toBe('')
+    expect(fmtDate(undefined)).toBe('')
+    expect(fmtDate('')).toBe('')
+  })
+})
 
 /** Build a minimal TeamMember for tests where only role + jobTitle matter. */
 function makeTeamMember(overrides: Partial<TeamMember>): TeamMember {

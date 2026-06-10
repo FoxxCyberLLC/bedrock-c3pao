@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs'
 import type { ControlView, ObjectiveView, EMassExportData, EMassExportFinding, TeamMember } from '@/lib/api-client'
 import { getCmmcDisplayId, getRequirementValue } from '@/lib/cmmc/requirement-values'
-import { format } from 'date-fns'
+import { format, parseISO } from 'date-fns'
 
 export interface EMASSWorkbookInput {
   controls: ControlView[]
@@ -35,10 +35,18 @@ function sanitizeForExcel(value: string | null | undefined): string {
   return str
 }
 
-function fmtDate(date: string | null | undefined): string {
+/**
+ * Format a date for the eMASS workbook as `dd-MMM-yyyy`. Date-only strings
+ * (`YYYY-MM-DD`) are parsed as local midnight via `parseISO` so a deliverable
+ * date renders the same calendar day in any timezone — `new Date('2026-06-09')`
+ * parses as UTC midnight and would shift to the previous day west of UTC.
+ */
+export function fmtDate(date: string | null | undefined): string {
   if (!date) return ''
   try {
-    return format(new Date(date), 'dd-MMM-yyyy')
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(date) ? parseISO(date) : new Date(date)
+    if (isNaN(parsed.getTime())) return ''
+    return format(parsed, 'dd-MMM-yyyy')
   } catch {
     return ''
   }
