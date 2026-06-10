@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { randomBytes } from 'node:crypto'
 import { createRequire } from 'node:module'
 
@@ -6,12 +6,16 @@ import { createRequire } from 'node:module'
 // running `node start.js`) means require.main !== module, so bootstrap() does
 // NOT run — only the exported helpers are loaded.
 const nodeRequire = createRequire(import.meta.url)
-const { decryptConfigValue, buildSslConfig } = nodeRequire('../start.js') as {
+const { decryptConfigValue, buildSslConfig, handleBootstrapError, ensureCerts } = nodeRequire(
+  '../start.js'
+) as {
   decryptConfigValue: (blob: string) => string
   buildSslConfig: (
     databaseUrl: string | undefined,
     caCert: string | undefined
   ) => { ca: string; rejectUnauthorized: true } | undefined
+  handleBootstrapError: (err: unknown) => void
+  ensureCerts: (fsImpl?: unknown, execImpl?: unknown) => void
 }
 
 const { encryptValue } = await import('@/lib/crypto')
@@ -72,5 +76,46 @@ describe('start.js buildSslConfig (mirrors lib/db.buildSslConfig)', () => {
 
   it('returns undefined when the URL has no sslmode', () => {
     expect(buildSslConfig('postgres://h/db', 'CA-PEM')).toBeUndefined()
+  })
+})
+
+describe('start.js handleBootstrapError', () => {
+  it('logs and exits the process with code 1', () => {
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never)
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      handleBootstrapError(new Error('bootstrap boom'))
+      expect(exitSpy).toHaveBeenCalledWith(1)
+      expect(errSpy).toHaveBeenCalled()
+    } finally {
+      exitSpy.mockRestore()
+      errSpy.mockRestore()
+    }
+  })
+})
+
+describe('start.js ensureCerts perms (M5)', () => {
+  it('sets dir 0700 and key 0600 unconditionally, even for pre-existing certs', () => {
+    const mkdir: Array<[string, unknown]> = []
+    const chmod: Array<[string, number]> = []
+    const fakeFs = {
+      mkdirSync: (p: string, opts: unknown) => mkdir.push([p, opts]),
+      existsSync: () => true, // certs already exist (e.g. mounted) → no openssl
+      chmodSync: (p: string, mode: number) => chmod.push([p, mode]),
+      readFileSync: () => Buffer.from(''),
+    }
+    const fakeExec = vi.fn()
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      ensureCerts(fakeFs, fakeExec)
+    } finally {
+      logSpy.mockRestore()
+    }
+
+    expect(fakeExec).not.toHaveBeenCalled()
+    expect(mkdir[0][1]).toMatchObject({ recursive: true, mode: 0o700 })
+    const modes = chmod.map(([, m]) => m)
+    expect(modes).toContain(0o600) // key
+    expect(modes).toContain(0o700) // dir
   })
 })

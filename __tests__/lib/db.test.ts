@@ -127,6 +127,20 @@ describe('lib/db', () => {
 
       expect(callCount2).toBe(callCount1)
     })
+
+    it('should retry after a failed init (does not cache the rejection)', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+
+      // First attempt: the DDL rejects.
+      mockPoolQuery.mockRejectedValueOnce(new Error('ddl failed'))
+      await expect(ensureSchema()).rejects.toThrow('ddl failed')
+      const afterFailure = mockPoolQuery.mock.calls.length
+
+      // Second attempt must re-run the DDL (cached rejection would skip it).
+      mockPoolQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      await expect(ensureSchema()).resolves.toBeUndefined()
+      expect(mockPoolQuery.mock.calls.length).toBeGreaterThan(afterFailure)
+    })
   })
 
   describe('ensureSchema() — readiness tables', () => {

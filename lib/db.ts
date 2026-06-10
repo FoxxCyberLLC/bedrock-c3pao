@@ -73,6 +73,9 @@ export async function getClient() {
 export async function ensureSchema(): Promise<void> {
   if (_schemaPromise) return _schemaPromise
 
+  // Don't cache a rejected init: if the DDL fails (e.g. transient DB outage at
+  // boot), clear the memoized promise so the next call retries instead of
+  // replaying the cached rejection forever.
   _schemaPromise = (async () => {
     const pool = getPool()
     await pool.query(`
@@ -322,7 +325,10 @@ export async function ensureSchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_outside_evidence_objective_links_objective
         ON outside_evidence_objective_links (objective_id);
     `)
-  })()
+  })().catch((err) => {
+    _schemaPromise = null
+    throw err
+  })
 
   return _schemaPromise
 }

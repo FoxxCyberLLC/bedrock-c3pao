@@ -87,25 +87,29 @@ const EXTERNAL_PORT = parseInt(process.env.PORT || '3001', 10)
  * Users can mount their own cert.pem / key.pem into /app/data/certs/ to
  * use a real certificate instead.
  */
-function ensureCerts() {
-  if (fs.existsSync(TLS_CERT) && fs.existsSync(TLS_KEY)) {
+function ensureCerts(fsImpl = fs, execImpl = execSync) {
+  // Create the cert dir restricted (0700). fsImpl/execImpl are injectable for tests.
+  fsImpl.mkdirSync(CERT_DIR, { recursive: true, mode: 0o700 })
+
+  if (fsImpl.existsSync(TLS_CERT) && fsImpl.existsSync(TLS_KEY)) {
     console.log('[start] Using existing TLS certificates')
-    return
+  } else {
+    console.log('[start] Generating self-signed TLS certificate...')
+    // execSync with hardcoded arguments only — no user input, safe from injection
+    execImpl(
+      `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes ` +
+      `-keyout "${TLS_KEY}" -out "${TLS_CERT}" ` +
+      `-days 825 -subj "/CN=bedrock-c3pao/O=Bedrock" ` +
+      `-addext "subjectAltName=DNS:localhost,DNS:bedrock-c3pao,IP:127.0.0.1"`,
+      { stdio: 'pipe' }
+    )
+    console.log('[start] Self-signed TLS certificate generated (ECDSA P-384, valid ~2.25 years)')
   }
 
-  fs.mkdirSync(CERT_DIR, { recursive: true })
-
-  console.log('[start] Generating self-signed TLS certificate...')
-  // execSync with hardcoded arguments only — no user input, safe from injection
-  execSync(
-    `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes ` +
-    `-keyout "${TLS_KEY}" -out "${TLS_CERT}" ` +
-    `-days 825 -subj "/CN=bedrock-c3pao/O=Bedrock" ` +
-    `-addext "subjectAltName=DNS:localhost,DNS:bedrock-c3pao,IP:127.0.0.1"`,
-    { stdio: 'pipe' }
-  )
-  fs.chmodSync(TLS_KEY, 0o600)
-  console.log('[start] Self-signed TLS certificate generated (ECDSA P-384, valid ~2.25 years)')
+  // Restrict perms UNCONDITIONALLY — also for pre-existing/mounted keys, whose
+  // perms we don't control. mkdir mode is subject to umask; chmod is not. (M5)
+  fsImpl.chmodSync(CERT_DIR, 0o700)
+  fsImpl.chmodSync(TLS_KEY, 0o600)
 }
 
 /**
@@ -261,10 +265,20 @@ async function bootstrap() {
   startHttpsProxy()
 }
 
+/**
+ * Fatal bootstrap failure handler. A failed bootstrap (bad CONFIG_ENCRYPTION_KEY,
+ * missing DATABASE_CA_CERT, etc.) must crash loudly with a non-zero exit so the
+ * container restarts/alerts rather than silently serving in a broken state.
+ */
+function handleBootstrapError(err) {
+  console.error('[start] Fatal bootstrap error:', err instanceof Error ? err.stack || err.message : err)
+  process.exit(1)
+}
+
 // Only auto-start when executed directly (node start.js). When required by a
 // test, skip bootstrap and expose the testable pieces instead.
 if (require.main === module) {
-  bootstrap()
+  bootstrap().catch(handleBootstrapError)
 }
 
-module.exports = { decryptConfigValue, buildSslConfig }
+module.exports = { decryptConfigValue, buildSslConfig, handleBootstrapError, ensureCerts }
