@@ -76,8 +76,10 @@ interface ATOPackage {
   } | null
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface SSPData {
+  // The SSP is a dynamic OSC-authored object with arbitrary, deeply-nested
+  // fields this read-only renderer accesses loosely; `any` is the boundary type.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any
 }
 

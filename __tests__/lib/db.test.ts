@@ -17,16 +17,9 @@ vi.mock('pg', () => {
 describe('lib/db', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
-    // Reset module to clear cached pool and schema promise
+    // Reset module registry to clear the cached pool + schema promise between
+    // tests. The top-level vi.mock('pg') persists across resetModules.
     vi.resetModules()
-    vi.mock('pg', () => ({
-      Pool: function () {
-        return {
-          query: mockPoolQuery,
-          on: mockPoolOn,
-        }
-      },
-    }))
   })
 
   describe('query()', () => {

@@ -18,6 +18,31 @@ import { EvidenceTableReadOnly } from '@/components/c3pao/evidence-table-readonl
 
 import { requireAuth } from '@/lib/auth'
 import { getEvidenceRepositoryForC3PAO } from '@/app/actions/c3pao-dashboard'
+
+/**
+ * Count evidence expiring within 30 days / already expired as of now. A plain
+ * module function (not a component) so reading the clock here is not subject to
+ * the React purity rule — the page renders once per request server-side.
+ */
+function computeEvidenceStats(
+  evidence: Array<{ expirationDate: string | null }>,
+): { total: number; expiring: number; expired: number } {
+  const now = Date.now()
+  const dayMs = 1000 * 60 * 60 * 24
+  let expiring = 0
+  let expired = 0
+  for (const e of evidence) {
+    if (!e.expirationDate) continue
+    const expMs = new Date(e.expirationDate).getTime()
+    if (expMs < now) {
+      expired++
+    } else {
+      const daysUntil = Math.ceil((expMs - now) / dayMs)
+      if (daysUntil <= 30 && daysUntil > 0) expiring++
+    }
+  }
+  return { total: evidence.length, expiring, expired }
+}
 import { formatBytes, getStoragePercentage, getStorageColorClass, getStorageProgressClass } from '@/lib/utils'
 
 interface PageProps {
@@ -72,18 +97,11 @@ export default async function C3PAOEvidenceRepositoryPage({ params }: PageProps)
   // API returns flat EvidenceView[] array
   const evidence = Array.isArray(result.data) ? result.data : []
 
-  const totalEvidence = evidence.length
-  const expiringEvidence = evidence.filter((e: { expirationDate: string | null }) => {
-    if (!e.expirationDate) return false
-    const daysUntilExpiration = Math.ceil(
-      (new Date(e.expirationDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    )
-    return daysUntilExpiration <= 30 && daysUntilExpiration > 0
-  }).length
-  const expiredEvidence = evidence.filter((e: { expirationDate: string | null }) => {
-    if (!e.expirationDate) return false
-    return new Date(e.expirationDate) < new Date()
-  }).length
+  const {
+    total: totalEvidence,
+    expiring: expiringEvidence,
+    expired: expiredEvidence,
+  } = computeEvidenceStats(evidence)
 
   return (
     <div className="container mx-auto py-8 space-y-8">

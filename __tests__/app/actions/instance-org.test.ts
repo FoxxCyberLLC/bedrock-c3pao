@@ -19,8 +19,8 @@ async function getHandler() {
 
 // Simulate an admin session
 beforeEach(() => {
-  vi.mocked(requireAuth).mockResolvedValue({ apiToken: 'tok', email: 'admin@test.com', isLocalAdmin: true } as any)
-  vi.mocked(createInstanceUser).mockResolvedValue({ id: '1', name: 'Test User', email: 'u@test.com' } as any)
+  vi.mocked(requireAuth).mockResolvedValue({ apiToken: 'tok', email: 'admin@test.com', isLocalAdmin: true } as never)
+  vi.mocked(createInstanceUser).mockResolvedValue({ id: '1', name: 'Test User', email: 'u@test.com' } as never)
 })
 
 function makeFormData(fields: Record<string, string>): FormData {

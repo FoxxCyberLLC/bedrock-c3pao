@@ -464,7 +464,7 @@ function EngagementDetailFull({
     try {
       const result = await getEngagementTeam(engagement.id)
       if (result.success && result.data) {
-        setTeam(result.data as any)
+        setTeam(result.data)
       }
     } catch (error) {
       console.error('Failed to load team:', error)
@@ -1237,7 +1237,7 @@ function EngagementDetailFull({
           ) : (
             <EngagementTeamCard
               engagementId={engagement.id}
-              team={team as any}
+              team={team}
               isLeadAssessor={user.isLeadAssessor}
               onTeamUpdated={loadTeam}
             />

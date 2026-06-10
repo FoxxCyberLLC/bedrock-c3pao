@@ -73,8 +73,21 @@ export function AdminPanel({ userName }: { userName: string }) {
   }, [])
 
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    let cancelled = false
+    void (async () => {
+      const [orgResult, usersResult] = await Promise.all([
+        getInstanceOrg(),
+        getInstanceUsers(),
+      ])
+      if (cancelled) return
+      if (orgResult.success && orgResult.data) setOrg(orgResult.data)
+      if (usersResult.success && usersResult.data) setUsers(usersResult.data)
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function handleLogout() {
     await c3paoLogout()

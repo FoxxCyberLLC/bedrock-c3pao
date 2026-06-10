@@ -28,8 +28,8 @@ function upstreamResponse(body: string | Uint8Array<ArrayBufferLike>, contentTyp
 }
 
 beforeEach(() => {
-  vi.mocked(requireAuth).mockResolvedValue({ apiToken: 'tok', email: 'a@b.com' } as any)
-  vi.mocked(fetchEvidenceDownloadURL).mockResolvedValue({ downloadUrl: 'https://s3.example.com/file' } as any)
+  vi.mocked(requireAuth).mockResolvedValue({ apiToken: 'tok', email: 'a@b.com' } as never)
+  vi.mocked(fetchEvidenceDownloadURL).mockResolvedValue({ downloadUrl: 'https://s3.example.com/file' } as never)
   vi.stubGlobal('fetch', vi.fn())
 })
 

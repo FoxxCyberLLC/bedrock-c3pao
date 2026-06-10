@@ -12,8 +12,8 @@ async function getHandler() {
 }
 
 beforeEach(() => {
-  vi.mocked(requireAuth).mockResolvedValue({ apiToken: 'tok', email: 'a@b.com' } as any)
-  vi.mocked(fetchSTIGs).mockResolvedValue({ targets: [], statistics: {} } as any)
+  vi.mocked(requireAuth).mockResolvedValue({ apiToken: 'tok', email: 'a@b.com' } as never)
+  vi.mocked(fetchSTIGs).mockResolvedValue({ targets: [], statistics: {} } as never)
 })
 
 describe('getSTIGTargets (H14: auth masking)', () => {

@@ -57,10 +57,28 @@ export function AssessmentProgressTracker({ engagementId }: AssessmentProgressTr
     }
   }, [engagementId])
 
+  // Inline the initial fetch so no setState runs synchronously in the effect
+  // body (the await precedes every setState); manual refresh reuses loadAll.
   useEffect(() => {
-    setLoading(true)
-    loadAll().finally(() => setLoading(false))
-  }, [loadAll])
+    let cancelled = false
+    void (async () => {
+      const [overallResult, assessorResult, domainResult] = await Promise.all([
+        getAssessmentProgress(engagementId),
+        getProgressByAssessor(engagementId),
+        getProgressByDomain(engagementId),
+      ])
+      if (cancelled) return
+      if (overallResult.success && overallResult.data) setOverall(overallResult.data)
+      if (assessorResult.success && assessorResult.data) setByAssessor(assessorResult.data)
+      if (domainResult.success && domainResult.data) {
+        setByDomain(domainResult.data.sort((a, b) => a.familyCode.localeCompare(b.familyCode)))
+      }
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [engagementId])
 
   const handleRefresh = async () => {
     setRefreshing(true)

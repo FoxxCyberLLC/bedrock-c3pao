@@ -80,9 +80,14 @@ function TOCEntry({
   );
   const [expanded, setExpanded] = useState(hasActiveChild || false);
 
-  useEffect(() => {
+  // Auto-expand when a descendant becomes active. Using the "adjust state during
+  // render on prop change" pattern (track the previous value) instead of an
+  // effect avoids a wasted render pass and the set-state-in-effect smell.
+  const [prevHasActiveChild, setPrevHasActiveChild] = useState(hasActiveChild);
+  if (hasActiveChild !== prevHasActiveChild) {
+    setPrevHasActiveChild(hasActiveChild);
     if (hasActiveChild) setExpanded(true);
-  }, [hasActiveChild]);
+  }
 
   return (
     <div>

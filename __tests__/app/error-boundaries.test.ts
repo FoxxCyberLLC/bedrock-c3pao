@@ -9,13 +9,13 @@ describe('Error boundaries (H17)', () => {
   it('global-error exports a default function component', async () => {
     const mod = await import('@/app/global-error')
     expect(typeof mod.default).toBe('function')
-    expect(mod.default.name || (mod.default as any).displayName || 'GlobalError').toBeTruthy()
+    expect(mod.default.name || (mod.default as { displayName?: string }).displayName || 'GlobalError').toBeTruthy()
   })
 
   it('dashboard error exports a default function component', async () => {
     const mod = await import('@/app/(dashboard)/error')
     expect(typeof mod.default).toBe('function')
-    expect(mod.default.name || (mod.default as any).displayName || 'DashboardError').toBeTruthy()
+    expect(mod.default.name || (mod.default as { displayName?: string }).displayName || 'DashboardError').toBeTruthy()
   })
 
   it('global-error component accepts required props without throwing', async () => {
@@ -32,7 +32,7 @@ describe('Error boundaries (H17)', () => {
   it('root error boundary exports a default function component', async () => {
     const mod = await import('@/app/error')
     expect(typeof mod.default).toBe('function')
-    expect(mod.default.name || (mod.default as any).displayName || 'RootError').toBeTruthy()
+    expect(mod.default.name || (mod.default as { displayName?: string }).displayName || 'RootError').toBeTruthy()
   })
 
   it('dashboard loading exports a default function component', async () => {

@@ -8,7 +8,7 @@
  * and mentions create real notifications via the Go API fan-out.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { formatDistanceToNow } from 'date-fns'
 import { AtSign, Eye, Loader2, Lock, Send } from 'lucide-react'
 import { toast } from 'sonner'
@@ -47,30 +47,32 @@ export function EngagementComments({ engagementId }: EngagementCommentsProps) {
   const [isPending, startTransition] = useTransition()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const [commentsResult, teamResult] = await Promise.all([
-      getEngagementComments(engagementId),
-      getC3PAOTeam(),
-    ])
-    if (commentsResult.success && commentsResult.data) {
-      setComments(commentsResult.data)
-    }
-    if (teamResult.success && teamResult.data) {
-      setTeam(
-        teamResult.data.map((m) => ({
-          id: String(m.id ?? ''),
-          name: String(m.name ?? ''),
-          email: String(m.email ?? ''),
-        })),
-      )
-    }
-    setLoading(false)
-  }, [engagementId])
-
+  // Inline the initial fetch so no setState runs synchronously in the effect
+  // body (the await precedes every setState).
   useEffect(() => {
-    load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      const [commentsResult, teamResult] = await Promise.all([
+        getEngagementComments(engagementId),
+        getC3PAOTeam(),
+      ])
+      if (cancelled) return
+      if (commentsResult.success && commentsResult.data) setComments(commentsResult.data)
+      if (teamResult.success && teamResult.data) {
+        setTeam(
+          teamResult.data.map((m) => ({
+            id: String(m.id ?? ''),
+            name: String(m.name ?? ''),
+            email: String(m.email ?? ''),
+          })),
+        )
+      }
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [engagementId])
 
   // Extract the current @ query from the textarea (everything after the
   // most recent `@` up to the next whitespace).
