@@ -8,7 +8,7 @@
  * for the rationale (CAP v2.0 constraint).
  */
 
-import { requireAuth } from '@/lib/auth'
+import { requireAssessor } from '@/lib/auth'
 import {
   listInternalReviews,
   createInternalReview,
@@ -27,7 +27,7 @@ export async function listEntityReviews(
   entityId: string,
 ): Promise<ActionResult<InternalReview[]>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
     const data = await listInternalReviews(engagementId, entityType, entityId)
     return { success: true, data }
@@ -43,7 +43,7 @@ export async function addEntityReview(input: {
   comment: string | null
 }): Promise<ActionResult<InternalReview>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
     const trimmed = input.comment?.trim() || null
     const data = await createInternalReview({
@@ -62,7 +62,7 @@ export async function addEntityReview(input: {
 
 export async function removeEntityReview(id: string): Promise<ActionResult<null>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
     const ok = await deleteInternalReview(id, session.c3paoUser.id)
     if (!ok) return { success: false, error: 'Review not found or not owned by you' }
@@ -78,7 +78,7 @@ export async function summarizeEntityReviews(
   entityIds: string[],
 ): Promise<ActionResult<Record<string, ReviewSummary>>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
     const map = await summarizeReviews(engagementId, entityType, entityIds)
     const obj: Record<string, ReviewSummary> = {}

@@ -1,8 +1,23 @@
 import { describe, it, expect } from 'vitest'
-import { buildEMASSWorkbook } from '@/lib/emass-workbook'
+import { buildEMASSWorkbook, fmtDate } from '@/lib/emass-workbook'
 import type { EMASSWorkbookInput } from '@/lib/emass-workbook'
 import type { TeamMember } from '@/lib/api-client'
 import ExcelJS from 'exceljs'
+
+describe('fmtDate timezone handling (B-MEDIUM)', () => {
+  it('formats a date-only string as the same calendar day in any timezone', () => {
+    // Under a negative-offset TZ (run with TZ=America/New_York) the old
+    // new Date('2026-06-09') parsed UTC midnight and shifted to 08-Jun.
+    expect(fmtDate('2026-06-09')).toBe('09-Jun-2026')
+    expect(fmtDate('2026-01-01')).toBe('01-Jan-2026')
+  })
+
+  it('returns empty string for null/undefined/blank', () => {
+    expect(fmtDate(null)).toBe('')
+    expect(fmtDate(undefined)).toBe('')
+    expect(fmtDate('')).toBe('')
+  })
+})
 
 /** Build a minimal TeamMember for tests where only role + jobTitle matter. */
 function makeTeamMember(overrides: Partial<TeamMember>): TeamMember {
@@ -32,7 +47,7 @@ const mockInput: EMASSWorkbookInput = {
       sortOrder: 1,
       implementationNotes: 'Access control implemented.',
       assessmentNotes: 'Verified.',
-    } as any,
+    } as never,
     {
       requirementId: '03.01.02',
       familyCode: 'AC',
@@ -42,7 +57,7 @@ const mockInput: EMASSWorkbookInput = {
       sortOrder: 2,
       implementationNotes: null,
       assessmentNotes: null,
-    } as any,
+    } as never,
   ],
   objectives: [],
   exportData: {
@@ -53,9 +68,9 @@ const mockInput: EMASSWorkbookInput = {
     assessmentStartDate: '2026-01-01',
     assessmentEndDate: '2026-01-15',
     findings: [],
-  } as any,
+  } as never,
   team: [
-    { role: 'LEAD', jobTitle: 'CCA-12345', name: 'Test Assessor' } as any,
+    { role: 'LEAD', jobTitle: 'CCA-12345', name: 'Test Assessor' } as never,
   ],
   ssp: { name: 'Test SSP', version: '1.0', date: '2026-01-01' },
   wizardFields: {
@@ -119,7 +134,7 @@ describe('buildEMASSWorkbook', () => {
       const input: EMASSWorkbookInput = {
         ...mockInput,
         controls: [
-          { ...mockInput.controls[0], assessmentNotes: '=HYPERLINK("http://evil.com","click")' } as any,
+          { ...mockInput.controls[0], assessmentNotes: '=HYPERLINK("http://evil.com","click")' } as never,
         ],
       }
       const result = await buildEMASSWorkbook(input)
@@ -131,7 +146,7 @@ describe('buildEMASSWorkbook', () => {
       const input: EMASSWorkbookInput = {
         ...mockInput,
         controls: [
-          { ...mockInput.controls[0], implementationNotes: '+cmd|"/C calc"!A0', assessmentNotes: '-2+3+cmd|"/C calc"!A0' } as any,
+          { ...mockInput.controls[0], implementationNotes: '+cmd|"/C calc"!A0', assessmentNotes: '-2+3+cmd|"/C calc"!A0' } as never,
         ],
       }
       const result = await buildEMASSWorkbook(input)
@@ -143,7 +158,7 @@ describe('buildEMASSWorkbook', () => {
     it('sanitizes @formula in organization name', async () => {
       const input: EMASSWorkbookInput = {
         ...mockInput,
-        exportData: { ...mockInput.exportData, organization: '@SUM(1+1)' } as any,
+        exportData: { ...mockInput.exportData, organization: '@SUM(1+1)' } as never,
       }
       const result = await buildEMASSWorkbook(input)
       const values = await getCellValues(result, 'Assessment Results')
@@ -154,7 +169,7 @@ describe('buildEMASSWorkbook', () => {
       const input: EMASSWorkbookInput = {
         ...mockInput,
         controls: [
-          { ...mockInput.controls[0], assessmentNotes: 'Normal text, no formula here.' } as any,
+          { ...mockInput.controls[0], assessmentNotes: 'Normal text, no formula here.' } as never,
         ],
       }
       const result = await buildEMASSWorkbook(input)

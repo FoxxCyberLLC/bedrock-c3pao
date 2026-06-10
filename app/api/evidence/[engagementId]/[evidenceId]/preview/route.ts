@@ -5,6 +5,7 @@ import ExcelJS from 'exceljs'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
 const MAX_PREVIEW_ROWS = 1000
+const UPSTREAM_TIMEOUT_MS = 30_000 // abort a hung S3/Go-API fetch after 30s
 
 function cellToString(v: ExcelJS.CellValue): string | null {
   if (v === null || v === undefined) return null
@@ -41,19 +42,21 @@ export async function GET(
     const urlResponse = await fetchEvidenceDownloadURL(engagementId, evidenceId, session.apiToken)
     downloadUrl = urlResponse.downloadUrl
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to get download URL'
-    return NextResponse.json({ error: message }, { status: 502 })
+    // L1: log detail server-side; return a generic message to the client.
+    console.error('[evidence-preview] failed to resolve download URL', error)
+    return NextResponse.json({ error: 'Failed to retrieve evidence' }, { status: 502 })
   }
 
   let upstream: Response
   try {
-    upstream = await fetch(downloadUrl)
+    upstream = await fetch(downloadUrl, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
     if (!upstream.ok) {
-      return NextResponse.json({ error: `Upstream returned ${upstream.status}` }, { status: 502 })
+      console.error('[evidence-preview] upstream returned', upstream.status)
+      return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch file'
-    return NextResponse.json({ error: message }, { status: 502 })
+    console.error('[evidence-preview] upstream fetch failed', error)
+    return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
   }
 
   const contentLength = upstream.headers.get('content-length')
@@ -68,8 +71,8 @@ export async function GET(
   try {
     buffer = await upstream.arrayBuffer()
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to read file'
-    return NextResponse.json({ error: message }, { status: 502 })
+    console.error('[evidence-preview] failed to read upstream body', error)
+    return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
   }
 
   // Size guard for when Content-Length header is absent (H4)

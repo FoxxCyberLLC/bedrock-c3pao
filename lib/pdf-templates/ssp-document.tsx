@@ -31,7 +31,7 @@ export function parsePoamSummary(json: string | null | undefined): {
 }
 
 /** Parse control statements JSON, returning {} on any parse error instead of crashing. */
-export function parseControlStatements(json: string | null | undefined): Record<string, any> {
+export function parseControlStatements(json: string | null | undefined): Record<string, unknown> {
   if (!json) return {}
   try {
     return JSON.parse(json)
@@ -646,26 +646,28 @@ const POAMSummaryPage: React.FC<{ ssp: SSPDocumentProps['ssp'] }> = ({ ssp }) =>
 };
 
 // Control Implementation Page (for each control family)
+interface ControlStatement {
+  controlId: string;
+  controlTitle: string;
+  basicRequirement: string;
+  implementationStatus: string;
+  implementationDescription: string;
+  implementationType?: string | null;
+  processOwner?: string | null;
+  processOperator?: string | null;
+  occurrence?: string | null;
+  technologyInUse?: string | null;
+  documentationLocation?: string | null;
+  supportingPolicy?: string | null;
+  supportingStandard?: string | null;
+  supportingProcedure?: string | null;
+}
+
 const ControlImplementationPage: React.FC<{
   ssp: SSPDocumentProps['ssp'];
   familyCode: string;
   familyName: string;
-  controls: Array<{
-    controlId: string;
-    controlTitle: string;
-    basicRequirement: string;
-    implementationStatus: string;
-    implementationDescription: string;
-    implementationType?: string | null;
-    processOwner?: string | null;
-    processOperator?: string | null;
-    occurrence?: string | null;
-    technologyInUse?: string | null;
-    documentationLocation?: string | null;
-    supportingPolicy?: string | null;
-    supportingStandard?: string | null;
-    supportingProcedure?: string | null;
-  }>;
+  controls: ControlStatement[];
 }> = ({ ssp, familyCode, familyName, controls }) => (
   <Page size="A4" style={styles.page} wrap>
     <DocumentHeader systemName={ssp.systemName || ssp.atoPackage.name} version={ssp.version} />
@@ -764,7 +766,10 @@ const SecurityRequirementsHeader: React.FC<{ ssp: SSPDocumentProps['ssp'] }> = (
 // Main SSP Document
 export const SSPDocument: React.FC<SSPDocumentProps> = ({ ssp }) => {
   // Parse control statements if available
-  const controlStatements = parseControlStatements(ssp.controlStatements);
+  const controlStatements = parseControlStatements(ssp.controlStatements) as Record<
+    string,
+    ControlStatement
+  >;
 
   // Group controls by family
   const controlFamilies: Record<string, { name: string; controls: typeof controlStatements[string][] }> = {};

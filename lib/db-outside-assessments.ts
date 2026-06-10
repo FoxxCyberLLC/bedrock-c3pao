@@ -14,7 +14,8 @@
  * to mirror the full NIST 800-171A objective set.
  */
 
-import { query } from './db'
+import type { QueryResult } from 'pg'
+import { query, getClient } from './db'
 import { cmmcRequirementValues } from './cmmc/requirement-values'
 import { CMMC_FAMILIES } from './cmmc/families'
 import type {
@@ -42,11 +43,13 @@ function nistToCmmcDisplayId(nistId: string): string {
 function familyCodeFromNistId(nistId: string): string {
   // NIST IDs follow "03.<family-num>.<seq>" where family-num maps to:
   //   01: AC, 02: AT, 03: AU, 04: CM, 05: IA, 06: IR, 07: MA,
-  //   08: MP, 09: PE, 10: PS, 11: RA, 12: CA, 13: SC, 14: SI
+  //   08: MP, 09: PS, 10: PE, 11: RA, 12: CA, 13: SC, 14: SI
+  // (03.09 = Personnel Security (PS), 03.10 = Physical Protection (PE) —
+  //  matches nistFamilyToCmmc in lib/cmmc/requirement-values.ts.)
   const familyNum = parseInt(nistId.split('.')[1] ?? '0', 10)
   const ORDER: ReadonlyArray<string> = [
     'AC', 'AT', 'AU', 'CM', 'IA', 'IR', 'MA',
-    'MP', 'PE', 'PS', 'RA', 'CA', 'SC', 'SI',
+    'MP', 'PS', 'PE', 'RA', 'CA', 'SC', 'SI',
   ]
   return ORDER[familyNum - 1] ?? 'AC'
 }
@@ -274,12 +277,20 @@ export interface ObjectiveUpdateResult {
  * Caller passes `expectedVersion = 0` for first writes; subsequent writes pass
  * the version returned by the prior call.
  */
+/**
+ * Runs a parameterized statement. Defaults to the pooled `query`; callers
+ * inside a transaction pass the dedicated client's query so the objective
+ * write and control recompute commit (or roll back) atomically.
+ */
+type Runner = (text: string, params?: unknown[]) => Promise<QueryResult>
+
 export async function outsideUpdateObjectiveStatus(
   engagementId: string,
   objectiveId: string,
   input: ObjectiveStatusUpdateInput,
+  run: Runner = query,
 ): Promise<ObjectiveUpdateResult> {
-  const updateResult = await query(
+  const updateResult = await run(
     `UPDATE outside_objective_assessments
         SET status = $4,
             assessment_notes = $5,
@@ -323,7 +334,7 @@ export async function outsideUpdateObjectiveStatus(
   // row exists with a different version (conflict). INSERT with ON CONFLICT
   // DO NOTHING distinguishes the two: insert succeeds → 'inserted'; conflict
   // means a row exists with a different version.
-  const insertResult = await query(
+  const insertResult = await run(
     `INSERT INTO outside_objective_assessments (
        engagement_id, requirement_id, objective_id, status,
        assessment_notes, evidence_description, artifacts_reviewed, interviewees,
@@ -362,13 +373,23 @@ export async function outsideUpdateObjectiveStatus(
  * objectives. CMMC convention: control is MET only when all assessed
  * objectives are MET; NOT_MET if any objective is NOT_MET; NOT_ASSESSED if
  * none are assessed; NOT_APPLICABLE if all are NOT_APPLICABLE.
+ *
+ * IN_POAM preservation: outside engagements have no POA&M table, so IN_POAM is
+ * a deliberate, manual control-level status the lead assessor sets. If the
+ * stored control is already IN_POAM, the upsert preserves it rather than
+ * clobbering it with the derived NOT_MET — the CASE clause keeps IN_POAM and
+ * RETURNING reports the status actually persisted.
+ *
+ * Returns the persisted control status (which may be the preserved IN_POAM
+ * rather than the freshly derived value).
  */
 export async function recomputeControlStatus(
   engagementId: string,
   requirementId: string,
   updatedBy: string,
+  run: Runner = query,
 ): Promise<string> {
-  const objResult = await query(
+  const objResult = await run(
     `SELECT status FROM outside_objective_assessments
       WHERE engagement_id = $1 AND requirement_id = $2`,
     [engagementId, requirementId],
@@ -388,18 +409,81 @@ export async function recomputeControlStatus(
     derived = 'MET'
   }
 
-  await query(
+  const upsertResult = await run(
     `INSERT INTO outside_control_assessments (engagement_id, requirement_id, status, updated_by)
      VALUES ($1, $2, $3, $4)
      ON CONFLICT (engagement_id, requirement_id)
-     DO UPDATE SET status = EXCLUDED.status,
+     DO UPDATE SET status = CASE
+                              WHEN outside_control_assessments.status = 'IN_POAM' THEN 'IN_POAM'
+                              ELSE EXCLUDED.status
+                            END,
                    updated_by = EXCLUDED.updated_by,
                    updated_at = NOW(),
-                   version = outside_control_assessments.version + 1`,
+                   version = outside_control_assessments.version + 1
+     RETURNING status`,
     [engagementId, requirementId, derived, updatedBy],
   )
 
-  return derived
+  const persisted = (upsertResult.rows[0] as { status: string } | undefined)?.status
+  return persisted ?? derived
+}
+
+/** An objective update plus the recomputed parent-control status. */
+export interface ObjectiveAndControlResult extends ObjectiveUpdateResult {
+  controlStatus?: string
+}
+
+/**
+ * Atomically update an objective's status and recompute its parent control,
+ * in a single transaction. Without this, a crash between the two writes (or two
+ * concurrent edits) could leave a MET control over a NOT_MET objective.
+ *
+ * The control row is locked `FOR UPDATE` first, so concurrent edits to
+ * different objectives of the same control serialize (correctness over
+ * throughput). An optimistic-lock conflict on the objective is a normal no-op
+ * outcome — the transaction still COMMITs and returns `{status:'conflict'}`;
+ * only a genuine error rolls back.
+ */
+export async function outsideUpdateObjectiveAndRecompute(
+  engagementId: string,
+  objectiveId: string,
+  input: ObjectiveStatusUpdateInput,
+  updatedBy: string,
+): Promise<ObjectiveAndControlResult> {
+  const client = await getClient()
+  const run: Runner = (text, params) => client.query(text, params)
+  try {
+    await client.query('BEGIN')
+
+    // Lock the control row (if it exists) to serialize concurrent objective edits.
+    await run(
+      `SELECT id FROM outside_control_assessments
+        WHERE engagement_id = $1 AND requirement_id = $2 FOR UPDATE`,
+      [engagementId, input.requirementId],
+    )
+
+    const result = await outsideUpdateObjectiveStatus(engagementId, objectiveId, input, run)
+
+    if (result.status === 'conflict') {
+      // No-op outcome — commit the (empty) transaction; do NOT recompute.
+      await client.query('COMMIT')
+      return result
+    }
+
+    const controlStatus = await recomputeControlStatus(
+      engagementId,
+      input.requirementId,
+      updatedBy,
+      run,
+    )
+    await client.query('COMMIT')
+    return { ...result, controlStatus }
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
 }
 
 // ─── Evidence helpers ──────────────────────────────────────────────────────
@@ -539,36 +623,49 @@ export async function getOutsideEvidenceContent(
 // ─── Evidence ↔ Objective links ────────────────────────────────────────────
 
 export async function linkEvidenceToObjective(
+  engagementId: string,
   evidenceId: string,
   objectiveId: string,
   linkedBy: string,
 ): Promise<void> {
+  // L2: only link evidence that belongs to the asserted engagement, so a lead
+  // of one engagement can't attach another engagement's evidence by id.
   await query(
     `INSERT INTO outside_evidence_objective_links (evidence_id, objective_id, linked_by)
-     VALUES ($1, $2, $3)
+     SELECT $1, $2, $3
+      WHERE EXISTS (SELECT 1 FROM outside_evidence WHERE id = $1 AND engagement_id = $4)
      ON CONFLICT (evidence_id, objective_id) DO NOTHING`,
-    [evidenceId, objectiveId, linkedBy],
+    [evidenceId, objectiveId, linkedBy, engagementId],
   )
 }
 
 export async function unlinkEvidenceFromObjective(
+  engagementId: string,
   evidenceId: string,
   objectiveId: string,
 ): Promise<boolean> {
+  // L2: scope the delete to the engagement that owns the evidence.
   const result = await query(
-    `DELETE FROM outside_evidence_objective_links
-      WHERE evidence_id = $1 AND objective_id = $2`,
-    [evidenceId, objectiveId],
+    `DELETE FROM outside_evidence_objective_links l
+      USING outside_evidence e
+      WHERE l.evidence_id = $1 AND l.objective_id = $2
+        AND e.id = l.evidence_id AND e.engagement_id = $3`,
+    [evidenceId, objectiveId, engagementId],
   )
   return (result.rowCount ?? 0) > 0
 }
 
 export async function listObjectivesForEvidence(
+  engagementId: string,
   evidenceId: string,
 ): Promise<string[]> {
+  // L3: scope the read to the engagement that owns the evidence.
   const result = await query(
-    `SELECT objective_id FROM outside_evidence_objective_links WHERE evidence_id = $1`,
-    [evidenceId],
+    `SELECT l.objective_id
+       FROM outside_evidence_objective_links l
+       JOIN outside_evidence e ON e.id = l.evidence_id
+      WHERE l.evidence_id = $1 AND e.engagement_id = $2`,
+    [evidenceId, engagementId],
   )
   return (result.rows as Array<{ objective_id: string }>).map((r) => r.objective_id)
 }

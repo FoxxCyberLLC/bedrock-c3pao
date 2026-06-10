@@ -15,7 +15,7 @@ Copyright (c) 2025 Foxx Cyber LLC. All rights reserved.
 - eMASS workbook export (Excel)
 - Assessor team management and domain assignment
 - Workload dashboard
-- Offline-capable with local SQLite configuration
+- Offline-capable with a self-contained local PostgreSQL database
 - Self-signed TLS with HTTPS proxy
 
 ## Quick Start

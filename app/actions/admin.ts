@@ -105,10 +105,10 @@ export async function editUser(params: {
     await requireAdmin()
 
     if (params.role && params.role !== 'admin') {
-      const admins = await countAdmins()
-      const currentUser = (await requireAuth())!
-      // Prevent demoting the last admin or yourself
-      if (admins <= 1 && params.id === currentUser.c3paoUser.id) {
+      // L5: block demoting the SOLE admin regardless of whether it is the
+      // current user — only matters when the target is currently an admin.
+      const target = await getLocalUserById(params.id)
+      if (target?.role === 'admin' && (await countAdmins()) <= 1) {
         return { success: false, error: 'Cannot demote the last admin' }
       }
     }

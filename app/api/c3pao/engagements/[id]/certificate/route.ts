@@ -10,6 +10,7 @@
 import { createElement, type ReactElement } from 'react'
 import { NextResponse, type NextRequest } from 'next/server'
 import { renderToBuffer, type DocumentProps } from '@react-pdf/renderer'
+import { requireAuth } from '@/lib/auth'
 import { getCertificateDataForEngagement } from '@/app/actions/c3pao-certificate'
 import {
   CMMCCertificate,
@@ -24,6 +25,13 @@ export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  // Explicit auth at the route boundary (M6): return 401 without entering the
+  // data path. The action below re-checks as a second layer.
+  const session = await requireAuth()
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const { id } = await ctx.params
   if (!id) {
     return NextResponse.json({ error: 'Missing engagement id' }, { status: 400 })

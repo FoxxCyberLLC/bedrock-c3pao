@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { AssessmentNote } from '@/lib/readiness-types'
 
 vi.mock('@/lib/auth', () => ({
-  requireAuth: vi.fn(),
+  requireAssessor: vi.fn(),
 }))
 
 vi.mock('@/lib/db-notes', () => ({
@@ -22,7 +22,7 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-const { requireAuth } = await import('@/lib/auth')
+const { requireAssessor } = await import('@/lib/auth')
 const dbNotes = await import('@/lib/db-notes')
 const { appendAudit } = await import('@/lib/db-audit')
 
@@ -64,12 +64,12 @@ function makeNote(overrides: Partial<AssessmentNote> = {}): AssessmentNote {
 
 beforeEach(() => {
   vi.resetAllMocks()
-  vi.mocked(requireAuth).mockResolvedValue(sessionFixture() as never)
+  vi.mocked(requireAssessor).mockResolvedValue(sessionFixture() as never)
 })
 
 describe('listNotes', () => {
   it('returns unauthorized when no session', async () => {
-    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    vi.mocked(requireAssessor).mockResolvedValueOnce(null)
     const { listNotes } = await getActions()
     const result = await listNotes('eng-1')
     expect(result.success).toBe(false)
@@ -209,7 +209,7 @@ describe('deleteNote', () => {
 
 describe('listNoteRevisions', () => {
   it('returns unauthorized when no session', async () => {
-    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    vi.mocked(requireAssessor).mockResolvedValueOnce(null)
     const { listNoteRevisions } = await getActions()
     const result = await listNoteRevisions('note-1')
     expect(result.success).toBe(false)

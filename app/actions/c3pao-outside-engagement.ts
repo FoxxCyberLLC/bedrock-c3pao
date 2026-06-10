@@ -23,8 +23,7 @@ import {
   type OutsideEngagementInput,
 } from '@/lib/db-outside-engagement'
 import {
-  outsideUpdateObjectiveStatus as dbUpdateObjective,
-  recomputeControlStatus,
+  outsideUpdateObjectiveAndRecompute as dbUpdateObjectiveAndRecompute,
   uploadOutsideEvidence as dbUploadEvidence,
   listOutsideEvidence as dbListEvidence,
   deleteOutsideEvidence as dbDeleteEvidence,
@@ -232,18 +231,18 @@ export async function outsideUpdateObjectiveStatus(
 
   try {
     const input: ObjectiveStatusUpdateInput = parsed.data
-    const result = await dbUpdateObjective(engagementId, objectiveId, input)
+    const result = await dbUpdateObjectiveAndRecompute(
+      engagementId,
+      objectiveId,
+      input,
+      auth.session.c3paoUser.id,
+    )
     if (result.status === 'conflict') {
       return {
         success: false,
         error: 'Conflict: this objective was modified by someone else. Reload to see latest.',
       }
     }
-    await recomputeControlStatus(
-      engagementId,
-      input.requirementId,
-      auth.session.c3paoUser.id,
-    )
     revalidatePath(`/engagements/${engagementId}`)
     return { success: true, data: result }
   } catch (err) {
@@ -338,7 +337,7 @@ export async function linkOutsideEvidenceToObjective(
   }
 
   try {
-    await dbLinkEvidence(evidenceId, objectiveId, auth.session.c3paoUser.id)
+    await dbLinkEvidence(engagementId, evidenceId, objectiveId, auth.session.c3paoUser.id)
     revalidatePath(`/engagements/${engagementId}`)
     return { success: true, data: true }
   } catch (err) {
@@ -358,7 +357,7 @@ export async function unlinkOutsideEvidenceFromObjective(
   }
 
   try {
-    await dbUnlinkEvidence(evidenceId, objectiveId)
+    await dbUnlinkEvidence(engagementId, evidenceId, objectiveId)
     revalidatePath(`/engagements/${engagementId}`)
     return { success: true, data: true }
   } catch (err) {
@@ -374,7 +373,7 @@ export async function listOutsideObjectivesForEvidenceAction(
   if (!session) return { success: false, error: 'Unauthorized' }
 
   try {
-    const list = await dbListObjectivesForEvidence(evidenceId)
+    const list = await dbListObjectivesForEvidence(engagementId, evidenceId)
     return { success: true, data: list }
   } catch (err) {
     return errorEnvelope(err, 'Failed to list objectives for evidence')

@@ -53,7 +53,7 @@ import { AssetsTab } from './tabs/assets-tab'
 import { PackageStatsSection } from './tabs/package-stats-section'
 import { SnapshotTimeline } from './snapshot-timeline'
 import type { AssessmentSnapshotView } from '@/lib/api-client'
-import { determineCMMCStatus, calculateExpirationDate, CMMCStatusConfig, normalizeLegacyStatus } from '@/lib/cmmc/status-determination'
+import { determineCMMCStatus, calculateExpirationDate, CMMCStatusConfig, normalizeLegacyStatus, mapRequirementStatusToObjective } from '@/lib/cmmc/status-determination'
 import { toast } from 'sonner'
 import { AssessmentControlsTable } from './assessment-controls-table'
 import { POAMViewer } from './poam-viewer'
@@ -220,15 +220,6 @@ interface ExternalServiceProvider {
 }
 
 /** Maps OSC package requirement status to CMMC objective status for auto-detection. */
-function mapRequirementStatus(status: string): 'MET' | 'NOT_MET' | 'NOT_APPLICABLE' | 'NOT_ASSESSED' {
-  switch (status) {
-    case 'COMPLIANT': return 'MET'
-    case 'NON_COMPLIANT': return 'NOT_MET'
-    case 'NOT_APPLICABLE': return 'NOT_APPLICABLE'
-    default: return 'NOT_ASSESSED'
-  }
-}
-
 /** Convert an ISO date or Date object to an ISO string, defensively. */
 function toIsoString(value: Date | string | null | undefined): string | null {
   if (!value) return null
@@ -473,7 +464,7 @@ function EngagementDetailFull({
     try {
       const result = await getEngagementTeam(engagement.id)
       if (result.success && result.data) {
-        setTeam(result.data as any)
+        setTeam(result.data)
       }
     } catch (error) {
       console.error('Failed to load team:', error)
@@ -665,7 +656,7 @@ function EngagementDetailFull({
     if (!pkg) return null
     const objectives = pkg.requirementStatuses.map(rs => ({
       requirementId: rs.requirement.requirementId,
-      status: mapRequirementStatus(rs.status),
+      status: mapRequirementStatusToObjective(rs.status),
     }))
     const poamInputs = pkg.poams.map(p => ({
       id: p.id,
@@ -1246,7 +1237,7 @@ function EngagementDetailFull({
           ) : (
             <EngagementTeamCard
               engagementId={engagement.id}
-              team={team as any}
+              team={team}
               isLeadAssessor={user.isLeadAssessor}
               onTeamUpdated={loadTeam}
             />

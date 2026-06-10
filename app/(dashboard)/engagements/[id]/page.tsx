@@ -99,7 +99,7 @@ export default async function EngagementDetailPage({
 
   // For pre-access engagements (introduction phase), show limited view
   if (result.accessLevel === 'NONE') {
-    return <LimitedEngagementDetail engagement={result.data as any} user={session.c3paoUser} />
+    return <LimitedEngagementDetail engagement={result.data} user={session.c3paoUser} />
   }
 
   // Fetch supplemental data for the Assessment + Engagement tab groups in
@@ -145,7 +145,7 @@ export default async function EngagementDetailPage({
   return (
     <EngagementDetail
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      engagement={result.data as any}
+      engagement={result.data}
       user={session.c3paoUser}
       initialChecklist={initialChecklist}
       initialAuditEntries={initialAuditEntries}

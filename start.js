@@ -14,7 +14,66 @@ const path = require('path')
 const fs = require('fs')
 const https = require('https')
 const http = require('http')
+const crypto = require('crypto')
 const { execSync } = require('child_process')
+
+const ENC_PREFIX = 'enc:v1:'
+
+/**
+ * Inline AES-256-GCM decrypt for the shared `enc:v1:<iv>:<tag>:<ct>` config
+ * format. start.js runs as `node start.js` from the Next.js standalone build
+ * and CANNOT import the TypeScript `lib/crypto.ts`, so this must stay
+ * byte-compatible with `lib/crypto.encryptValue`. Read-through for legacy
+ * plaintext (no prefix). Throws on a missing/short key or a failed GCM tag —
+ * a broken AUTH_SECRET must fail loudly, not boot with auth silently broken.
+ */
+function decryptConfigValue(blob) {
+  if (typeof blob !== 'string' || !blob.startsWith(ENC_PREFIX)) return blob
+  const raw = process.env.CONFIG_ENCRYPTION_KEY
+  if (!raw) {
+    throw new Error('CONFIG_ENCRYPTION_KEY is not set — cannot decrypt config values')
+  }
+  const key = /^[0-9a-fA-F]{64}$/.test(raw)
+    ? Buffer.from(raw, 'hex')
+    : Buffer.from(raw, 'base64')
+  if (key.length !== 32) {
+    throw new Error('CONFIG_ENCRYPTION_KEY must decode to 32 bytes')
+  }
+  const parts = blob.slice(ENC_PREFIX.length).split(':')
+  if (parts.length !== 3) {
+    throw new Error('Malformed enc:v1 ciphertext — expected iv:tag:ct')
+  }
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    key,
+    Buffer.from(parts[0], 'base64')
+  )
+  decipher.setAuthTag(Buffer.from(parts[1], 'base64'))
+  return Buffer.concat([
+    decipher.update(Buffer.from(parts[2], 'base64')),
+    decipher.final(),
+  ]).toString('utf8')
+}
+
+/**
+ * Build the pg SSL config from the connection URL and an optional CA cert.
+ * Mirror of lib/db.ts buildSslConfig (CommonJS — keep both in sync):
+ * no sslmode → undefined (internal DB); sslmode + CA → verified TLS;
+ * sslmode without a CA → throw (fail closed, never rejectUnauthorized:false).
+ */
+function buildSslConfig(databaseUrl, caCert) {
+  if (!databaseUrl || !databaseUrl.includes('sslmode=')) {
+    return undefined
+  }
+  if (!caCert || caCert.trim() === '') {
+    throw new Error(
+      'DATABASE_URL requests SSL (sslmode=) but DATABASE_CA_CERT is not set. ' +
+        'Provide the server CA certificate (PEM) so the connection can be verified, ' +
+        'or remove sslmode from DATABASE_URL for an unencrypted internal connection.'
+    )
+  }
+  return { ca: caCert, rejectUnauthorized: true }
+}
 
 const CERT_DIR = path.join(__dirname, 'data', 'certs')
 const TLS_CERT = path.join(CERT_DIR, 'cert.pem')
@@ -28,25 +87,29 @@ const EXTERNAL_PORT = parseInt(process.env.PORT || '3001', 10)
  * Users can mount their own cert.pem / key.pem into /app/data/certs/ to
  * use a real certificate instead.
  */
-function ensureCerts() {
-  if (fs.existsSync(TLS_CERT) && fs.existsSync(TLS_KEY)) {
+function ensureCerts(fsImpl = fs, execImpl = execSync) {
+  // Create the cert dir restricted (0700). fsImpl/execImpl are injectable for tests.
+  fsImpl.mkdirSync(CERT_DIR, { recursive: true, mode: 0o700 })
+
+  if (fsImpl.existsSync(TLS_CERT) && fsImpl.existsSync(TLS_KEY)) {
     console.log('[start] Using existing TLS certificates')
-    return
+  } else {
+    console.log('[start] Generating self-signed TLS certificate...')
+    // execSync with hardcoded arguments only — no user input, safe from injection
+    execImpl(
+      `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes ` +
+      `-keyout "${TLS_KEY}" -out "${TLS_CERT}" ` +
+      `-days 825 -subj "/CN=bedrock-c3pao/O=Bedrock" ` +
+      `-addext "subjectAltName=DNS:localhost,DNS:bedrock-c3pao,IP:127.0.0.1"`,
+      { stdio: 'pipe' }
+    )
+    console.log('[start] Self-signed TLS certificate generated (ECDSA P-384, valid ~2.25 years)')
   }
 
-  fs.mkdirSync(CERT_DIR, { recursive: true })
-
-  console.log('[start] Generating self-signed TLS certificate...')
-  // execSync with hardcoded arguments only — no user input, safe from injection
-  execSync(
-    `openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-384 -nodes ` +
-    `-keyout "${TLS_KEY}" -out "${TLS_CERT}" ` +
-    `-days 825 -subj "/CN=bedrock-c3pao/O=Bedrock" ` +
-    `-addext "subjectAltName=DNS:localhost,DNS:bedrock-c3pao,IP:127.0.0.1"`,
-    { stdio: 'pipe' }
-  )
-  fs.chmodSync(TLS_KEY, 0o600)
-  console.log('[start] Self-signed TLS certificate generated (ECDSA P-384, valid ~2.25 years)')
+  // Restrict perms UNCONDITIONALLY — also for pre-existing/mounted keys, whose
+  // perms we don't control. mkdir mode is subject to umask; chmod is not. (M5)
+  fsImpl.chmodSync(CERT_DIR, 0o700)
+  fsImpl.chmodSync(TLS_KEY, 0o600)
 }
 
 /**
@@ -138,11 +201,10 @@ async function loadConfig() {
     connectionString: connStr,
     max: 1,
     connectionTimeoutMillis: 15000,
-    ssl: databaseUrl.includes('sslmode=')
-      ? { rejectUnauthorized: false }
-      : undefined,
+    ssl: buildSslConfig(databaseUrl, process.env.DATABASE_CA_CERT),
   })
 
+  let rows
   try {
     // Ensure tables exist
     await pool.query(`
@@ -160,22 +222,28 @@ async function loadConfig() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `)
-
-    // Inject all config into process.env
-    const { rows } = await pool.query('SELECT key, value FROM app_config')
-    for (const row of rows) {
-      process.env[row.key] = row.value
-    }
-
-    if (rows.length > 0) {
-      console.log(`[start] Loaded ${rows.length} config values from PostgreSQL`)
-    } else {
-      console.log('[start] No config found — setup wizard will be shown')
-    }
+    rows = (await pool.query('SELECT key, value FROM app_config')).rows
   } catch (e) {
+    // DB unreachable / DDL error → fall through to the setup wizard. This is a
+    // recoverable state, unlike a decrypt failure below.
     console.error('[start] Failed to load config from PostgreSQL:', e.message)
+    return
   } finally {
     await pool.end()
+  }
+
+  // Decrypt sensitive values and inject all config into process.env. A decrypt
+  // failure here is FATAL (misconfigured CONFIG_ENCRYPTION_KEY / tampered row):
+  // let it propagate so bootstrap surfaces it rather than booting with a broken
+  // AUTH_SECRET that breaks every login.
+  for (const row of rows) {
+    process.env[row.key] = decryptConfigValue(row.value)
+  }
+
+  if (rows.length > 0) {
+    console.log(`[start] Loaded ${rows.length} config values from PostgreSQL`)
+  } else {
+    console.log('[start] No config found — setup wizard will be shown')
   }
 }
 
@@ -197,4 +265,20 @@ async function bootstrap() {
   startHttpsProxy()
 }
 
-bootstrap()
+/**
+ * Fatal bootstrap failure handler. A failed bootstrap (bad CONFIG_ENCRYPTION_KEY,
+ * missing DATABASE_CA_CERT, etc.) must crash loudly with a non-zero exit so the
+ * container restarts/alerts rather than silently serving in a broken state.
+ */
+function handleBootstrapError(err) {
+  console.error('[start] Fatal bootstrap error:', err instanceof Error ? err.stack || err.message : err)
+  process.exit(1)
+}
+
+// Only auto-start when executed directly (node start.js). When required by a
+// test, skip bootstrap and expose the testable pieces instead.
+if (require.main === module) {
+  bootstrap().catch(handleBootstrapError)
+}
+
+module.exports = { decryptConfigValue, buildSslConfig, handleBootstrapError, ensureCerts }

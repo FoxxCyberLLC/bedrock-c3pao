@@ -40,9 +40,20 @@ export function CheckinCard({ engagementId, assessmentModeActive }: CheckinCardP
     setLoading(false)
   }, [engagementId])
 
+  // Inline the initial fetch so no setState runs synchronously in the effect
+  // body (the await precedes every setState); reloads reuse loadCheckins.
   useEffect(() => {
-    loadCheckins()
-  }, [loadCheckins])
+    let cancelled = false
+    void (async () => {
+      const result = await getAssessmentCheckins(engagementId)
+      if (cancelled) return
+      if (result.success && result.data) setCheckins(result.data)
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [engagementId])
 
   const handleSubmit = async () => {
     if (!title.trim()) return

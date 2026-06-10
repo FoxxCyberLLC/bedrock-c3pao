@@ -109,11 +109,3 @@ export interface POAMWithMilestones {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any
 }
-
-// Stub for Prisma namespace used in some type utilities
-export namespace Prisma {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  export type POAMGetPayload<T = any> = any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  export type POAMMilestoneGetPayload<T = any> = any
-}

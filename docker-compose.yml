@@ -3,7 +3,7 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: c3pao
-      POSTGRES_PASSWORD: ${C3PAO_DB_PASSWORD:-c3pao}
+      POSTGRES_PASSWORD: ${C3PAO_DB_PASSWORD:?C3PAO_DB_PASSWORD is required — see deploy/.env.example}
       POSTGRES_DB: c3pao
     volumes:
       - c3pao_pgdata:/var/lib/postgresql/data
@@ -22,10 +22,16 @@ services:
         condition: service_healthy
     environment:
       # Local config + assessment data live in the bundled Postgres above.
-      # Everything else (AUTH_SECRET, BEDROCK_API_URL, INSTANCE_API_KEY, C3PAO
-      # identity) is created by the first-run setup wizard and persisted to the
-      # app_config table — no other env vars are required.
-      DATABASE_URL: postgres://c3pao:${C3PAO_DB_PASSWORD:-c3pao}@db:5432/c3pao
+      # AUTH_SECRET, BEDROCK_API_URL, INSTANCE_API_KEY, and C3PAO identity are
+      # created by the first-run setup wizard and persisted to the app_config
+      # table. The wizard encrypts the sensitive values (AUTH_SECRET,
+      # INSTANCE_API_KEY) at rest, so CONFIG_ENCRYPTION_KEY MUST be set before
+      # first run — without it the setup wizard cannot store config.
+      DATABASE_URL: postgres://c3pao:${C3PAO_DB_PASSWORD:?C3PAO_DB_PASSWORD is required — see deploy/.env.example}@db:5432/c3pao
+      CONFIG_ENCRYPTION_KEY: ${CONFIG_ENCRYPTION_KEY:?set CONFIG_ENCRYPTION_KEY in .env — see deploy/.env.example}
+      # Only needed when DATABASE_URL points at an external Postgres with
+      # sslmode= (the bundled db above is plaintext on the internal network).
+      DATABASE_CA_CERT: ${DATABASE_CA_CERT:-}
     ports:
       - "3001:3001"
     volumes:

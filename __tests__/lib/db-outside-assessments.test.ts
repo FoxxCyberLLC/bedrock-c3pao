@@ -1,16 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockQuery = vi.fn()
+const mockGetClient = vi.fn()
 
 vi.mock('@/lib/db', () => ({
   query: mockQuery,
-  getClient: vi.fn(),
+  getClient: mockGetClient,
 }))
 
 const {
   mergeOutsideControlsWithCatalog,
   mergeOutsideObjectivesWithCatalog,
   outsideUpdateObjectiveStatus,
+  outsideUpdateObjectiveAndRecompute,
   recomputeControlStatus,
   uploadOutsideEvidence,
   listOutsideEvidence,
@@ -67,6 +69,21 @@ describe('mergeOutsideControlsWithCatalog', () => {
     expect(sample.familyCode).toMatch(/^[A-Z]{2}$/)
     expect(sample.familyName).toBeTruthy()
     expect(typeof sample.sortOrder).toBe('number')
+  })
+
+  it('maps NIST families to the correct CMMC family code: 03.09=PS, 03.10=PE (not swapped)', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+    const result = await mergeOutsideControlsWithCatalog(ENG)
+    const byReq = (id: string) => result.find((c) => c.requirementId === id)
+
+    // NIST 800-171 R3: 03.09 = Personnel Security (PS), 03.10 = Physical Protection (PE).
+    expect(byReq('PS.L2-3.9.1')?.familyCode).toBe('PS')
+    expect(byReq('PS.L2-3.9.2')?.familyCode).toBe('PS')
+    expect(byReq('PE.L2-3.10.1')?.familyCode).toBe('PE')
+    expect(byReq('PE.L2-3.10.2')?.familyCode).toBe('PE')
+    // The historical swap must NOT be present.
+    expect(byReq('PE.L2-3.9.1')).toBeUndefined()
+    expect(byReq('PS.L2-3.10.1')).toBeUndefined()
   })
 })
 
@@ -175,7 +192,7 @@ describe('recomputeControlStatus', () => {
   it('returns NOT_ASSESSED when there are no objective rows', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SELECT statuses
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // UPSERT
+      .mockResolvedValueOnce({ rows: [{ status: 'NOT_ASSESSED' }], rowCount: 1 }) // UPSERT RETURNING
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('NOT_ASSESSED')
   })
@@ -186,7 +203,7 @@ describe('recomputeControlStatus', () => {
         rows: [{ status: 'MET' }, { status: 'NOT_MET' }, { status: 'MET' }],
         rowCount: 3,
       })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'NOT_MET' }], rowCount: 1 })
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('NOT_MET')
   })
@@ -197,7 +214,7 @@ describe('recomputeControlStatus', () => {
         rows: [{ status: 'MET' }, { status: 'NOT_ASSESSED' }],
         rowCount: 2,
       })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'NOT_ASSESSED' }], rowCount: 1 })
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('NOT_ASSESSED')
   })
@@ -208,7 +225,7 @@ describe('recomputeControlStatus', () => {
         rows: [{ status: 'MET' }, { status: 'MET' }],
         rowCount: 2,
       })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 })
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('MET')
   })
@@ -219,20 +236,131 @@ describe('recomputeControlStatus', () => {
         rows: [{ status: 'NOT_APPLICABLE' }, { status: 'NOT_APPLICABLE' }],
         rowCount: 2,
       })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'NOT_APPLICABLE' }], rowCount: 1 })
     const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     expect(result).toBe('NOT_APPLICABLE')
+  })
+
+  it('preserves a manually-set IN_POAM control instead of overwriting it with the derived status (B-HIGH-2)', async () => {
+    // Objectives recompute to NOT_MET, but the control was deliberately set
+    // IN_POAM by the lead assessor. Outside engagements have no POA&M table, so
+    // IN_POAM is a manual control-level status that recompute must preserve.
+    mockQuery
+      .mockResolvedValueOnce({
+        rows: [{ status: 'MET' }, { status: 'NOT_MET' }],
+        rowCount: 2,
+      }) // SELECT statuses → derived NOT_MET
+      .mockResolvedValueOnce({ rows: [{ status: 'IN_POAM' }], rowCount: 1 }) // UPSERT preserves IN_POAM
+    const result = await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
+    expect(result).toBe('IN_POAM')
+    const upsertSql = mockQuery.mock.calls[1][0] as string
+    expect(upsertSql).toContain("outside_control_assessments.status = 'IN_POAM'")
+    expect(upsertSql).toContain('RETURNING status')
   })
 
   it('UPSERTs the derived status into outside_control_assessments', async () => {
     mockQuery
       .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 })
-      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 })
     await recomputeControlStatus(ENG, 'AC.L2-3.1.1', 'lead-1')
     const upsertSql = mockQuery.mock.calls[1][0] as string
     expect(upsertSql).toContain('INSERT INTO outside_control_assessments')
     expect(upsertSql).toContain('ON CONFLICT (engagement_id, requirement_id)')
     expect(upsertSql).toContain('DO UPDATE')
+  })
+})
+
+describe('outsideUpdateObjectiveAndRecompute (transactional)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function makeClient() {
+    const clientQuery = vi.fn()
+    const release = vi.fn()
+    return { client: { query: clientQuery, release }, clientQuery, release }
+  }
+
+  const sqlsOf = (clientQuery: ReturnType<typeof vi.fn>) =>
+    clientQuery.mock.calls.map((c: unknown[]) => c[0] as string)
+
+  it('runs the objective write and control recompute in one transaction (BEGIN…COMMIT, FOR UPDATE)', async () => {
+    const { client, clientQuery, release } = makeClient()
+    mockGetClient.mockResolvedValueOnce(client)
+    clientQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // SELECT ... FOR UPDATE (control lock)
+      .mockResolvedValueOnce({ rows: [{ version: 2 }], rowCount: 1 }) // UPDATE objective → updated
+      .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 }) // SELECT objective statuses
+      .mockResolvedValueOnce({ rows: [{ status: 'MET' }], rowCount: 1 }) // UPSERT control RETURNING
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // COMMIT
+
+    const result = await outsideUpdateObjectiveAndRecompute(
+      ENG,
+      'AC.L2-3.1.1.a',
+      { requirementId: 'AC.L2-3.1.1', status: 'MET', expectedVersion: 1 },
+      'lead-1',
+    )
+
+    const sqls = sqlsOf(clientQuery)
+    expect(sqls[0]).toBe('BEGIN')
+    expect(sqls[sqls.length - 1]).toBe('COMMIT')
+    expect(sqls.some((s) => s.includes('FOR UPDATE'))).toBe(true)
+    expect(sqls).not.toContain('ROLLBACK')
+    expect(result.status).toBe('updated')
+    expect(result.controlStatus).toBe('MET')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('rolls back the objective write when recompute throws (no partial commit)', async () => {
+    const { client, clientQuery, release } = makeClient()
+    mockGetClient.mockResolvedValueOnce(client)
+    clientQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // FOR UPDATE
+      .mockResolvedValueOnce({ rows: [{ version: 2 }], rowCount: 1 }) // UPDATE objective → updated
+      .mockRejectedValueOnce(new Error('recompute boom')) // SELECT statuses throws
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // ROLLBACK
+
+    await expect(
+      outsideUpdateObjectiveAndRecompute(
+        ENG,
+        'AC.L2-3.1.1.a',
+        { requirementId: 'AC.L2-3.1.1', status: 'MET', expectedVersion: 1 },
+        'lead-1',
+      ),
+    ).rejects.toThrow('recompute boom')
+
+    const sqls = sqlsOf(clientQuery)
+    expect(sqls).toContain('ROLLBACK')
+    expect(sqls).not.toContain('COMMIT')
+    expect(release).toHaveBeenCalledOnce()
+  })
+
+  it('commits and returns conflict on an optimistic-lock conflict (no rollback, no recompute)', async () => {
+    const { client, clientQuery, release } = makeClient()
+    mockGetClient.mockResolvedValueOnce(client)
+    clientQuery
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // BEGIN
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // FOR UPDATE
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // UPDATE objective → no row
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // INSERT ON CONFLICT DO NOTHING → conflict
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 }) // COMMIT
+
+    const result = await outsideUpdateObjectiveAndRecompute(
+      ENG,
+      'AC.L2-3.1.1.a',
+      { requirementId: 'AC.L2-3.1.1', status: 'MET', expectedVersion: 5 },
+      'lead-1',
+    )
+
+    expect(result.status).toBe('conflict')
+    const sqls = sqlsOf(clientQuery)
+    expect(sqls).toContain('COMMIT')
+    expect(sqls).not.toContain('ROLLBACK')
+    // recompute UPSERT must NOT run on conflict
+    expect(sqls.some((s) => s.includes('INSERT INTO outside_control_assessments'))).toBe(false)
+    expect(release).toHaveBeenCalledOnce()
   })
 })
 
@@ -361,33 +489,42 @@ describe('evidence-objective links', () => {
     vi.clearAllMocks()
   })
 
-  it('linkEvidenceToObjective uses ON CONFLICT DO NOTHING (idempotent)', async () => {
+  it('linkEvidenceToObjective is idempotent AND scoped to the engagement (L2)', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
-    await linkEvidenceToObjective('ev-1', 'AC.L2-3.1.1.a', 'lead-1')
-    const sql = mockQuery.mock.calls[0][0] as string
+    await linkEvidenceToObjective(ENG, 'ev-1', 'AC.L2-3.1.1.a', 'lead-1')
+    const [sql, params] = mockQuery.mock.calls[0]
     expect(sql).toContain('INSERT INTO outside_evidence_objective_links')
-    expect(sql).toContain('ON CONFLICT')
     expect(sql).toContain('DO NOTHING')
+    // Only links evidence that belongs to the asserted engagement.
+    expect(sql).toContain('outside_evidence')
+    expect(sql).toContain('engagement_id')
+    expect(params).toContain(ENG)
   })
 
-  it('unlinkEvidenceFromObjective returns true when a link was deleted', async () => {
+  it('unlinkEvidenceFromObjective returns true when a link was deleted, scoped to engagement (L2)', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
-    const ok = await unlinkEvidenceFromObjective('ev-1', 'AC.L2-3.1.1.a')
+    const ok = await unlinkEvidenceFromObjective(ENG, 'ev-1', 'AC.L2-3.1.1.a')
     expect(ok).toBe(true)
+    const [sql, params] = mockQuery.mock.calls[0]
+    expect(sql).toContain('engagement_id')
+    expect(params).toContain(ENG)
   })
 
   it('unlinkEvidenceFromObjective returns false when no link existed', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
-    expect(await unlinkEvidenceFromObjective('ev-1', 'missing')).toBe(false)
+    expect(await unlinkEvidenceFromObjective(ENG, 'ev-1', 'missing')).toBe(false)
   })
 
-  it('listObjectivesForEvidence returns objective_id strings', async () => {
+  it('listObjectivesForEvidence returns objective_id strings scoped to engagement (L3)', async () => {
     mockQuery.mockResolvedValueOnce({
       rows: [{ objective_id: 'AC.L2-3.1.1.a' }, { objective_id: 'AT.L2-3.2.1.a' }],
       rowCount: 2,
     })
-    const result = await listObjectivesForEvidence('ev-1')
+    const result = await listObjectivesForEvidence(ENG, 'ev-1')
     expect(result).toEqual(['AC.L2-3.1.1.a', 'AT.L2-3.2.1.a'])
+    const [sql, params] = mockQuery.mock.calls[0]
+    expect(sql).toContain('engagement_id')
+    expect(params).toContain(ENG)
   })
 
   it('listEvidenceForObjective joins evidence + links', async () => {

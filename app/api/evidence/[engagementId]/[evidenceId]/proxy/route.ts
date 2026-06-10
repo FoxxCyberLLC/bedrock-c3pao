@@ -4,6 +4,7 @@ import { fetchEvidenceDownloadURL } from '@/lib/api-client'
 import { PROXY_DISPLAY_ALLOWED } from '@/lib/evidence-mime-types'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
+const UPSTREAM_TIMEOUT_MS = 30_000 // abort a hung S3/Go-API fetch after 30s
 
 export async function GET(
   request: NextRequest,
@@ -22,23 +23,23 @@ export async function GET(
     const urlResponse = await fetchEvidenceDownloadURL(engagementId, evidenceId, session.apiToken)
     downloadUrl = urlResponse.downloadUrl
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to get download URL'
-    return NextResponse.json({ error: message }, { status: 502 })
+    // L1: log the detail server-side; return a generic message so internal
+    // endpoint paths / upstream error text never reach the client.
+    console.error('[evidence-proxy] failed to resolve download URL', error)
+    return NextResponse.json({ error: 'Failed to retrieve evidence' }, { status: 502 })
   }
 
   // Step 2: Fetch the actual file from the download URL
   let upstream: Response
   try {
-    upstream = await fetch(downloadUrl)
+    upstream = await fetch(downloadUrl, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
     if (!upstream.ok) {
-      return NextResponse.json(
-        { error: `Upstream returned ${upstream.status}` },
-        { status: 502 },
-      )
+      console.error('[evidence-proxy] upstream returned', upstream.status)
+      return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Failed to fetch file'
-    return NextResponse.json({ error: message }, { status: 502 })
+    console.error('[evidence-proxy] upstream fetch failed', error)
+    return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
   }
 
   // Step 3: Enforce file size limit using Content-Length when available (H4)

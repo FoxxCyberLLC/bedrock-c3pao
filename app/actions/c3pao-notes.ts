@@ -9,7 +9,7 @@
  */
 
 import { revalidatePath } from 'next/cache'
-import { requireAuth } from '@/lib/auth'
+import { requireAssessor } from '@/lib/auth'
 import {
   createNote as dbCreateNote,
   deleteNote as dbDeleteNote,
@@ -67,7 +67,7 @@ export async function listNotes(
   engagementId: string,
 ): Promise<ActionResult<AssessmentNote[]>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
     const notes = await dbListNotes(engagementId)
     return { success: true, data: notes }
@@ -82,7 +82,7 @@ export async function createNote(
   body: string,
 ): Promise<ActionResult<{ id: string }>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
 
     const trimmed = validateBody(body)
@@ -122,7 +122,7 @@ export async function editNote(
   body: string,
 ): Promise<ActionResult<void>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
 
     const trimmed = validateBody(body)
@@ -162,7 +162,7 @@ export async function editNote(
 /** Author-only: soft-delete a note (revisions preserved). */
 export async function deleteNote(noteId: string): Promise<ActionResult<void>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
 
     const existing = await getNote(noteId)
@@ -196,7 +196,7 @@ export async function listNoteRevisions(
   noteId: string,
 ): Promise<ActionResult<NoteRevision[]>> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
     const revisions = await listRevisions(noteId)
     return { success: true, data: revisions }

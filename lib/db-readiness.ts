@@ -343,18 +343,37 @@ export async function removeArtifact(artifactId: string): Promise<void> {
 }
 
 /** Download-path only: read the bytea blob. */
-export async function getArtifactContent(
-  artifactId: string,
-): Promise<{ filename: string; mimeType: string; content: Buffer } | null> {
+/**
+ * Resolve the engagement that owns an artifact (via its checklist item) without
+ * loading the blob — used to authorize a download before streaming bytes.
+ */
+export async function getArtifactEngagementId(artifactId: string): Promise<string | null> {
   const result = await query(
-    `SELECT filename, mime_type, content
-     FROM readiness_artifacts
-     WHERE id = $1`,
+    `SELECT i.engagement_id
+       FROM readiness_artifacts a
+       JOIN readiness_checklist_items i ON i.id = a.item_id
+      WHERE a.id = $1`,
     [artifactId],
   )
-  const row = result.rows[0] as { filename: string; mime_type: string; content: Buffer } | undefined
+  return (result.rows[0] as { engagement_id: string } | undefined)?.engagement_id ?? null
+}
+
+export async function getArtifactContent(
+  artifactId: string,
+): Promise<{ engagementId: string; filename: string; mimeType: string; content: Buffer } | null> {
+  const result = await query(
+    `SELECT a.filename, a.mime_type, a.content, i.engagement_id
+       FROM readiness_artifacts a
+       JOIN readiness_checklist_items i ON i.id = a.item_id
+      WHERE a.id = $1`,
+    [artifactId],
+  )
+  const row = result.rows[0] as
+    | { filename: string; mime_type: string; content: Buffer; engagement_id: string }
+    | undefined
   if (!row) return null
   return {
+    engagementId: row.engagement_id,
     filename: row.filename,
     mimeType: row.mime_type,
     content: row.content,

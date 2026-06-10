@@ -15,6 +15,8 @@ import { appendAudit, getAuditLog } from '@/lib/db-audit'
 import { listNotes, listRevisions } from '@/lib/db-notes'
 
 const BUNDLE_SCHEMA_VERSION = 1
+/** Aggregate cap on artifact bytes in one bundle — guards against OOM/huge zips. */
+const MAX_BUNDLE_ARTIFACT_BYTES = 500 * 1024 * 1024 // 500 MB
 
 function safeFilename(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, '_')
@@ -86,10 +88,20 @@ export async function GET(
     name: 'notes/notes.json',
   })
 
+  let bundleArtifactBytes = 0
+  const skipped: Array<{ id: string; filename: string; sizeBytes: number }> = []
   for (const item of items) {
     for (const artifact of item.artifacts) {
       const blob = await getArtifactContent(artifact.id)
       if (!blob) continue
+      // Enforce an aggregate cap so a runaway artifact set can't OOM the worker
+      // or produce an unbounded zip. Over the cap, skip-with-warning rather than
+      // truncating silently — the manifest records what was left out.
+      if (bundleArtifactBytes + blob.content.length > MAX_BUNDLE_ARTIFACT_BYTES) {
+        skipped.push({ id: artifact.id, filename: blob.filename, sizeBytes: blob.content.length })
+        continue
+      }
+      bundleArtifactBytes += blob.content.length
       const safeName = safeFilename(blob.filename)
       archive.append(blob.content, {
         name: `readiness/artifacts/${artifact.id}__${safeName}`,
@@ -97,7 +109,33 @@ export async function GET(
     }
   }
 
-  void archive.finalize()
+  if (skipped.length > 0) {
+    console.warn(
+      `[export-bundle] skipped ${skipped.length} artifact(s) over the ${MAX_BUNDLE_ARTIFACT_BYTES}-byte bundle cap`,
+    )
+    archive.append(
+      JSON.stringify(
+        {
+          reason: `aggregate artifact size exceeded ${MAX_BUNDLE_ARTIFACT_BYTES} bytes; these artifacts were omitted`,
+          skipped,
+        },
+        null,
+        2,
+      ),
+      { name: 'readiness/artifacts/_SKIPPED.json' },
+    )
+  }
+
+  // Surface finalize errors instead of swallowing them with `void`. We do NOT
+  // `await` here: the archive is streamed as the response body below and only
+  // drains once the client reads it, so awaiting before returning would
+  // deadlock (and buffering the whole zip would reintroduce the OOM risk). On a
+  // finalize error, destroy the stream so the client sees a torn download
+  // rather than a silently-truncated archive.
+  archive.finalize().catch((err) => {
+    console.error('[export-bundle] finalize failed', err)
+    archive.destroy(err instanceof Error ? err : new Error(String(err)))
+  })
 
   try {
     await appendAudit({

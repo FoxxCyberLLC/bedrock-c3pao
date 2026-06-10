@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { ReadinessItem } from '@/lib/readiness-types'
 
 vi.mock('@/lib/auth', () => ({
-  requireAuth: vi.fn(),
+  requireAssessor: vi.fn(),
   requireLeadAssessor: vi.fn(),
 }))
 
@@ -49,7 +49,7 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-const { requireAuth, requireLeadAssessor } = await import('@/lib/auth')
+const { requireAssessor, requireLeadAssessor } = await import('@/lib/auth')
 const {
   ensureItemsSeeded,
   getItems,
@@ -117,12 +117,12 @@ function makeItem(overrides: Partial<ReadinessItem> = {}): ReadinessItem {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(requireAuth).mockResolvedValue(sessionFixture() as never)
+  vi.mocked(requireAssessor).mockResolvedValue(sessionFixture() as never)
 })
 
 describe('getReadinessChecklist', () => {
   it('returns unauthorized envelope when no session', async () => {
-    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    vi.mocked(requireAssessor).mockResolvedValueOnce(null)
     const { getReadinessChecklist } = await getActions()
     const result = await getReadinessChecklist('eng-1')
     expect(result.success).toBe(false)
@@ -172,7 +172,7 @@ describe('getReadinessChecklist', () => {
 
 describe('getReadinessAuditLog', () => {
   it('returns unauthorized envelope when no session', async () => {
-    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    vi.mocked(requireAssessor).mockResolvedValueOnce(null)
     const { getReadinessAuditLog } = await getActions()
     const result = await getReadinessAuditLog('eng-1')
     expect(result.success).toBe(false)
@@ -479,7 +479,7 @@ function makePdfFile(opts: { size?: number; type?: string; name?: string } = {})
 
 describe('uploadArtifact', () => {
   it('returns unauthorized when no session', async () => {
-    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    vi.mocked(requireAssessor).mockResolvedValueOnce(null)
     const fd = new FormData()
     fd.append('file', makePdfFile())
     const { uploadArtifact } = await getArtifactActions()
@@ -574,7 +574,7 @@ describe('uploadArtifact', () => {
 
 describe('removeArtifact', () => {
   it('returns unauthorized when no session', async () => {
-    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    vi.mocked(requireAssessor).mockResolvedValueOnce(null)
     const { removeArtifact } = await getArtifactActions()
     const result = await removeArtifact('eng-1', 'contract_executed', 'a1')
     expect(result.success).toBe(false)
@@ -599,7 +599,7 @@ describe('removeArtifact', () => {
 
   it('denies non-lead trying to remove another user’s artifact', async () => {
     // Caller is a non-lead member; artifact uploaded by someone else.
-    vi.mocked(requireAuth).mockResolvedValueOnce(
+    vi.mocked(requireAssessor).mockResolvedValueOnce(
       sessionFixture({
         c3paoUser: {
           id: 'user-2',
@@ -638,7 +638,7 @@ describe('removeArtifact', () => {
   })
 
   it('allows uploader to remove their own artifact', async () => {
-    vi.mocked(requireAuth).mockResolvedValueOnce(
+    vi.mocked(requireAssessor).mockResolvedValueOnce(
       sessionFixture({
         c3paoUser: {
           id: 'user-2',
@@ -704,7 +704,7 @@ describe('removeArtifact', () => {
 
 describe('ensureEngagementInPlanPhase', () => {
   it('returns unauthorized when no session', async () => {
-    vi.mocked(requireAuth).mockResolvedValueOnce(null)
+    vi.mocked(requireAssessor).mockResolvedValueOnce(null)
     const { ensureEngagementInPlanPhase } = await getActions()
     const result = await ensureEngagementInPlanPhase('eng-1')
     expect(result.success).toBe(false)

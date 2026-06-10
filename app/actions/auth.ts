@@ -3,6 +3,7 @@
 import { setSession, deleteSession, type SessionC3PAOUser } from '@/lib/auth'
 import { apiLogin } from '@/lib/api-client'
 import { authenticateLocalUser } from '@/lib/local-auth'
+import { isLockedOut, recordFailedLogin, clearLoginAttempts } from '@/lib/login-attempts'
 import { redirect } from 'next/navigation'
 
 export async function login(formData: FormData) {
@@ -13,10 +14,24 @@ export async function login(formData: FormData) {
     return { success: false, error: 'Email and password are required' }
   }
 
+  // Throttle: reject while locked out, even with correct credentials. Returned
+  // (never thrown) so the result reaches the caller. Keyed by email — generic
+  // wording preserves anti-enumeration (a never-seen email is simply unlocked).
+  const lock = await isLockedOut(email)
+  if (lock.locked) {
+    const minutes = Math.ceil((lock.retryAfterSec ?? 0) / 60)
+    return {
+      success: false,
+      locked: true,
+      error: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+    }
+  }
+
   // Try local admin auth first
   try {
     const localUser = await authenticateLocalUser(email, password)
     if (localUser) {
+      await clearLoginAttempts(email)
       const user: SessionC3PAOUser = {
         id: localUser.id,
         email: localUser.email,
@@ -36,6 +51,7 @@ export async function login(formData: FormData) {
   // Fall back to Go API auth
   try {
     const response = await apiLogin(email, password)
+    await clearLoginAttempts(email)
 
     const user: SessionC3PAOUser = {
       id: response.userId,
@@ -51,6 +67,8 @@ export async function login(formData: FormData) {
 
     return { success: true }
   } catch {
+    // Both auth paths failed — count this attempt toward the lockout threshold.
+    await recordFailedLogin(email)
     return { success: false, error: 'Invalid email or password' }
   }
 }

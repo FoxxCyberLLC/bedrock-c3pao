@@ -42,7 +42,7 @@ export function STIGViewer({ engagementId, assessmentModeActive = false }: STIGV
           setStatistics(statsResult.data)
         }
         if (targetsResult.success && targetsResult.data) {
-          setTargets(targetsResult.data as any)
+          setTargets(targetsResult.data)
         }
       } catch (error) {
         console.error('Failed to load STIG data:', error)

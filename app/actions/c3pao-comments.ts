@@ -4,7 +4,7 @@
  * Engagement comments server actions (Task 13a).
  */
 
-import { requireAuth } from '@/lib/auth'
+import { requireAssessor } from '@/lib/auth'
 import {
   fetchEngagementComments,
   createEngagementComment as apiCreateComment,
@@ -29,7 +29,7 @@ export async function getEngagementComments(
   engagementId: string,
 ): Promise<CommentListResponse> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
     const data = await fetchEngagementComments(engagementId, session.apiToken)
     return { success: true, data }
@@ -48,7 +48,7 @@ export async function createEngagementCommentAction(
   input: CreateCommentInput,
 ): Promise<CommentResponse> {
   try {
-    const session = await requireAuth()
+    const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
     const data = await apiCreateComment(engagementId, input, session.apiToken)
     return { success: true, data }

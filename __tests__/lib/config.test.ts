@@ -20,6 +20,8 @@ const {
   isAppConfigured,
 } = await import('@/lib/config')
 
+const { encryptValue, isEncrypted } = await import('@/lib/crypto')
+
 describe('lib/config', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -46,6 +48,30 @@ describe('lib/config', () => {
 
       const result = await getConfig('NONEXISTENT')
       expect(result).toBeNull()
+    })
+
+    it('should decrypt an encrypted sensitive value on read', async () => {
+      const stored = encryptValue('the-real-secret')
+      mockQuery.mockResolvedValueOnce({ rows: [{ value: stored }], rowCount: 1 })
+
+      const result = await getConfig('AUTH_SECRET')
+      expect(result).toBe('the-real-secret')
+    })
+
+    it('should re-encrypt a legacy-plaintext sensitive value on read (opportunistic migration)', async () => {
+      // SELECT returns legacy plaintext; the opportunistic setConfig re-write
+      // issues a second query storing the value as enc:v1.
+      mockQuery
+        .mockResolvedValueOnce({ rows: [{ value: 'legacy-plain-secret' }], rowCount: 1 })
+        .mockResolvedValueOnce({ rows: [], rowCount: 1 })
+
+      const result = await getConfig('INSTANCE_API_KEY')
+      expect(result).toBe('legacy-plain-secret')
+
+      expect(mockQuery).toHaveBeenCalledTimes(2)
+      const [, params] = mockQuery.mock.calls[1]
+      expect(params[0]).toBe('INSTANCE_API_KEY')
+      expect(isEncrypted(params[1] as string)).toBe(true)
     })
   })
 
@@ -86,6 +112,27 @@ describe('lib/config', () => {
         ['BEDROCK_API_URL', 'https://api.test.com']
       )
     })
+
+    it('should encrypt a sensitive value at rest (AUTH_SECRET stored as enc:v1)', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
+
+      await setConfig('AUTH_SECRET', 'top-secret-signing-key')
+
+      const [, params] = mockQuery.mock.calls[0]
+      expect(params[0]).toBe('AUTH_SECRET')
+      expect(isEncrypted(params[1] as string)).toBe(true)
+      expect(params[1]).not.toBe('top-secret-signing-key')
+    })
+
+    it('should not double-encrypt an already-encrypted sensitive value', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 })
+      const already = encryptValue('already-ciphertext')
+
+      await setConfig('INSTANCE_API_KEY', already)
+
+      const [, params] = mockQuery.mock.calls[0]
+      expect(params[1]).toBe(already)
+    })
   })
 
   describe('setConfigBatch()', () => {
@@ -103,6 +150,27 @@ describe('lib/config', () => {
       const inserts = calls.filter((sql: string) => sql.includes('INSERT INTO app_config'))
       expect(inserts).toHaveLength(2)
       expect(mockClientRelease).toHaveBeenCalledOnce()
+    })
+
+    it('should encrypt sensitive values and leave non-sensitive plaintext', async () => {
+      mockClientQuery.mockResolvedValue({ rows: [], rowCount: 1 })
+
+      await setConfigBatch({
+        BEDROCK_API_URL: 'https://api.test.com',
+        AUTH_SECRET: 'batch-secret',
+      })
+
+      const inserts = mockClientQuery.mock.calls.filter((c: unknown[]) =>
+        (c[0] as string).includes('INSERT INTO app_config')
+      )
+      const byKey = Object.fromEntries(
+        inserts.map((c: unknown[]) => {
+          const params = c[1] as string[]
+          return [params[0], params[1]]
+        })
+      )
+      expect(byKey['BEDROCK_API_URL']).toBe('https://api.test.com')
+      expect(isEncrypted(byKey['AUTH_SECRET'])).toBe(true)
     })
 
     it('should ROLLBACK on insert failure and release client', async () => {

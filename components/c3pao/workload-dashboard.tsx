@@ -14,7 +14,7 @@
  *   - Assessment Activity card (real engagement coverage / objective progress)
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { differenceInDays } from 'date-fns'
 import {
   AlertTriangle,
@@ -59,21 +59,25 @@ export function WorkloadDashboard() {
   const [assessors, setAssessors] = useState<AssessorWorkloadItem[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    const result = await getC3PAOWorkloadOverview()
-    if (result.success && result.data) {
-      setAssessors(result.data.assessors)
-      setError(null)
-    } else {
-      setError(result.error ?? 'Failed to load workload')
-    }
-    setLoading(false)
-  }, [])
-
+  // Inline the initial fetch so no setState runs synchronously in the effect
+  // body (the await precedes every setState).
   useEffect(() => {
-    load()
-  }, [load])
+    let cancelled = false
+    void (async () => {
+      const result = await getC3PAOWorkloadOverview()
+      if (cancelled) return
+      if (result.success && result.data) {
+        setAssessors(result.data.assessors)
+        setError(null)
+      } else {
+        setError(result.error ?? 'Failed to load workload')
+      }
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   if (loading) {
     return (

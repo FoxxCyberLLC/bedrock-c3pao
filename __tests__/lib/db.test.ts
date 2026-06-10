@@ -17,16 +17,9 @@ vi.mock('pg', () => {
 describe('lib/db', () => {
   beforeEach(async () => {
     vi.clearAllMocks()
-    // Reset module to clear cached pool and schema promise
+    // Reset module registry to clear the cached pool + schema promise between
+    // tests. The top-level vi.mock('pg') persists across resetModules.
     vi.resetModules()
-    vi.mock('pg', () => ({
-      Pool: function () {
-        return {
-          query: mockPoolQuery,
-          on: mockPoolOn,
-        }
-      },
-    }))
   })
 
   describe('query()', () => {
@@ -50,6 +43,36 @@ describe('lib/db', () => {
 
       expect(mockPoolQuery).toHaveBeenCalledWith('SELECT 1', undefined)
       expect(result).toEqual(mockResult)
+    })
+  })
+
+  describe('buildSslConfig()', () => {
+    const CA = '-----BEGIN CERTIFICATE-----\nMIIB...\n-----END CERTIFICATE-----'
+
+    it('returns verified TLS config when sslmode is present and a CA is provided', async () => {
+      const { buildSslConfig } = await import('@/lib/db')
+      const cfg = buildSslConfig('postgres://h/db?sslmode=require', CA)
+      expect(cfg).toEqual({ ca: CA, rejectUnauthorized: true })
+    })
+
+    it('throws (fail-closed) when sslmode is present but no CA — never rejectUnauthorized:false', async () => {
+      const { buildSslConfig } = await import('@/lib/db')
+      expect(() => buildSslConfig('postgres://h/db?sslmode=require', undefined)).toThrow(
+        /DATABASE_CA_CERT/
+      )
+    })
+
+    it('throws when sslmode is present and the CA is empty/whitespace', async () => {
+      const { buildSslConfig } = await import('@/lib/db')
+      expect(() => buildSslConfig('postgres://h/db?sslmode=verify-full', '   ')).toThrow(
+        /DATABASE_CA_CERT/
+      )
+    })
+
+    it('returns undefined when the URL has no sslmode (internal bundled DB)', async () => {
+      const { buildSslConfig } = await import('@/lib/db')
+      expect(buildSslConfig('postgres://h/db', CA)).toBeUndefined()
+      expect(buildSslConfig(undefined, undefined)).toBeUndefined()
     })
   })
 
@@ -96,6 +119,20 @@ describe('lib/db', () => {
       const callCount2 = mockPoolQuery.mock.calls.length
 
       expect(callCount2).toBe(callCount1)
+    })
+
+    it('should retry after a failed init (does not cache the rejection)', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+
+      // First attempt: the DDL rejects.
+      mockPoolQuery.mockRejectedValueOnce(new Error('ddl failed'))
+      await expect(ensureSchema()).rejects.toThrow('ddl failed')
+      const afterFailure = mockPoolQuery.mock.calls.length
+
+      // Second attempt must re-run the DDL (cached rejection would skip it).
+      mockPoolQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      await expect(ensureSchema()).resolves.toBeUndefined()
+      expect(mockPoolQuery.mock.calls.length).toBeGreaterThan(afterFailure)
     })
   })
 

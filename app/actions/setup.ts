@@ -1,7 +1,6 @@
 'use server'
 
 import crypto from 'crypto'
-import { cookies } from 'next/headers'
 import { setConfigBatch, getConfig, isAppConfigured } from '@/lib/config'
 import { createLocalAdmin } from '@/lib/local-auth'
 import { validateApiUrl, isValidApiKey } from '@/lib/setup-validation'
@@ -117,22 +116,13 @@ export async function completeSetup(
     // Create local admin user
     await createLocalAdmin(params.adminEmail, params.adminName, params.adminPassword)
 
-    // Inject into process.env for immediate use (no restart needed)
+    // Inject into process.env for immediate use (no restart needed). The
+    // Node-runtime middleware reads INSTANCE_API_KEY directly, so no
+    // "configured" cookie is needed (and a client cookie must not gate setup — L4).
     process.env.BEDROCK_API_URL = params.apiUrl
     process.env.AUTH_SECRET = authSecret
     process.env.INSTANCE_API_KEY = params.apiKey
     process.env.FORCE_HTTPS = 'true'
-
-    // Set cookie so Edge middleware knows setup is done
-    const isSecure = process.env.FORCE_HTTPS === 'true' || process.env.NODE_ENV === 'production'
-    const cookieStore = await cookies()
-    cookieStore.set('bedrock_instance_configured', 'true', {
-      httpOnly: true,
-      secure: isSecure,
-      maxAge: 60 * 60 * 24 * 30, // 30 days — UX hint only, not a security gate
-      path: '/',
-      sameSite: 'lax',
-    })
 
     return { success: true }
   } catch (error) {

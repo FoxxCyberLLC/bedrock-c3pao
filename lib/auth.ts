@@ -133,6 +133,26 @@ export async function getApiToken(): Promise<string | null> {
   return session?.apiToken || null
 }
 
+/**
+ * Require an authenticated ASSESSOR — rejects the local instance admin.
+ *
+ * The local admin is an instance operator (user + config management, `/admin`
+ * only), NOT an assessor. Assessment-data actions must not be reachable by an
+ * admin session, so this returns null for `isLocalAdmin` sessions as well as
+ * for missing/expired ones; callers treat null as Unauthorized/Forbidden.
+ *
+ * Note the deliberate asymmetry with `requireLeadAssessor` /
+ * `requireOutsideLeadAssessor`, which DO grant the local admin lead access:
+ * those gate engagement *management* where an operator stepping in is intended.
+ * Pure assessment-data reads/writes use `requireAssessor` and exclude the admin.
+ */
+export async function requireAssessor(): Promise<C3PAOSessionPayload | null> {
+  const session = await requireAuth()
+  if (!session) return null
+  if (session.isLocalAdmin) return null
+  return session
+}
+
 export type RequireLeadAssessorResult = {
   session: C3PAOSessionPayload | null
   isLead: boolean
