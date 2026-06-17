@@ -10,6 +10,7 @@ import { getPortfolioList } from '@/app/actions/c3pao-portfolio'
 import { getC3PAOEngagements } from '@/app/actions/engagements'
 import { getC3PAOTeam } from '@/app/actions/c3pao-dashboard'
 import { listOutsideEngagementsAction } from '@/app/actions/c3pao-outside-engagement'
+import { getOnsiteRangesForEngagements } from '@/lib/db-schedule'
 import {
   listActiveSnoozesAction,
   listAllTagLabels,
@@ -78,39 +79,65 @@ export default async function C3PAOEngagementsPage({
     }
   }
 
-  const oscRows: PortfolioRow[] = portfolioItems.map((item) => ({
-    ...item,
-    findingsCount: findingsById.get(item.id) ?? null,
-    kind: 'osc' as const,
-  }))
+  // The Schedule column shows the assessor's on-site dates. Those are owned
+  // by the Schedule & Logistics tab (engagement_schedule.onsite_start/end),
+  // so let those override the engagement's own scheduledStartDate/EndDate
+  // when present. Outside engagements seed start/end from the create dialog
+  // and OSC engagements get them from the bedrock-cmmc side; either is the
+  // fallback when no on-site row exists yet.
+  const allEngagementIds: string[] = [
+    ...portfolioItems.map((item) => item.id),
+    ...(outsideResult.success && outsideResult.data
+      ? outsideResult.data.map((eng) => eng.id)
+      : []),
+  ]
+  const onsiteRanges = await getOnsiteRangesForEngagements(allEngagementIds).catch(
+    // Local Postgres outage must not break the list — fall back to the API-
+    // supplied dates for every row.
+    () => new Map<string, { onsiteStart: string | null; onsiteEnd: string | null }>(),
+  )
+
+  const oscRows: PortfolioRow[] = portfolioItems.map((item) => {
+    const onsite = onsiteRanges.get(item.id)
+    return {
+      ...item,
+      scheduledStartDate: onsite?.onsiteStart ?? item.scheduledStartDate,
+      scheduledEndDate: onsite?.onsiteEnd ?? item.scheduledEndDate,
+      findingsCount: findingsById.get(item.id) ?? null,
+      kind: 'osc' as const,
+    }
+  })
 
   // Outside engagements live in local Postgres. Map onto the same row shape
   // with placeholder fields where the OSC concept does not apply.
   const outsideRows: PortfolioRow[] =
     outsideResult.success && outsideResult.data
-      ? outsideResult.data.map((eng) => ({
-          id: eng.id,
-          packageName: eng.name,
-          organizationName: eng.clientName,
-          status: eng.status,
-          currentPhase: null,
-          leadAssessorId: eng.leadAssessorId,
-          leadAssessorName: eng.leadAssessorName,
-          scheduledStartDate: eng.scheduledStartDate,
-          scheduledEndDate: eng.scheduledEndDate,
-          daysInPhase: 0,
-          objectivesTotal: 110,
-          objectivesAssessed: 0,
-          assessmentResult: null,
-          certStatus: null,
-          certExpiresAt: null,
-          poamCloseoutDue: null,
-          reevalWindowOpenUntil: null,
-          createdAt: eng.createdAt,
-          updatedAt: eng.updatedAt,
-          findingsCount: null,
-          kind: 'outside_osc' as const,
-        }))
+      ? outsideResult.data.map((eng) => {
+          const onsite = onsiteRanges.get(eng.id)
+          return {
+            id: eng.id,
+            packageName: eng.name,
+            organizationName: eng.clientName,
+            status: eng.status,
+            currentPhase: null,
+            leadAssessorId: eng.leadAssessorId,
+            leadAssessorName: eng.leadAssessorName,
+            scheduledStartDate: onsite?.onsiteStart ?? eng.scheduledStartDate,
+            scheduledEndDate: onsite?.onsiteEnd ?? eng.scheduledEndDate,
+            daysInPhase: 0,
+            objectivesTotal: 110,
+            objectivesAssessed: 0,
+            assessmentResult: null,
+            certStatus: null,
+            certExpiresAt: null,
+            poamCloseoutDue: null,
+            reevalWindowOpenUntil: null,
+            createdAt: eng.createdAt,
+            updatedAt: eng.updatedAt,
+            findingsCount: null,
+            kind: 'outside_osc' as const,
+          }
+        })
       : []
 
   const items: PortfolioRow[] = [...oscRows, ...outsideRows]

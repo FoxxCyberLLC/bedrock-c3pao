@@ -7,7 +7,7 @@ vi.mock('@/lib/db', () => ({
   getClient: vi.fn(),
 }))
 
-const { getSchedule, upsertSchedule } = await import('@/lib/db-schedule')
+const { getSchedule, upsertSchedule, getOnsiteRangesForEngagements } = await import('@/lib/db-schedule')
 
 const ACTOR = { id: 'u1', email: 'u1@c3pao.test', name: 'Unit One' }
 
@@ -130,6 +130,50 @@ describe('db-schedule', () => {
       expect(sql).not.toContain('not_a_real_field')
       // engagementId, actor.name, kickoffDate = 3 params (unknown field dropped)
       expect(params).toEqual(['eng-1', ACTOR.name, '2026-05-01'])
+    })
+  })
+
+  describe('getOnsiteRangesForEngagements', () => {
+    it('returns an empty map for an empty id list without hitting the DB', async () => {
+      const out = await getOnsiteRangesForEngagements([])
+
+      expect(out.size).toBe(0)
+      expect(mockQuery).not.toHaveBeenCalled()
+    })
+
+    it('returns a map keyed by engagement id with onsite start/end ISO dates', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            engagement_id: 'eng-1',
+            onsite_start: new Date('2026-06-01T00:00:00Z'),
+            onsite_end: new Date('2026-06-05T00:00:00Z'),
+          },
+          {
+            engagement_id: 'eng-2',
+            onsite_start: null,
+            onsite_end: null,
+          },
+        ],
+        rowCount: 2,
+      })
+
+      const out = await getOnsiteRangesForEngagements(['eng-1', 'eng-2', 'eng-missing'])
+
+      expect(out.get('eng-1')).toEqual({
+        onsiteStart: '2026-06-01',
+        onsiteEnd: '2026-06-05',
+      })
+      expect(out.get('eng-2')).toEqual({
+        onsiteStart: null,
+        onsiteEnd: null,
+      })
+      expect(out.has('eng-missing')).toBe(false)
+
+      const [sql, params] = mockQuery.mock.calls[0]
+      expect(sql).toContain('engagement_schedule')
+      expect(sql).toContain('= ANY($1')
+      expect(params).toEqual([['eng-1', 'eng-2', 'eng-missing']])
     })
   })
 })

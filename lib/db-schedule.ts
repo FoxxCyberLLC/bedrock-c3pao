@@ -69,6 +69,43 @@ function mapRow(row: ScheduleRow): EngagementSchedule {
   }
 }
 
+export interface OnsiteRange {
+  onsiteStart: string | null
+  onsiteEnd: string | null
+}
+
+/**
+ * Bulk fetch onsite_start/onsite_end for a list of engagement ids. Engagements
+ * without a row in engagement_schedule are absent from the returned map (the
+ * caller decides on the fallback). Used by the engagements list to surface the
+ * Schedule & Logistics on-site dates as the table's Schedule column.
+ */
+export async function getOnsiteRangesForEngagements(
+  engagementIds: ReadonlyArray<string>,
+): Promise<Map<string, OnsiteRange>> {
+  const out = new Map<string, OnsiteRange>()
+  if (engagementIds.length === 0) return out
+
+  const result = await query(
+    `SELECT engagement_id, onsite_start, onsite_end
+     FROM engagement_schedule
+     WHERE engagement_id = ANY($1::uuid[])`,
+    [engagementIds],
+  )
+
+  for (const row of result.rows as Array<{
+    engagement_id: string
+    onsite_start: string | Date | null
+    onsite_end: string | Date | null
+  }>) {
+    out.set(row.engagement_id, {
+      onsiteStart: dateToIso(row.onsite_start),
+      onsiteEnd: dateToIso(row.onsite_end),
+    })
+  }
+  return out
+}
+
 /** Fetch the schedule row, or null if the engagement has no row yet. */
 export async function getSchedule(engagementId: string): Promise<EngagementSchedule | null> {
   const result = await query(
