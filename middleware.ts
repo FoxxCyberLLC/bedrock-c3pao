@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { decryptC3PAOSession } from './lib/auth-edge'
+import { isInstanceConfigured } from './lib/instance-config'
 
 const PUBLIC_ROUTES = ['/login', '/setup']
 
@@ -32,13 +33,17 @@ export async function middleware(request: NextRequest) {
   const isSetupRoute = path.startsWith('/setup')
   const isAdminRoute = path.startsWith('/admin')
 
-  // Instance is configured iff the server holds the instance API key. After cold
-  // start instrumentation.ts loads it into process.env; completeSetup() sets it
-  // inline. Because this middleware runs on the Node.js runtime (see below) it
-  // sees those mutations, so we rely on server state ONLY (L4): a forgeable
-  // client cookie must never create a "configured" state, which could otherwise
-  // be used to block a legitimate first-run /setup by bouncing it to /login.
-  const isConfigured = !!process.env.INSTANCE_API_KEY
+  // Instance is configured iff the durable config exists. isInstanceConfigured()
+  // checks process.env.INSTANCE_API_KEY first (the fast path, populated at boot
+  // by start.js / instrumentation.ts) and falls back to the Postgres app_config
+  // truth (isAppConfigured). The DB fallback is essential: completeSetup() writes
+  // config to Postgres but its inline process.env mutation only lands in the one
+  // worker that served the request — sibling workers (and the worker serving the
+  // next page request) never saw it, which bounced freshly-configured instances
+  // back to /setup until a restart. Reading the DB truth fixes that with no
+  // restart. We still rely on SERVER state ONLY (L4): a forgeable client cookie
+  // must never create a "configured" state.
+  const isConfigured = await isInstanceConfigured()
 
   // If not configured and not on setup page → redirect to setup
   if (!isConfigured && !isSetupRoute) {
