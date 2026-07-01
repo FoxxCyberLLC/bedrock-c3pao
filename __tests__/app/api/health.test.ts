@@ -48,4 +48,19 @@ describe('GET /api/health', () => {
     expect(body.status).toBe('healthy')
     expect(body.timestamp).toBeDefined()
   })
+
+  it('reports offline without contacting any remote host when OFFLINE=true (Task 10)', async () => {
+    process.env.OFFLINE = 'true'
+    try {
+      const { GET } = await import('@/app/api/health/route')
+      const response = await GET()
+      const body = await response.json()
+
+      expect(body.status).toBe('healthy')
+      expect(body.api.status).toBe('offline')
+      expect(mockFetch).not.toHaveBeenCalled()
+    } finally {
+      delete process.env.OFFLINE
+    }
+  })
 })

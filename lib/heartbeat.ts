@@ -1,12 +1,15 @@
 import { getInstanceConfig } from './instance-config'
+import { isOffline } from './mode'
 
 const APP_VERSION = process.env.npm_package_version || '0.1.0'
 
 /**
  * Send a heartbeat to the Go API.
- * Fire-and-forget — never throws, never blocks.
+ * Fire-and-forget — never throws, never blocks. No-op in air-gapped mode.
  */
 export async function sendHeartbeat(): Promise<void> {
+  // Air-gapped: there is no remote to phone home to.
+  if (isOffline()) return
   try {
     const config = await getInstanceConfig()
     if (!config?.instanceApiKey) return

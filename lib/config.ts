@@ -74,9 +74,18 @@ export async function setConfigBatch(entries: Record<string, string>): Promise<v
   }
 }
 
+/**
+ * True once setup has completed. Two valid shapes:
+ *  - Online: both INSTANCE_API_KEY and BEDROCK_API_URL are stored.
+ *  - Air-gapped: AUTH_SECRET and the OFFLINE marker are stored (no remote API).
+ */
 export async function isAppConfigured(): Promise<boolean> {
   const result = await query(
-    `SELECT COUNT(*) as count FROM app_config WHERE key IN ('INSTANCE_API_KEY', 'BEDROCK_API_URL')`
+    `SELECT
+       COUNT(*) FILTER (WHERE key IN ('INSTANCE_API_KEY', 'BEDROCK_API_URL')) AS online_count,
+       COUNT(*) FILTER (WHERE key IN ('AUTH_SECRET', 'OFFLINE')) AS offline_count
+     FROM app_config`
   )
-  return parseInt(result.rows[0]?.count, 10) === 2
+  const row = result.rows[0]
+  return parseInt(row?.online_count, 10) === 2 || parseInt(row?.offline_count, 10) === 2
 }

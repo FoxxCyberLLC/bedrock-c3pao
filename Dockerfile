@@ -59,6 +59,12 @@ EXPOSE 3001
 ENV PORT=3001
 ENV HOSTNAME="0.0.0.0"
 
+# Air-gapped defaults: run fully offline (no Bedrock API), evidence on a local volume.
+# Boot requires only DATABASE_URL + CONFIG_ENCRYPTION_KEY; BEDROCK_API_URL / INSTANCE_API_KEY
+# are intentionally unset. Override OFFLINE=false only for a connected SaaS build.
+ENV OFFLINE=true
+ENV EVIDENCE_DIR=/app/data/evidence
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider --no-check-certificate https://localhost:3001/api/health || exit 1
 

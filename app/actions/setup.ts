@@ -133,6 +133,53 @@ export async function completeSetup(
   }
 }
 
+interface OfflineSetupParams {
+  c3paoId: string
+  c3paoName: string
+  adminName: string
+  adminEmail: string
+  adminPassword: string
+}
+
+/**
+ * Air-gapped setup — no instance key, no API URL, NO network call. Stores AUTH_SECRET +
+ * the OFFLINE marker (which flips isAppConfigured true) and creates the local admin.
+ */
+export async function completeOfflineSetup(
+  params: OfflineSetupParams
+): Promise<{ success: boolean; error?: string }> {
+  if (await isAppConfigured()) {
+    return { success: false, error: 'Instance is already configured' }
+  }
+
+  try {
+    const authSecret = crypto.randomBytes(32).toString('base64')
+
+    await setConfigBatch({
+      AUTH_SECRET: authSecret,
+      OFFLINE: 'true',
+      FORCE_HTTPS: 'true',
+      C3PAO_ID: params.c3paoId,
+      C3PAO_NAME: params.c3paoName,
+      ACTIVATED_AT: new Date().toISOString(),
+    })
+
+    await createLocalAdmin(params.adminEmail, params.adminName, params.adminPassword)
+
+    // Immediate use without a restart (mirrors completeSetup). No remote-API env.
+    process.env.AUTH_SECRET = authSecret
+    process.env.OFFLINE = 'true'
+    process.env.FORCE_HTTPS = 'true'
+
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save configuration',
+    }
+  }
+}
+
 export async function getSetupStatus(): Promise<{
   configured: boolean
   config: {

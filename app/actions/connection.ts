@@ -1,6 +1,7 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
 
 // Connection settings are configured during the setup wizard and stored in PostgreSQL.
 
@@ -11,6 +12,14 @@ export async function saveConnectionConfig(): Promise<{ success: boolean; error?
 export async function getConnectionStatus() {
   const session = await requireAuth()
   if (!session) return { success: false, error: 'Unauthorized' }
+
+  if (isOffline()) {
+    // Air-gapped: intentionally disconnected — never probe a remote host.
+    return {
+      success: true,
+      data: { connected: false, offline: true, apiVersion: null, timestamp: new Date().toISOString() },
+    }
+  }
 
   const apiUrl = process.env.BEDROCK_API_URL || 'http://localhost:8080'
 

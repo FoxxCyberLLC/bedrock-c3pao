@@ -192,9 +192,9 @@ describe('lib/config', () => {
   })
 
   describe('isAppConfigured()', () => {
-    it('should return true when both keys exist', async () => {
+    it('should return true when both online keys exist', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ count: '2' }],
+        rows: [{ online_count: '2', offline_count: '0' }],
         rowCount: 1,
       })
 
@@ -204,7 +204,7 @@ describe('lib/config', () => {
 
     it('should return false when keys are missing', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ count: '0' }],
+        rows: [{ online_count: '0', offline_count: '0' }],
         rowCount: 1,
       })
 
@@ -212,14 +212,24 @@ describe('lib/config', () => {
       expect(result).toBe(false)
     })
 
-    it('should return false when only one key exists', async () => {
+    it('should return false when only one online key exists', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ count: '1' }],
+        rows: [{ online_count: '1', offline_count: '0' }],
         rowCount: 1,
       })
 
       const result = await isAppConfigured()
       expect(result).toBe(false)
+    })
+
+    it('should return true for a completed air-gapped setup (AUTH_SECRET + OFFLINE)', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ online_count: '0', offline_count: '2' }],
+        rowCount: 1,
+      })
+
+      const result = await isAppConfigured()
+      expect(result).toBe(true)
     })
   })
 })
