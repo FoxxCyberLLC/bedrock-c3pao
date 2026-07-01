@@ -5,6 +5,8 @@
  * All data flows through the Go API — no direct database access.
  */
 
+import { assertOnline } from './mode'
+
 const API_URL = process.env.BEDROCK_API_URL || 'http://localhost:8080'
 
 export class ApiError extends Error {
@@ -31,6 +33,8 @@ interface RequestOptions {
 }
 
 async function apiRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
+  // Offline guard (Task 4): never touch the network when air-gapped; fail loud instead.
+  assertOnline(endpoint)
   const { method = 'GET', body, token, timeout = 30000 } = options
 
   const headers: Record<string, string> = {
