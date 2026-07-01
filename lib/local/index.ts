@@ -4,3 +4,4 @@
  * place. For now it exposes the offline-mode utilities.
  */
 export { isOffline, assertOnline, OfflineModeError } from '@/lib/mode'
+export { getLocalEngagementSummaries, getLocalEngagementDetail } from './engagements'

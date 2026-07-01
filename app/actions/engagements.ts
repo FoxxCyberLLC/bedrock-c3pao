@@ -1,6 +1,8 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalEngagementSummaries, getLocalEngagementDetail } from '@/lib/local/engagements'
 import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
   fetchAssessments,
@@ -33,6 +35,15 @@ async function getToken(): Promise<string> {
   return session.apiToken
 }
 
+/**
+ * Load an engagement's detail row. Air-gapped: from the imported snapshot (local Postgres);
+ * online: from the Go API. Returns null when the engagement is not present locally.
+ */
+async function loadEngagementDetail(id: string, token: string): Promise<Record<string, unknown> | null> {
+  if (isOffline()) return getLocalEngagementDetail(id)
+  return fetchEngagementDetail(id, token)
+}
+
 // checkEngagementStatus fetches only the status and assessmentResult for an engagement.
 // Used by the layout to determine if a redirect is needed before rendering any sub-page.
 // Returns null if the engagement is not found or the request fails.
@@ -41,7 +52,8 @@ export async function checkEngagementStatus(
 ): Promise<{ status: string; assessmentResult: string | null } | null> {
   try {
     const token = await getToken()
-    const detail = await fetchEngagementDetail(id, token)
+    const detail = await loadEngagementDetail(id, token)
+    if (!detail) return null
     return {
       status: (detail.status as string) || '',
       assessmentResult: (detail.assessmentResult as string) || null,
@@ -54,7 +66,7 @@ export async function checkEngagementStatus(
 export async function getC3PAOEngagements(): Promise<{ success: boolean; data?: EngagementSummary[]; error?: string }> {
   try {
     const token = await getToken()
-    const engagements = await fetchAssessments(token)
+    const engagements = isOffline() ? await getLocalEngagementSummaries() : await fetchAssessments(token)
     return { success: true, data: engagements }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load engagements' }
@@ -65,7 +77,8 @@ export async function getC3PAOEngagements(): Promise<{ success: boolean; data?: 
 export async function getEngagementById(id: string): Promise<{ success: boolean; data?: any; accessLevel?: string; error?: string }> {
   try {
     const token = await getToken()
-    const detail = await fetchEngagementDetail(id, token)
+    const detail = await loadEngagementDetail(id, token)
+    if (!detail) return { success: false, error: 'Engagement not found' }
 
     // Short-circuit for COMPLETED: the layout will redirect before this page renders,
     // but if called directly return minimal data to avoid 5 failing parallel fetches.
