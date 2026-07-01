@@ -5,6 +5,7 @@ import { isOffline } from '@/lib/mode'
 import { getLocalEngagementSummaries, getLocalEngagementDetail } from '@/lib/local/engagements'
 import { getLocalControls } from '@/lib/local/controls'
 import { getLocalObjectives } from '@/lib/local/objectives'
+import { getLocalSnapshots, startLocalCorrectionOpportunity, resumeLocalReEvaluation } from '@/lib/local/snapshots'
 import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
   fetchAssessments,
@@ -481,7 +482,7 @@ export async function listSnapshotsAction(
 ): Promise<{ success: boolean; data?: AssessmentSnapshotView[]; error?: string }> {
   try {
     const token = await getToken()
-    const data = await fetchSnapshots(engagementId, token)
+    const data = isOffline() ? await getLocalSnapshots(engagementId) : await fetchSnapshots(engagementId, token)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load snapshots' }
@@ -492,8 +493,16 @@ export async function giveCorrectionOpportunityAction(
   engagementId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const token = await getToken()
-    await startCorrectionOpportunity(engagementId, token)
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    if (isOffline()) {
+      await startLocalCorrectionOpportunity(engagementId, {
+        id: session.c3paoUser.id,
+        name: session.c3paoUser.name,
+      })
+    } else {
+      await startCorrectionOpportunity(engagementId, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to start correction opportunity' }
@@ -505,7 +514,11 @@ export async function resumeReEvaluationAction(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await resumeReEvaluation(engagementId, token)
+    if (isOffline()) {
+      await resumeLocalReEvaluation(engagementId)
+    } else {
+      await resumeReEvaluation(engagementId, token)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to resume re-evaluation' }

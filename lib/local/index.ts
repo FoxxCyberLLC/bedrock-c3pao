@@ -15,3 +15,9 @@ export {
 } from './engagements'
 export { getLocalControls, updateLocalControlNotes, getLocalStats } from './controls'
 export { getLocalObjectives, getLocalObjective, updateLocalObjective } from './objectives'
+export {
+  getLocalSnapshots,
+  getLocalSnapshotObjectives,
+  startLocalCorrectionOpportunity,
+  resumeLocalReEvaluation,
+} from './snapshots'
