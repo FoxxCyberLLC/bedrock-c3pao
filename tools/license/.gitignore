@@ -1,0 +1,4 @@
+# Never commit signing keys
+*.pem
+*.key
+keys/
