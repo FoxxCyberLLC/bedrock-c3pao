@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth'
 import { isOffline } from '@/lib/mode'
 import { getLocalEngagementSummaries, getLocalEngagementDetail } from '@/lib/local/engagements'
 import { getLocalControls } from '@/lib/local/controls'
+import { getLocalObjectives } from '@/lib/local/objectives'
 import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
   fetchAssessments,
@@ -96,7 +97,7 @@ export async function getEngagementById(id: string): Promise<{ success: boolean;
     // degrade to empty via allSettled.
     const [controls, objectives, evidence, poams, ssp] = await Promise.allSettled([
       isOffline() ? getLocalControls(id) : fetchControls(id, token),
-      fetchObjectives(id, token),
+      isOffline() ? getLocalObjectives(id) : fetchObjectives(id, token),
       fetchEvidence(id, token),
       fetchPOAMs(id, token),
       fetchSSP(id, token),
@@ -174,7 +175,7 @@ export async function getEngagementControls(engagementId: string): Promise<{ suc
 export async function getEngagementObjectives(engagementId: string): Promise<{ success: boolean; data?: ObjectiveView[]; error?: string }> {
   try {
     const token = await getToken()
-    const objectives = await fetchObjectives(engagementId, token)
+    const objectives = isOffline() ? await getLocalObjectives(engagementId) : await fetchObjectives(engagementId, token)
     return { success: true, data: objectives }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load objectives' }

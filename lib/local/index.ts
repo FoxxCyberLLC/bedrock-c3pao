@@ -14,3 +14,4 @@ export {
   getLocalEngagementLifecycle,
 } from './engagements'
 export { getLocalControls, updateLocalControlNotes, getLocalStats } from './controls'
+export { getLocalObjectives, getLocalObjective, updateLocalObjective } from './objectives'

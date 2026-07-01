@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth'
 import { isOffline } from '@/lib/mode'
 import { setLocalEngagementStatus } from '@/lib/local/engagements'
 import { getLocalStats } from '@/lib/local/controls'
+import { updateLocalObjective } from '@/lib/local/objectives'
 import type { CMMCStatus } from '@/lib/cmmc/status-determination'
 import {
   fetchProfile,
@@ -336,7 +337,11 @@ export async function assessorUpdateObjectiveStatus(dataOrEngagementId: string |
       objId = dataOrEngagementId.objectiveId as string
       payload = dataOrEngagementId
     }
-    await updateObjective(engId, objId, payload, token)
+    if (isOffline()) {
+      await updateLocalObjective(engId, objId, payload)
+    } else {
+      await updateObjective(engId, objId, payload, token)
+    }
     return { success: true }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Failed to update objective status'
