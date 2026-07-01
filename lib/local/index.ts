@@ -38,3 +38,4 @@ export {
   getLocalDailyProgress, getLocalProgressByDomain, getLocalProgressByAssessor,
   getLocalPlanning, updateLocalPlanning, sendLocalProposal, acknowledgeLocalIntroduction,
 } from './progress'
+export { getLocalCustomerReadiness, confirmLocalCustomerReadinessItem } from './readiness'

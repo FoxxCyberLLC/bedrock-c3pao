@@ -11,6 +11,8 @@
  */
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalCustomerReadiness, confirmLocalCustomerReadinessItem } from '@/lib/local/readiness'
 import {
   fetchCustomerReadiness,
   confirmCustomerReadinessItem as apiConfirmCustomerReadinessItem,
@@ -37,7 +39,9 @@ export async function getCustomerReadiness(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchCustomerReadiness(engagementId, session.apiToken)
+    const data = isOffline()
+      ? await getLocalCustomerReadiness(engagementId)
+      : await fetchCustomerReadiness(engagementId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
@@ -58,11 +62,9 @@ export async function confirmCustomerReadiness(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiConfirmCustomerReadinessItem(
-      engagementId,
-      itemType,
-      session.apiToken,
-    )
+    const data = isOffline()
+      ? await confirmLocalCustomerReadinessItem(engagementId, itemType)
+      : await apiConfirmCustomerReadinessItem(engagementId, itemType, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
