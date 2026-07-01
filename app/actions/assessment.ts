@@ -3,6 +3,7 @@
 import { requireAuth } from '@/lib/auth'
 import { isOffline } from '@/lib/mode'
 import { updateLocalControlNotes } from '@/lib/local/controls'
+import { getLocalFindings, createLocalFinding, updateLocalFinding } from '@/lib/local/findings'
 import {
   fetchFindings,
   createFinding,
@@ -44,34 +45,30 @@ export async function saveAssessmentFinding(input: {
     const token = await getToken()
     const reqId = input.controlId || input.requirementId || ''
 
+    const updateInput = {
+      determination: input.determination || undefined,
+      methodInterview: input.methodInterview,
+      methodExamine: input.methodExamine,
+      methodTest: input.methodTest,
+      finding: input.findingText || input.finding || undefined,
+      objectiveEvidence: input.objectiveEvidence || undefined,
+      deficiency: input.deficiency || undefined,
+      recommendation: input.recommendation || undefined,
+      riskLevel: input.riskLevel || undefined,
+    }
+
     let result
     if (input.findingId) {
       // Update existing finding
-      result = await updateFinding(input.engagementId, input.findingId, {
-        determination: input.determination || undefined,
-        methodInterview: input.methodInterview,
-        methodExamine: input.methodExamine,
-        methodTest: input.methodTest,
-        finding: input.findingText || input.finding || undefined,
-        objectiveEvidence: input.objectiveEvidence || undefined,
-        deficiency: input.deficiency || undefined,
-        recommendation: input.recommendation || undefined,
-        riskLevel: input.riskLevel || undefined,
-      }, token)
+      result = isOffline()
+        ? await updateLocalFinding(input.engagementId, input.findingId, updateInput)
+        : await updateFinding(input.engagementId, input.findingId, updateInput, token)
     } else {
       // Create new finding
-      result = await createFinding(input.engagementId, {
-        requirementId: reqId,
-        determination: input.determination || 'NOT_ASSESSED',
-        methodInterview: input.methodInterview,
-        methodExamine: input.methodExamine,
-        methodTest: input.methodTest,
-        finding: input.findingText || input.finding || undefined,
-        objectiveEvidence: input.objectiveEvidence || undefined,
-        deficiency: input.deficiency || undefined,
-        recommendation: input.recommendation || undefined,
-        riskLevel: input.riskLevel || undefined,
-      }, token)
+      const createInput = { ...updateInput, requirementId: reqId, determination: input.determination || 'NOT_ASSESSED' }
+      result = isOffline()
+        ? await createLocalFinding(input.engagementId, createInput)
+        : await createFinding(input.engagementId, createInput, token)
     }
 
     return { success: true, data: result }
@@ -83,7 +80,7 @@ export async function saveAssessmentFinding(input: {
 export async function getAssessmentFindings(engagementId: string): Promise<{ success: boolean; data?: FindingView[]; error?: string }> {
   try {
     const token = await getToken()
-    const findings = await fetchFindings(engagementId, token)
+    const findings = isOffline() ? await getLocalFindings(engagementId) : await fetchFindings(engagementId, token)
     return { success: true, data: findings }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load findings' }

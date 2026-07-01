@@ -3,6 +3,7 @@
 import { requireAuth } from '@/lib/auth'
 import { isOffline } from '@/lib/mode'
 import { getLocalStats } from '@/lib/local/controls'
+import { reviewLocalFinding } from '@/lib/local/findings'
 import { saveAssessmentFinding as _save, getAssessmentFindings as _getFindings, updateAssessorNotes as _updateNotes } from './assessment'
 import {
   fetchReport, fetchAssessmentReport as apiFetchAssessmentReport, fetchStats,
@@ -141,8 +142,10 @@ export async function reviewAssessmentFinding(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiReviewFinding(engagementId, findingId, { status, notes }, session.apiToken)
-    return { success: true, data }
+    const data = isOffline()
+      ? await reviewLocalFinding(engagementId, findingId, { status, notes })
+      : await apiReviewFinding(engagementId, findingId, { status, notes }, session.apiToken)
+    return { success: true, data: data ?? undefined }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to review finding' }
   }

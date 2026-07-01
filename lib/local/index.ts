@@ -23,3 +23,4 @@ export {
 } from './snapshots'
 export { getLocalEvidence, getLocalEvidenceObject, getLocalEvidenceBytes } from './evidence'
 export { getLocalSSP, getLocalAssets, getLocalPoams } from './ssp-assets-poam'
+export { getLocalFindings, createLocalFinding, updateLocalFinding, reviewLocalFinding } from './findings'
