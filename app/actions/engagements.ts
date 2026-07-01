@@ -3,6 +3,7 @@
 import { requireAuth } from '@/lib/auth'
 import { isOffline } from '@/lib/mode'
 import { getLocalEngagementSummaries, getLocalEngagementDetail } from '@/lib/local/engagements'
+import { getLocalControls } from '@/lib/local/controls'
 import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
   fetchAssessments,
@@ -90,9 +91,11 @@ export async function getEngagementById(id: string): Promise<{ success: boolean;
       }
     }
 
-    // Fetch controls, objectives, evidence, POAMs, and SSP in parallel
+    // Fetch controls, objectives, evidence, POAMs, and SSP in parallel. Offline sources are
+    // repointed to the local layer per domain as Tasks 12-15 land; unported ones reject and
+    // degrade to empty via allSettled.
     const [controls, objectives, evidence, poams, ssp] = await Promise.allSettled([
-      fetchControls(id, token),
+      isOffline() ? getLocalControls(id) : fetchControls(id, token),
       fetchObjectives(id, token),
       fetchEvidence(id, token),
       fetchPOAMs(id, token),
@@ -161,7 +164,7 @@ export async function getEngagementById(id: string): Promise<{ success: boolean;
 export async function getEngagementControls(engagementId: string): Promise<{ success: boolean; data?: ControlView[]; error?: string }> {
   try {
     const token = await getToken()
-    const controls = await fetchControls(engagementId, token)
+    const controls = isOffline() ? await getLocalControls(engagementId) : await fetchControls(engagementId, token)
     return { success: true, data: controls }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load controls' }

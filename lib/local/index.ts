@@ -13,3 +13,4 @@ export {
   setLocalEngagementPhase,
   getLocalEngagementLifecycle,
 } from './engagements'
+export { getLocalControls, updateLocalControlNotes, getLocalStats } from './controls'

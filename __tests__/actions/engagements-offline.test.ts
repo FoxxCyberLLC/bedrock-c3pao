@@ -11,6 +11,7 @@ vi.mock('@/lib/local/engagements', () => ({
   getLocalEngagementSummaries: () => getLocalEngagementSummaries(),
   getLocalEngagementDetail: (id: string) => getLocalEngagementDetail(id),
 }))
+vi.mock('@/lib/local/controls', () => ({ getLocalControls: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/lib/api-client', () => ({
   fetchAssessments: (...a: unknown[]) => fetchAssessments(...a),
   fetchEngagementDetail: vi.fn(),

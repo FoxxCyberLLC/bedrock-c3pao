@@ -1,11 +1,12 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { updateLocalControlNotes } from '@/lib/local/controls'
 import {
   fetchFindings,
   createFinding,
   updateFinding,
-  createNote,
   fetchNotes,
   updateControlNotes,
   type FindingView,
@@ -96,7 +97,11 @@ export async function updateAssessorNotes(input: {
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await updateControlNotes(input.engagementId, input.requirementStatusId, input.assessmentNotes, token)
+    if (isOffline()) {
+      await updateLocalControlNotes(input.requirementStatusId, input.assessmentNotes)
+    } else {
+      await updateControlNotes(input.engagementId, input.requirementStatusId, input.assessmentNotes, token)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to save notes' }

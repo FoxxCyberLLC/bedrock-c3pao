@@ -1,6 +1,8 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalStats } from '@/lib/local/controls'
 import { saveAssessmentFinding as _save, getAssessmentFindings as _getFindings, updateAssessorNotes as _updateNotes } from './assessment'
 import {
   fetchReport, fetchAssessmentReport as apiFetchAssessmentReport, fetchStats,
@@ -27,7 +29,7 @@ export async function getAssessmentStats(engagementId: string) {
     const session = await requireAuth()
     if (!session) return { success: false, data: null, error: 'Unauthorized' }
     const token = session.apiToken
-    const stats = await fetchStats(engagementId, token)
+    const stats = isOffline() ? await getLocalStats(engagementId) : await fetchStats(engagementId, token)
     const totals = stats.totals
     // Compute 'assessed' as total - notAssessed for component compatibility
     const assessed = totals.total - (totals.notAssessed || 0)
@@ -69,7 +71,6 @@ export async function getAssessmentReport(engagementId: string): Promise<{ succe
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function updateReportStatus(engagementId: string, status: string): Promise<{ success: boolean; error?: string }> {
   try {
     const session = await requireAuth()
