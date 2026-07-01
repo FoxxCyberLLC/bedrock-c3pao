@@ -6,6 +6,7 @@ import { getLocalEngagementSummaries, getLocalEngagementDetail } from '@/lib/loc
 import { getLocalControls } from '@/lib/local/controls'
 import { getLocalObjectives } from '@/lib/local/objectives'
 import { getLocalEvidence } from '@/lib/local/evidence'
+import { getLocalSSP, getLocalPoams } from '@/lib/local/ssp-assets-poam'
 import { getLocalSnapshots, startLocalCorrectionOpportunity, resumeLocalReEvaluation } from '@/lib/local/snapshots'
 import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
@@ -101,8 +102,8 @@ export async function getEngagementById(id: string): Promise<{ success: boolean;
       isOffline() ? getLocalControls(id) : fetchControls(id, token),
       isOffline() ? getLocalObjectives(id) : fetchObjectives(id, token),
       isOffline() ? getLocalEvidence(id) : fetchEvidence(id, token),
-      fetchPOAMs(id, token),
-      fetchSSP(id, token),
+      isOffline() ? getLocalPoams(id) : fetchPOAMs(id, token),
+      isOffline() ? getLocalSSP(id) : fetchSSP(id, token),
     ])
 
     const controlsData = controls.status === 'fulfilled' ? controls.value : []
@@ -197,7 +198,7 @@ export async function getEngagementEvidence(engagementId: string): Promise<{ suc
 export async function getEngagementPoams(engagementId: string): Promise<{ success: boolean; data?: POAMView[]; error?: string }> {
   try {
     const token = await getToken()
-    const poams = await fetchPOAMs(engagementId, token)
+    const poams = isOffline() ? await getLocalPoams(engagementId) : await fetchPOAMs(engagementId, token)
     return { success: true, data: poams }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load POA&Ms' }
@@ -207,8 +208,8 @@ export async function getEngagementPoams(engagementId: string): Promise<{ succes
 export async function getEngagementSSP(engagementId: string): Promise<{ success: boolean; data?: SSPView; error?: string }> {
   try {
     const token = await getToken()
-    const ssp = await fetchSSP(engagementId, token)
-    return { success: true, data: ssp }
+    const ssp = isOffline() ? await getLocalSSP(engagementId) : await fetchSSP(engagementId, token)
+    return { success: true, data: ssp ?? undefined }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load SSP' }
   }

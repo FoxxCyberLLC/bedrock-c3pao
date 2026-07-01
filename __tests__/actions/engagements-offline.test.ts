@@ -14,6 +14,11 @@ vi.mock('@/lib/local/engagements', () => ({
 vi.mock('@/lib/local/controls', () => ({ getLocalControls: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/lib/local/objectives', () => ({ getLocalObjectives: vi.fn().mockResolvedValue([]) }))
 vi.mock('@/lib/local/evidence', () => ({ getLocalEvidence: vi.fn().mockResolvedValue([]) }))
+vi.mock('@/lib/local/ssp-assets-poam', () => ({
+  getLocalSSP: vi.fn().mockResolvedValue(null),
+  getLocalAssets: vi.fn().mockResolvedValue([]),
+  getLocalPoams: vi.fn().mockResolvedValue([]),
+}))
 vi.mock('@/lib/api-client', () => ({
   fetchAssessments: (...a: unknown[]) => fetchAssessments(...a),
   fetchEngagementDetail: vi.fn(),

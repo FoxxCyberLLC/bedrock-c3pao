@@ -21,4 +21,5 @@ export {
   startLocalCorrectionOpportunity,
   resumeLocalReEvaluation,
 } from './snapshots'
-export { getLocalEvidence, getLocalEvidenceObject } from './evidence'
+export { getLocalEvidence, getLocalEvidenceObject, getLocalEvidenceBytes } from './evidence'
+export { getLocalSSP, getLocalAssets, getLocalPoams } from './ssp-assets-poam'

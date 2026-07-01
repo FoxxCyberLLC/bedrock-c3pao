@@ -5,6 +5,7 @@ import { isOffline } from '@/lib/mode'
 import { setLocalEngagementStatus } from '@/lib/local/engagements'
 import { getLocalStats } from '@/lib/local/controls'
 import { updateLocalObjective } from '@/lib/local/objectives'
+import { getLocalSSP, getLocalAssets, getLocalPoams } from '@/lib/local/ssp-assets-poam'
 import type { CMMCStatus } from '@/lib/cmmc/status-determination'
 import {
   fetchProfile,
@@ -434,7 +435,7 @@ export async function getEvidenceRepositoryForC3PAO(engagementId: string): Promi
 export async function getSSPLongFormDataForC3PAO(engagementId: string): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const token = await getToken()
-    const data = await fetchSSP(engagementId, token)
+    const data = isOffline() ? await getLocalSSP(engagementId) : await fetchSSP(engagementId, token)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load SSP data' }
@@ -446,7 +447,7 @@ export async function getSSPLongFormDataForC3PAO(engagementId: string): Promise<
 export async function getAssetsForC3PAO(engagementId: string): Promise<{ success: boolean; data?: import('@/lib/api-client').AssetView[]; error?: string }> {
   try {
     const token = await getToken()
-    const data = await fetchAssets(engagementId, token)
+    const data = isOffline() ? await getLocalAssets(engagementId) : await fetchAssets(engagementId, token)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load assets' }
@@ -471,7 +472,7 @@ export async function getStatsForC3PAO(engagementId: string): Promise<{ success:
 export async function getPOAMForC3PAO(poamId: string, engagementId: string): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const token = await getToken()
-    const poams = await fetchPOAMs(engagementId, token)
+    const poams = isOffline() ? await getLocalPoams(engagementId) : await fetchPOAMs(engagementId, token)
     const poam = poams.find(p => p.id === poamId)
     if (!poam) {
       return { success: false, error: 'POAM not found' }
