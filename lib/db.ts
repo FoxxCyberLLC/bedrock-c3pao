@@ -1,5 +1,6 @@
 import { Pool, type QueryResult } from 'pg'
 import { seedReferenceCatalog } from './reference/seed-reference'
+import { ensureImportedSchema } from './local/schema'
 
 let _pool: Pool | null = null
 let _schemaPromise: Promise<void> | null = null
@@ -334,6 +335,9 @@ export async function ensureSchema(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_outside_evidence_objective_links_objective
         ON outside_evidence_objective_links (objective_id);
     `)
+
+    // Raw imported-snapshot tables (imp_*) for offline OSC engagements.
+    await ensureImportedSchema(pool)
 
     // Seed the CMMC L2 reference catalog (110 reqs / 14 families / 321 objectives /
     // CCI crosswalk). Idempotent + count-guarded, so this is cheap after first boot.
