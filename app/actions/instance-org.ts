@@ -2,6 +2,8 @@
 
 import { z } from 'zod'
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalInstanceOrg, getLocalInstanceUsers } from '@/lib/local/org'
 import {
   fetchInstanceOrg,
   fetchInstanceUsers,
@@ -39,7 +41,7 @@ export async function getInstanceOrg(): Promise<{
 }> {
   try {
     await requireAdmin()
-    const org = await fetchInstanceOrg()
+    const org = isOffline() ? await getLocalInstanceOrg() : await fetchInstanceOrg()
     return { success: true, data: org }
   } catch (error) {
     return {
@@ -56,7 +58,7 @@ export async function getInstanceUsers(): Promise<{
 }> {
   try {
     await requireAdmin()
-    const users = await fetchInstanceUsers()
+    const users = isOffline() ? await getLocalInstanceUsers() : await fetchInstanceUsers()
     return { success: true, data: users }
   } catch (error) {
     return {

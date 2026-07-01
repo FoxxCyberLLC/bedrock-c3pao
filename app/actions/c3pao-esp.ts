@@ -1,6 +1,8 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalESPsForEngagement, getLocalESPDetailForEngagement } from '@/lib/local/esp'
 import {
   fetchESPsForEngagement,
   fetchESPDetailForEngagement,
@@ -14,7 +16,7 @@ export async function getESPsByEngagement(
   const session = await requireAuth()
   if (!session) return { success: false, error: 'Unauthorized' }
   try {
-    const esps = await fetchESPsForEngagement(engagementId, session.apiToken)
+    const esps = isOffline() ? await getLocalESPsForEngagement(engagementId) : await fetchESPsForEngagement(engagementId, session.apiToken)
     return { success: true, data: esps }
   } catch (error) {
     return {
@@ -31,11 +33,9 @@ export async function getESPDetailForEngagement(
   const session = await requireAuth()
   if (!session) return { success: false, error: 'Unauthorized' }
   try {
-    const esp = await fetchESPDetailForEngagement(
-      engagementId,
-      espId,
-      session.apiToken,
-    )
+    const esp = (isOffline()
+      ? await getLocalESPDetailForEngagement(engagementId, espId)
+      : await fetchESPDetailForEngagement(engagementId, espId, session.apiToken)) ?? undefined
     return { success: true, data: esp }
   } catch (error) {
     return {

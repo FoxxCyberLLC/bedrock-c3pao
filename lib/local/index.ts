@@ -43,3 +43,16 @@ export {
   getLocalAssessmentReport, saveLocalAssessmentReport, updateLocalReportStatus,
   getLocalEMassExport, getLocalReport,
 } from './reports'
+export { getLocalPortfolioStats, getLocalPortfolioList, getLocalWorkload } from './portfolio'
+export {
+  getLocalProfile, updateLocalProfile, getLocalLicense, updateLocalAssessorSkills,
+  getLocalC3PAOUsers, getLocalInstanceOrg, getLocalInstanceUsers,
+} from './org'
+export {
+  getLocalCOIList, createLocalCOI, updateLocalCOI, checkLocalCOIAssignment,
+  getLocalQAReviews, getLocalEngagementQAReviews, createLocalQAReview, updateLocalQAReview,
+} from './coi-qa'
+export {
+  getLocalNotifications, getLocalUnreadCount, markLocalNotificationRead, markAllLocalNotificationsRead,
+} from './notifications'
+export { getLocalESPsForEngagement, getLocalESPDetailForEngagement } from './esp'

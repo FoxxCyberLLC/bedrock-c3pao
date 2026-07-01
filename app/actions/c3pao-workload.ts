@@ -11,6 +11,10 @@
  */
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalWorkload } from '@/lib/local/portfolio'
+import { updateLocalAssessorSkills } from '@/lib/local/org'
+import { getLocalTeam as getWTeam } from '@/lib/local/team'
 import {
   fetchTeam,
   fetchWorkload,
@@ -43,7 +47,7 @@ export async function getC3PAOWorkloadOverview(): Promise<WorkloadOverviewRespon
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const assessors = await fetchWorkload(session.apiToken)
+    const assessors = isOffline() ? await getLocalWorkload() : await fetchWorkload(session.apiToken)
     const overview: WorkloadOverview = {
       assessors,
       totalAssessors: assessors.length,
@@ -77,7 +81,7 @@ export async function getAssessorWorkload(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const assessors = await fetchWorkload(session.apiToken)
+    const assessors = isOffline() ? await getLocalWorkload() : await fetchWorkload(session.apiToken)
     const match = assessors.find((a) => a.assessorId === assessorId)
     if (!match) return { success: false, error: 'Assessor not found' }
     return { success: true, data: match }
@@ -113,13 +117,13 @@ export async function getC3PAOAssessmentActivity(): Promise<AssessmentActivityRe
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
 
-    const assessors = await fetchWorkload(session.apiToken)
+    const assessors = isOffline() ? await getLocalWorkload() : await fetchWorkload(session.apiToken)
     const engagementIds = collectActiveEngagementIds(assessors)
 
     const teamResults = await Promise.all(
       engagementIds.map(async (id) => {
         try {
-          const team = await fetchTeam(id, session.apiToken)
+          const team = isOffline() ? await getWTeam(id) : await fetchTeam(id, session.apiToken)
           return [id, team] as const
         } catch {
           return [id, [] as TeamMember[]] as const
@@ -155,7 +159,7 @@ export async function updateAssessorSkillsAction(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiUpdateSkills(assessorId, skills, session.apiToken)
+    const data = isOffline() ? await updateLocalAssessorSkills(assessorId, skills) : await apiUpdateSkills(assessorId, skills, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {

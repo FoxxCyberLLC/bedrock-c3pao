@@ -6,6 +6,8 @@
  */
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalQAReviews, getLocalEngagementQAReviews, createLocalQAReview, updateLocalQAReview } from '@/lib/local/coi-qa'
 import {
   fetchQAReviews,
   fetchEngagementQAReviews,
@@ -33,7 +35,7 @@ export async function getQAReviews(mine = false): Promise<QAReviewListResponse> 
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchQAReviews(session.apiToken, mine)
+    const data = isOffline() ? await getLocalQAReviews() : await fetchQAReviews(session.apiToken, mine)
     return { success: true, data }
   } catch (error) {
     return {
@@ -51,7 +53,7 @@ export async function getEngagementQAReviews(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchEngagementQAReviews(engagementId, session.apiToken)
+    const data = isOffline() ? await getLocalEngagementQAReviews(engagementId) : await fetchEngagementQAReviews(engagementId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
@@ -72,7 +74,7 @@ export async function createQAReviewAction(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiCreateQAReview(engagementId, input, session.apiToken)
+    const data = isOffline() ? await createLocalQAReview(engagementId, input) : await apiCreateQAReview(engagementId, input, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
@@ -91,7 +93,7 @@ export async function updateQAReviewAction(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiUpdateQAReview(reviewId, input, session.apiToken)
+    const data = (isOffline() ? await updateLocalQAReview(reviewId, input) : await apiUpdateQAReview(reviewId, input, session.apiToken)) ?? undefined
     return { success: true, data }
   } catch (error) {
     return {

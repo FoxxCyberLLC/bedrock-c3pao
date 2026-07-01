@@ -4,6 +4,7 @@ import { ensureImportedSchema } from './local/schema'
 import { ensureCollabSchema } from './local/collab'
 import { ensureTeamSchema } from './local/team'
 import { ensureReadinessSchema } from './local/readiness'
+import { ensureOrgSchema } from './local/coi-qa'
 
 let _pool: Pool | null = null
 let _schemaPromise: Promise<void> | null = null
@@ -350,6 +351,9 @@ export async function ensureSchema(): Promise<void> {
 
     // C3PAO-local customer readiness confirmations.
     await ensureReadinessSchema(pool)
+
+    // C3PAO-local COI disclosures + QA reviews.
+    await ensureOrgSchema(pool)
 
     // Seed the CMMC L2 reference catalog (110 reqs / 14 families / 321 objectives /
     // CCI crosswalk). Idempotent + count-guarded, so this is cheap after first boot.

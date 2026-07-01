@@ -2,6 +2,8 @@
 
 import { requireAuth } from '@/lib/auth'
 import { isOffline } from '@/lib/mode'
+import { getLocalProfile, getLocalLicense, updateLocalProfile } from '@/lib/local/org'
+import { createLocalUser, updateLocalUser, deleteLocalUser } from '@/lib/local-auth'
 import { setLocalEngagementStatus } from '@/lib/local/engagements'
 import { getLocalStats } from '@/lib/local/controls'
 import { updateLocalObjective } from '@/lib/local/objectives'
@@ -83,7 +85,7 @@ export async function updateAssessorNotes(...args: Parameters<typeof _updateNote
 export async function getC3PAOLicense(): Promise<{ success: boolean; data?: C3PAOLicense; error?: string }> {
   try {
     const token = await getToken()
-    const data = await fetchLicense(token)
+    const data = isOffline() ? await getLocalLicense() : await fetchLicense(token)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load license' }
@@ -95,7 +97,7 @@ export async function getC3PAOLicense(): Promise<{ success: boolean; data?: C3PA
 export async function getC3PAOProfile(): Promise<{ success: boolean; data?: unknown; error?: string }> {
   try {
     const token = await getToken()
-    const profile = await fetchProfile(token)
+    const profile = isOffline() ? await getLocalProfile() : await fetchProfile(token)
     return { success: true, data: profile }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load profile' }
@@ -124,7 +126,7 @@ export async function updateC3PAOProfile(data: FormData | Record<string, unknown
     } else {
       payload = data
     }
-    const updated = await updateProfile(payload, token)
+    const updated = isOffline() ? await updateLocalProfile() : await updateProfile(payload, token)
     return { success: true, data: updated }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update profile' }
@@ -134,7 +136,7 @@ export async function updateC3PAOProfile(data: FormData | Record<string, unknown
 export async function updateC3PAOLogo(base64DataUri: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await updateProfile({ logo: base64DataUri }, token)
+    if (isOffline()) { await updateLocalProfile() } else { await updateProfile({ logo: base64DataUri }, token) }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update logo' }
@@ -385,6 +387,10 @@ export async function addTeamMember(dataOrEngagementId: string | Record<string, 
       } else {
         await apiAddTeamMember(dataOrEngagementId, { assessorId: userId!, role: role || 'ASSESSOR' }, token)
       }
+    } else if (isOffline()) {
+      // Air-gapped: provision a local assessor account.
+      const u = dataOrEngagementId as { name: string; email: string; password: string; isLeadAssessor?: boolean }
+      await createLocalUser(u.email, u.name, u.password, u.isLeadAssessor ? 'lead_assessor' : 'assessor')
     } else {
       // Called as (data) — org-level user creation
       await createC3PAOUser(dataOrEngagementId as {
@@ -411,6 +417,13 @@ export async function updateTeamMember(memberIdOrEngagementId: string, dataOrAss
       } else {
         await updateTeamMemberRole(memberIdOrEngagementId, dataOrAssessorId, role!, token)
       }
+    } else if (isOffline()) {
+      const u = dataOrAssessorId as { name?: string; email?: string; isLeadAssessor?: boolean }
+      await updateLocalUser(memberIdOrEngagementId, {
+        name: u.name,
+        email: u.email,
+        role: u.isLeadAssessor === undefined ? undefined : u.isLeadAssessor ? 'lead_assessor' : 'assessor',
+      })
     } else {
       // Called as (memberId, data) — org-level user update
       await updateC3PAOUser(memberIdOrEngagementId, dataOrAssessorId as {
@@ -435,6 +448,8 @@ export async function deleteTeamMember(memberIdOrEngagementId: string, assessorI
       } else {
         await removeTeamMember(memberIdOrEngagementId, assessorId, token)
       }
+    } else if (isOffline()) {
+      await deleteLocalUser(memberIdOrEngagementId)
     } else {
       // Called as (memberId) — org-level user deactivation
       await deleteC3PAOUser(memberIdOrEngagementId, token)

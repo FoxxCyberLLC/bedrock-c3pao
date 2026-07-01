@@ -10,6 +10,8 @@
  */
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalNotifications, getLocalUnreadCount, markLocalNotificationRead, markAllLocalNotificationsRead } from '@/lib/local/notifications'
 import {
   fetchApiNotifications,
   fetchApiUnreadCount,
@@ -76,7 +78,7 @@ export async function getNotifications(): Promise<NotificationListResponse> {
     const session = await requireAuth()
     if (!session)
       return { success: true, data: { items: [], unreadCount: 0 } }
-    const list = await fetchApiNotifications(session.apiToken)
+    const list = isOffline() ? await getLocalNotifications() : await fetchApiNotifications(session.apiToken)
     return {
       success: true,
       data: {
@@ -99,7 +101,7 @@ export async function getUnreadNotificationCount(): Promise<UnreadCountResponse>
   try {
     const session = await requireAuth()
     if (!session) return { success: true, data: 0 }
-    const count = await fetchApiUnreadCount(session.apiToken)
+    const count = isOffline() ? await getLocalUnreadCount() : await fetchApiUnreadCount(session.apiToken)
     return { success: true, data: count }
   } catch (error) {
     return {
@@ -112,12 +114,11 @@ export async function getUnreadNotificationCount(): Promise<UnreadCountResponse>
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function markNotificationRead(notificationId: string): Promise<AckResponse> {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    await apiMarkNotificationRead(notificationId, session.apiToken)
+    if (isOffline()) { await markLocalNotificationRead() } else { await apiMarkNotificationRead(notificationId, session.apiToken) }
     return { success: true }
   } catch (error) {
     return {
@@ -134,7 +135,7 @@ export async function markAllNotificationsRead(): Promise<AckResponse> {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    await apiMarkAllNotificationsRead(session.apiToken)
+    if (isOffline()) { await markAllLocalNotificationsRead() } else { await apiMarkAllNotificationsRead(session.apiToken) }
     return { success: true }
   } catch (error) {
     return {

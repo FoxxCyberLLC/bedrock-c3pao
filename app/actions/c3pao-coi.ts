@@ -9,6 +9,8 @@
  */
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalCOIList, createLocalCOI, updateLocalCOI, checkLocalCOIAssignment } from '@/lib/local/coi-qa'
 import {
   fetchCOIList,
   createCOI as apiCreateCOI,
@@ -43,7 +45,7 @@ export async function getCOIList(): Promise<COIListResponse> {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchCOIList(session.apiToken)
+    const data = isOffline() ? await getLocalCOIList() : await fetchCOIList(session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
@@ -60,7 +62,7 @@ export async function createCOIDisclosure(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiCreateCOI(input, session.apiToken)
+    const data = isOffline() ? await createLocalCOI(input) : await apiCreateCOI(input, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
@@ -79,7 +81,7 @@ export async function updateCOIDisclosure(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiUpdateCOI(id, input, session.apiToken)
+    const data = (isOffline() ? await updateLocalCOI(id, input) : await apiUpdateCOI(id, input, session.apiToken)) ?? undefined
     return { success: true, data }
   } catch (error) {
     return {
@@ -102,11 +104,9 @@ export async function checkCOIForAssignment(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await checkCOIAssignment(
-      engagementId,
-      assessorId,
-      session.apiToken,
-    )
+    const data = isOffline()
+      ? await checkLocalCOIAssignment(engagementId, assessorId)
+      : await checkCOIAssignment(engagementId, assessorId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {

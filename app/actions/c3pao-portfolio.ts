@@ -9,6 +9,9 @@
  */
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalPortfolioStats, getLocalPortfolioList } from '@/lib/local/portfolio'
+import { getLocalTeam, addLocalTeamMember, updateLocalTeamMemberRole } from '@/lib/local/team'
 import {
   fetchPortfolioStats,
   fetchPortfolioList,
@@ -36,7 +39,7 @@ export async function getPortfolioStats(): Promise<PortfolioStatsResponse> {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchPortfolioStats(session.apiToken)
+    const data = isOffline() ? await getLocalPortfolioStats() : await fetchPortfolioStats(session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
@@ -55,7 +58,7 @@ export async function getPortfolioList(): Promise<PortfolioListResponse> {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchPortfolioList(session.apiToken)
+    const data = isOffline() ? await getLocalPortfolioList() : await fetchPortfolioList(session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
@@ -106,21 +109,14 @@ export async function bulkUpdateLead(
 
     for (const engagementId of engagementIds) {
       try {
-        const team = await fetchTeam(engagementId, session.apiToken)
+        const team = isOffline() ? await getLocalTeam(engagementId) : await fetchTeam(engagementId, session.apiToken)
         const existing = team.find((m) => m.assessorId === newLeadAssessorId)
         if (existing) {
-          await updateTeamMemberRole(
-            engagementId,
-            newLeadAssessorId,
-            'LEAD',
-            session.apiToken,
-          )
+          if (isOffline()) await updateLocalTeamMemberRole(engagementId, newLeadAssessorId, 'LEAD')
+          else await updateTeamMemberRole(engagementId, newLeadAssessorId, 'LEAD', session.apiToken)
         } else {
-          await addTeamMember(
-            engagementId,
-            { assessorId: newLeadAssessorId, role: 'LEAD' },
-            session.apiToken,
-          )
+          if (isOffline()) await addLocalTeamMember(engagementId, newLeadAssessorId, 'LEAD')
+          else await addTeamMember(engagementId, { assessorId: newLeadAssessorId, role: 'LEAD' }, session.apiToken)
         }
         succeeded.push(engagementId)
       } catch (error) {
