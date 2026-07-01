@@ -1041,10 +1041,6 @@ export interface STIGData {
   statistics: Record<string, unknown>
 }
 
-export async function fetchSTIGs(engagementId: string, token: string): Promise<STIGData> {
-  return apiRequest<STIGData>(`/api/c3pao/assessments/${engagementId}/stigs`, { token })
-}
-
 export interface STIGRuleView {
   id: string
   ruleId: string
@@ -1108,17 +1104,6 @@ export interface STIGTargetDetail {
   checklists: STIGChecklistView[]
   ruleSummary: STIGRuleSummary
   rules: STIGRuleView[]
-}
-
-export async function fetchSTIGTargetDetail(
-  engagementId: string,
-  targetId: string,
-  token: string,
-): Promise<STIGTargetDetail> {
-  return apiRequest<STIGTargetDetail>(
-    `/api/c3pao/assessments/${engagementId}/stigs/targets/${targetId}`,
-    { token },
-  )
 }
 
 // ---- Profile ----

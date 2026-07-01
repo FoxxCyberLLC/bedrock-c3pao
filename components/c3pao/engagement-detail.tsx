@@ -63,7 +63,6 @@ import { EngagementTeamCard } from './engagement-team-card'
 import { EngagementActions } from './engagement-actions'
 import { CompletedEngagementSummary } from './completed-engagement-summary'
 import { ConflictDialog } from './conflict-dialog'
-import { STIGViewer } from './stig-viewer'
 import { AssessmentPlanningBoard } from './assessment-planning-board'
 import { EngagementLifecycleStepper } from './engagement/engagement-lifecycle-stepper'
 import { EngagementOverview } from './engagement/engagement-overview'
@@ -1114,10 +1113,6 @@ function EngagementDetailFull({
                 <span className="hidden sm:inline">Evidence</span>
                 <Badge variant="secondary" className="ml-1">{pkg?.evidence.length || 0}</Badge>
               </TabsTrigger>
-              <TabsTrigger value="stigs" className="gap-2">
-                <FileJson className="h-4 w-4" />
-                <span className="hidden sm:inline">STIGs</span>
-              </TabsTrigger>
               <TabsTrigger value="poams" className="gap-2">
                 <AlertTriangle className="h-4 w-4" />
                 <span className="hidden sm:inline">POA&Ms</span>
@@ -1276,45 +1271,7 @@ function EngagementDetailFull({
 
         {/* Evidence Tab */}
         <TabsContent value="evidence" className="space-y-4">
-          {/* STIG Checklists Link */}
-          <Card className="bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
-            <CardContent className="flex items-center justify-between py-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/50">
-                  <FileJson className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <p className="font-medium">STIG Checklists</p>
-                  <p className="text-sm text-muted-foreground">
-                    View STIG scan results imported by the OSC
-                  </p>
-                </div>
-              </div>
-              <Button variant="outline" asChild>
-                <Link href={`/engagements/${engagement.id}/stigs`}>
-                  View STIGs
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
           <EvidenceViewer evidence={pkg?.evidence || []} engagementId={engagement.id} />
-        </TabsContent>
-
-        {/* STIGs Tab */}
-        <TabsContent value="stigs">
-          {pkg?.id ? (
-            <STIGViewer engagementId={engagement.id} assessmentModeActive={engagement.assessmentModeActive} />
-          ) : (
-            <Card>
-              <CardContent className="py-12 text-center">
-                <FileJson className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                <h3 className="mt-4 text-lg font-semibold">No Package Data</h3>
-                <p className="text-muted-foreground mt-1">
-                  Package information is not available.
-                </p>
-              </CardContent>
-            </Card>
-          )}
         </TabsContent>
 
         {/* Assets Tab */}

@@ -19,7 +19,6 @@ import {
   fetchPOAMs,
   fetchSSP,
   fetchTeam,
-  fetchSTIGs,
   fetchObjectives,
   fetchSnapshots,
   fetchC3PAOUsers,
@@ -33,7 +32,6 @@ import {
   type SSPView,
   type C3PAOUserItem,
   type AssessmentSnapshotView,
-  type STIGData,
 } from '@/lib/api-client'
 
 async function getToken(): Promise<string> {
@@ -251,16 +249,6 @@ export async function getEngagementTeam(engagementId: string): Promise<{ success
     return { success: true, data: team }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load team' }
-  }
-}
-
-export async function getEngagementStigs(engagementId: string): Promise<{ success: boolean; data?: STIGData; error?: string }> {
-  try {
-    const token = await getToken()
-    const stigs = await fetchSTIGs(engagementId, token)
-    return { success: true, data: stigs }
-  } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : 'Failed to load STIGs' }
   }
 }
 

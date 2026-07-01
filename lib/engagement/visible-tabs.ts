@@ -16,7 +16,6 @@ export type PackageTabId =
   | 'policies'
   | 'assets'
   | 'evidence'
-  | 'stigs'
   | 'poams'
   | 'full-ssp'
 
@@ -50,7 +49,6 @@ const PACKAGE_TABS: ReadonlyArray<PackageTabId> = [
   'policies',
   'assets',
   'evidence',
-  'stigs',
   'poams',
   'full-ssp',
 ]
