@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: 'standalone',
 
+  // The CMMC reference catalog (Task 23) is seeded from these SQL assets at boot.
+  // They live outside the JS bundle, so the standalone trace must include them.
+  outputFileTracingIncludes: {
+    '/**': ['./lib/reference/data/*.sql'],
+  },
+
   images: {
     unoptimized: true, // No Vercel image optimization in self-hosted
   },

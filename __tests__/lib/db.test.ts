@@ -130,9 +130,22 @@ describe('lib/db', () => {
       const afterFailure = mockPoolQuery.mock.calls.length
 
       // Second attempt must re-run the DDL (cached rejection would skip it).
-      mockPoolQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      // Default resolve covers the DDL, the reference-catalog count guard, and seeds.
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
       await expect(ensureSchema()).resolves.toBeUndefined()
       expect(mockPoolQuery.mock.calls.length).toBeGreaterThan(afterFailure)
+    })
+
+    it('seeds the reference catalog tables (Task 23 hook)', async () => {
+      const { ensureSchema } = await import('@/lib/db')
+      mockPoolQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+
+      await ensureSchema()
+
+      const allSql = mockPoolQuery.mock.calls.map((c: unknown[]) => c[0] as string).join(' ')
+      expect(allSql).toContain('CREATE TABLE IF NOT EXISTS "Requirement"')
+      expect(allSql).toContain('CREATE TABLE IF NOT EXISTS "AssessmentObjective"')
+      expect(allSql).toContain('INSERT INTO "AssessmentObjective"')
     })
   })
 
