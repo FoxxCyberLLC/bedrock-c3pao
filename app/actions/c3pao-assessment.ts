@@ -8,6 +8,9 @@ import {
   getLocalDailyProgress, getLocalProgressByAssessor, getLocalProgressByDomain,
   getLocalPlanning, updateLocalPlanning,
 } from '@/lib/local/progress'
+import {
+  getLocalAssessmentReport, saveLocalAssessmentReport, updateLocalReportStatus, getLocalReport,
+} from '@/lib/local/reports'
 import { saveAssessmentFinding as _save, getAssessmentFindings as _getFindings, updateAssessorNotes as _updateNotes } from './assessment'
 import {
   fetchReport, fetchAssessmentReport as apiFetchAssessmentReport, fetchStats,
@@ -50,14 +53,17 @@ export async function saveAssessmentReport(data: any): Promise<{ success: boolea
     const session = await requireAuth()
     if (!session) return { success: false, data: null, error: 'Unauthorized' }
     const token = session.apiToken
-    const result = await apiSaveReport(data.engagementId, {
+    const reportBody = {
       executiveSummary: data.executiveSummary || data.reportData,
       scopeDescription: data.scopeDescription,
       methodology: data.methodology,
       findingsSummary: data.findingsSummary,
       recommendations: data.recommendations,
       conclusion: data.conclusion,
-    }, token)
+    }
+    const result = isOffline()
+      ? await saveLocalAssessmentReport(data.engagementId, reportBody)
+      : await apiSaveReport(data.engagementId, reportBody, token)
     return { success: true, data: { id: result.id || data.engagementId } }
   } catch (error) {
     return { success: false, data: null, error: error instanceof Error ? error.message : 'Failed to save report' }
@@ -69,7 +75,9 @@ export async function getAssessmentReport(engagementId: string): Promise<{ succe
   try {
     const session = await requireAuth()
     if (!session) return { success: false, data: null }
-    const report = await apiFetchAssessmentReport(engagementId, session.apiToken)
+    const report = isOffline()
+      ? await getLocalAssessmentReport(engagementId)
+      : await apiFetchAssessmentReport(engagementId, session.apiToken)
     return { success: true, data: report }
   } catch {
     return { success: false, data: null }
@@ -81,7 +89,11 @@ export async function updateReportStatus(engagementId: string, status: string): 
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
     const token = session.apiToken
-    await apiUpdateReportStatus(engagementId, status, token)
+    if (isOffline()) {
+      await updateLocalReportStatus(engagementId, status)
+    } else {
+      await apiUpdateReportStatus(engagementId, status, token)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update report status' }
@@ -93,7 +105,7 @@ export async function generateReportData(engagementId: string): Promise<{ succes
   try {
     const session = await requireAuth()
     if (!session) return { success: false, data: null }
-    const report = await fetchReport(engagementId, session.apiToken)
+    const report = isOffline() ? await getLocalReport(engagementId) : await fetchReport(engagementId, session.apiToken)
     return { success: true, data: report }
   } catch {
     return { success: false, data: null }

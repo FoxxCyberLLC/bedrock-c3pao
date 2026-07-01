@@ -39,3 +39,7 @@ export {
   getLocalPlanning, updateLocalPlanning, sendLocalProposal, acknowledgeLocalIntroduction,
 } from './progress'
 export { getLocalCustomerReadiness, confirmLocalCustomerReadinessItem } from './readiness'
+export {
+  getLocalAssessmentReport, saveLocalAssessmentReport, updateLocalReportStatus,
+  getLocalEMassExport, getLocalReport,
+} from './reports'

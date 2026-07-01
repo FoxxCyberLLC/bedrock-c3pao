@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalEMassExport } from '@/lib/local/reports'
 import { fetchEMassExport } from '@/lib/api-client'
 
 interface WizardFormData {
@@ -29,7 +31,7 @@ export async function POST(
   }
 
   try {
-    const exportData = await fetchEMassExport(id, session.apiToken)
+    const exportData = isOffline() ? await getLocalEMassExport(id) : await fetchEMassExport(id, session.apiToken)
 
     // Merge wizard-provided editable fields into the export output
     const merged = {

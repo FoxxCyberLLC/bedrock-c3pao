@@ -1,6 +1,13 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalControls } from '@/lib/local/controls'
+import { getLocalObjectives } from '@/lib/local/objectives'
+import { getLocalSSP } from '@/lib/local/ssp-assets-poam'
+import { getLocalTeam } from '@/lib/local/team'
+import { getLocalSnapshotObjectives } from '@/lib/local/snapshots'
+import { getLocalEMassExport } from '@/lib/local/reports'
 import {
   fetchEMassExport,
   fetchControls,
@@ -133,15 +140,16 @@ export async function getEMASSExportData(
       teamResult,
       snapshotObjectivesResult,
     ] = await Promise.allSettled([
-      fetchEMassExport(engagementId, token),
-      fetchControls(engagementId, token),
-      fetchObjectives(engagementId, token),
-      fetchSSP(engagementId, token).catch(() => null),
-      fetchTeam(engagementId, token).catch(() => []),
+      isOffline() ? getLocalEMassExport(engagementId) : fetchEMassExport(engagementId, token),
+      isOffline() ? getLocalControls(engagementId) : fetchControls(engagementId, token),
+      isOffline() ? getLocalObjectives(engagementId) : fetchObjectives(engagementId, token),
+      (isOffline() ? getLocalSSP(engagementId) : fetchSSP(engagementId, token)).catch(() => null),
+      (isOffline() ? getLocalTeam(engagementId) : fetchTeam(engagementId, token)).catch(() => []),
       snapshotId
-        ? fetchSnapshotObjectives(engagementId, snapshotId, token).catch(
-            () => [] as ObjectiveStatusSnapshotView[],
-          )
+        ? (isOffline()
+            ? getLocalSnapshotObjectives(engagementId, snapshotId)
+            : fetchSnapshotObjectives(engagementId, snapshotId, token)
+          ).catch(() => [] as ObjectiveStatusSnapshotView[])
         : Promise.resolve([] as ObjectiveStatusSnapshotView[]),
     ])
 

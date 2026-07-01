@@ -1,14 +1,16 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
-import { fetchReport, fetchEMassExport, saveAssessmentReport as apiSaveReport } from '@/lib/api-client'
+import { isOffline } from '@/lib/mode'
+import { getLocalReport, saveLocalAssessmentReport } from '@/lib/local/reports'
+import { fetchReport, saveAssessmentReport as apiSaveReport } from '@/lib/api-client'
 
 export async function getAssessmentReportData(engagementId: string): Promise<{ success: boolean; data?: unknown; error?: string }> {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
 
-    const report = await fetchReport(engagementId, session.apiToken)
+    const report = isOffline() ? await getLocalReport(engagementId) : await fetchReport(engagementId, session.apiToken)
 
     return {
       success: true,
@@ -31,7 +33,12 @@ export async function saveAssessmentReport(input: {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    await apiSaveReport(input.engagementId, { executiveSummary: input.reportData, status: input.status }, session.apiToken)
+    const body = { executiveSummary: input.reportData, status: input.status }
+    if (isOffline()) {
+      await saveLocalAssessmentReport(input.engagementId, body)
+    } else {
+      await apiSaveReport(input.engagementId, body, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to save report' }
