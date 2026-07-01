@@ -21,3 +21,4 @@ export {
   startLocalCorrectionOpportunity,
   resumeLocalReEvaluation,
 } from './snapshots'
+export { getLocalEvidence, getLocalEvidenceObject } from './evidence'

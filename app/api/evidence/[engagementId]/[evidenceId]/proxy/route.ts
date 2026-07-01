@@ -1,10 +1,23 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { Readable } from 'node:stream'
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalEvidenceObject } from '@/lib/local/evidence'
 import { fetchEvidenceDownloadURL } from '@/lib/api-client'
 import { PROXY_DISPLAY_ALLOWED } from '@/lib/evidence-mime-types'
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024 // 25 MB
 const UPSTREAM_TIMEOUT_MS = 30_000 // abort a hung S3/Go-API fetch after 30s
+
+function sanitizeType(raw: string, hint: string): string {
+  const r = raw.split(';')[0].trim().toLowerCase()
+  const h = hint.split(';')[0].trim().toLowerCase()
+  if (PROXY_DISPLAY_ALLOWED.has(r)) return r
+  if (h && PROXY_DISPLAY_ALLOWED.has(h)) return h
+  return 'application/octet-stream'
+}
+
+const DISPLAYABLE_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'])
 
 export async function GET(
   request: NextRequest,
@@ -16,6 +29,33 @@ export async function GET(
   }
 
   const { engagementId, evidenceId } = await params
+
+  // Air-gapped: stream directly from the local Storage layer, no remote download URL.
+  if (isOffline()) {
+    const obj = await getLocalEvidenceObject(engagementId, evidenceId).catch((error) => {
+      console.error('[evidence-proxy] local evidence read failed', error)
+      return null
+    })
+    if (!obj) return NextResponse.json({ error: 'Failed to retrieve evidence' }, { status: 404 })
+    if (obj.sizeBytes > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json(
+        { error: `File exceeds the 25MB preview limit. Please download the file instead.` },
+        { status: 413 },
+      )
+    }
+    const contentType = sanitizeType(obj.mimeType, request.nextUrl.searchParams.get('hint') ?? '')
+    const disposition = DISPLAYABLE_TYPES.has(contentType) ? 'inline' : 'attachment'
+    return new NextResponse(Readable.toWeb(obj.stream) as ReadableStream<Uint8Array>, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'X-Content-Type-Options': 'nosniff',
+        'Content-Disposition': disposition,
+        'Cache-Control': 'private, max-age=300',
+        'Content-Length': String(obj.sizeBytes),
+      },
+    })
+  }
 
   // Step 1: Get the presigned/dev download URL from Go API
   let downloadUrl: string
@@ -84,7 +124,6 @@ export async function GET(
   })
 
   // H3: Prevent MIME-sniffing and force download for non-display types
-  const DISPLAYABLE_TYPES = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp'])
   const disposition = DISPLAYABLE_TYPES.has(contentType) ? 'inline' : 'attachment'
 
   return new NextResponse(upstream.body.pipeThrough(sizeGuard), {

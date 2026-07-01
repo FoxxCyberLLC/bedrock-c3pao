@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalEvidenceBytes } from '@/lib/local/evidence'
 import { fetchEvidenceDownloadURL } from '@/lib/api-client'
 import ExcelJS from 'exceljs'
 
@@ -37,42 +39,53 @@ export async function GET(
 
   const { engagementId, evidenceId } = await params
 
-  let downloadUrl: string
-  try {
-    const urlResponse = await fetchEvidenceDownloadURL(engagementId, evidenceId, session.apiToken)
-    downloadUrl = urlResponse.downloadUrl
-  } catch (error) {
-    // L1: log detail server-side; return a generic message to the client.
-    console.error('[evidence-preview] failed to resolve download URL', error)
-    return NextResponse.json({ error: 'Failed to retrieve evidence' }, { status: 502 })
-  }
+  let buffer: ArrayBuffer
+  if (isOffline()) {
+    // Air-gapped: read the bytes from the local Storage layer, no remote download URL.
+    const local = await getLocalEvidenceBytes(engagementId, evidenceId).catch((error) => {
+      console.error('[evidence-preview] local evidence read failed', error)
+      return null
+    })
+    if (!local) return NextResponse.json({ error: 'Failed to retrieve evidence' }, { status: 404 })
+    const { bytes } = local
+    buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer
+  } else {
+    let downloadUrl: string
+    try {
+      const urlResponse = await fetchEvidenceDownloadURL(engagementId, evidenceId, session.apiToken)
+      downloadUrl = urlResponse.downloadUrl
+    } catch (error) {
+      // L1: log detail server-side; return a generic message to the client.
+      console.error('[evidence-preview] failed to resolve download URL', error)
+      return NextResponse.json({ error: 'Failed to retrieve evidence' }, { status: 502 })
+    }
 
-  let upstream: Response
-  try {
-    upstream = await fetch(downloadUrl, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
-    if (!upstream.ok) {
-      console.error('[evidence-preview] upstream returned', upstream.status)
+    let upstream: Response
+    try {
+      upstream = await fetch(downloadUrl, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) })
+      if (!upstream.ok) {
+        console.error('[evidence-preview] upstream returned', upstream.status)
+        return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
+      }
+    } catch (error) {
+      console.error('[evidence-preview] upstream fetch failed', error)
       return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
     }
-  } catch (error) {
-    console.error('[evidence-preview] upstream fetch failed', error)
-    return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
-  }
 
-  const contentLength = upstream.headers.get('content-length')
-  if (contentLength && parseInt(contentLength, 10) > MAX_FILE_SIZE_BYTES) {
-    return NextResponse.json(
-      { error: 'File exceeds the 25MB preview limit. Please download the file instead.' },
-      { status: 413 },
-    )
-  }
+    const contentLength = upstream.headers.get('content-length')
+    if (contentLength && parseInt(contentLength, 10) > MAX_FILE_SIZE_BYTES) {
+      return NextResponse.json(
+        { error: 'File exceeds the 25MB preview limit. Please download the file instead.' },
+        { status: 413 },
+      )
+    }
 
-  let buffer: ArrayBuffer
-  try {
-    buffer = await upstream.arrayBuffer()
-  } catch (error) {
-    console.error('[evidence-preview] failed to read upstream body', error)
-    return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
+    try {
+      buffer = await upstream.arrayBuffer()
+    } catch (error) {
+      console.error('[evidence-preview] failed to read upstream body', error)
+      return NextResponse.json({ error: 'Failed to retrieve evidence file' }, { status: 502 })
+    }
   }
 
   // Size guard for when Content-Length header is absent (H4)

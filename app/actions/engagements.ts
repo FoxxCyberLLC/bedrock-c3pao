@@ -5,6 +5,7 @@ import { isOffline } from '@/lib/mode'
 import { getLocalEngagementSummaries, getLocalEngagementDetail } from '@/lib/local/engagements'
 import { getLocalControls } from '@/lib/local/controls'
 import { getLocalObjectives } from '@/lib/local/objectives'
+import { getLocalEvidence } from '@/lib/local/evidence'
 import { getLocalSnapshots, startLocalCorrectionOpportunity, resumeLocalReEvaluation } from '@/lib/local/snapshots'
 import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
@@ -99,7 +100,7 @@ export async function getEngagementById(id: string): Promise<{ success: boolean;
     const [controls, objectives, evidence, poams, ssp] = await Promise.allSettled([
       isOffline() ? getLocalControls(id) : fetchControls(id, token),
       isOffline() ? getLocalObjectives(id) : fetchObjectives(id, token),
-      fetchEvidence(id, token),
+      isOffline() ? getLocalEvidence(id) : fetchEvidence(id, token),
       fetchPOAMs(id, token),
       fetchSSP(id, token),
     ])
@@ -186,7 +187,7 @@ export async function getEngagementObjectives(engagementId: string): Promise<{ s
 export async function getEngagementEvidence(engagementId: string): Promise<{ success: boolean; data?: EvidenceView[]; error?: string }> {
   try {
     const token = await getToken()
-    const evidence = await fetchEvidence(engagementId, token)
+    const evidence = isOffline() ? await getLocalEvidence(engagementId) : await fetchEvidence(engagementId, token)
     return { success: true, data: evidence }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load evidence' }
