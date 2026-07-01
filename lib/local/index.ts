@@ -34,3 +34,7 @@ export {
   updateLocalTeamMemberRole, removeLocalTeamMember, setLocalAssessorDomains,
   isLocalEngagementLead,
 } from './team'
+export {
+  getLocalDailyProgress, getLocalProgressByDomain, getLocalProgressByAssessor,
+  getLocalPlanning, updateLocalPlanning, sendLocalProposal, acknowledgeLocalIntroduction,
+} from './progress'

@@ -13,6 +13,7 @@ import {
 import {
   addLocalTeamMember, updateLocalTeamMemberRole, removeLocalTeamMember,
 } from '@/lib/local/team'
+import { sendLocalProposal, acknowledgeLocalIntroduction } from '@/lib/local/progress'
 import type { CMMCStatus } from '@/lib/cmmc/status-determination'
 import {
   fetchProfile,
@@ -296,7 +297,11 @@ export async function rejectAssessmentSubmission(engagementId: string, reason?: 
 export async function acknowledgeIntroduction(engagementId: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await apiAcknowledgeIntroduction(engagementId, token)
+    if (isOffline()) {
+      await acknowledgeLocalIntroduction(engagementId)
+    } else {
+      await apiAcknowledgeIntroduction(engagementId, token)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to acknowledge introduction' }
@@ -315,7 +320,11 @@ export async function sendProposal(proposalDataOrEngagementId: string | Record<s
       engId = proposalDataOrEngagementId.engagementId as string
       data = proposalDataOrEngagementId
     }
-    await apiSendProposal(engId, data, token)
+    if (isOffline()) {
+      await sendLocalProposal(engId, data)
+    } else {
+      await apiSendProposal(engId, data, token)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to send proposal' }

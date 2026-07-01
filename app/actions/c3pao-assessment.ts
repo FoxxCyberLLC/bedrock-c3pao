@@ -4,6 +4,10 @@ import { requireAuth } from '@/lib/auth'
 import { isOffline } from '@/lib/mode'
 import { getLocalStats } from '@/lib/local/controls'
 import { reviewLocalFinding } from '@/lib/local/findings'
+import {
+  getLocalDailyProgress, getLocalProgressByAssessor, getLocalProgressByDomain,
+  getLocalPlanning, updateLocalPlanning,
+} from '@/lib/local/progress'
 import { saveAssessmentFinding as _save, getAssessmentFindings as _getFindings, updateAssessorNotes as _updateNotes } from './assessment'
 import {
   fetchReport, fetchAssessmentReport as apiFetchAssessmentReport, fetchStats,
@@ -102,7 +106,7 @@ export async function getAssessmentProgress(engagementId: string): Promise<{ suc
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchDailyProgress(engagementId, session.apiToken)
+    const data = isOffline() ? await getLocalDailyProgress(engagementId) : await fetchDailyProgress(engagementId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load progress' }
@@ -113,7 +117,7 @@ export async function getProgressByAssessor(engagementId: string): Promise<{ suc
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchProgressByAssessor(engagementId, session.apiToken)
+    const data = isOffline() ? await getLocalProgressByAssessor(engagementId) : await fetchProgressByAssessor(engagementId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load assessor progress' }
@@ -124,7 +128,7 @@ export async function getProgressByDomain(engagementId: string): Promise<{ succe
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchProgressByDomain(engagementId, session.apiToken)
+    const data = isOffline() ? await getLocalProgressByDomain(engagementId) : await fetchProgressByDomain(engagementId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load domain progress' }
@@ -157,7 +161,7 @@ export async function getAssessmentPlanning(engagementId: string): Promise<{ suc
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchPlanning(engagementId, session.apiToken)
+    const data = isOffline() ? await getLocalPlanning(engagementId) : await fetchPlanning(engagementId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load planning data' }
@@ -171,7 +175,9 @@ export async function updateAssessmentPlanning(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiUpdatePlanning(engagementId, body, session.apiToken)
+    const data = isOffline()
+      ? await updateLocalPlanning(engagementId, body)
+      : await apiUpdatePlanning(engagementId, body, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update planning' }
