@@ -1,6 +1,8 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { setLocalEngagementStatus } from '@/lib/local/engagements'
 import type { CMMCStatus } from '@/lib/cmmc/status-determination'
 import {
   fetchProfile,
@@ -133,7 +135,11 @@ export async function updateC3PAOLogo(base64DataUri: string): Promise<{ success:
 export async function updateEngagementStatus(engagementId: string, status: string, notes?: string): Promise<{ success: boolean; error?: string }> {
   try {
     const token = await getToken()
-    await apiUpdateEngagementStatus(engagementId, { status, resultNotes: notes }, token)
+    if (isOffline()) {
+      await setLocalEngagementStatus(engagementId, { status, resultNotes: notes })
+    } else {
+      await apiUpdateEngagementStatus(engagementId, { status, resultNotes: notes }, token)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update engagement status' }

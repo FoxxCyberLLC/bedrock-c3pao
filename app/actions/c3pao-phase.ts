@@ -9,6 +9,12 @@
  */
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import {
+  getLocalEngagementPhase,
+  setLocalEngagementPhase,
+  getLocalEngagementLifecycle,
+} from '@/lib/local/engagements'
 import {
   fetchEngagementPhase,
   updateEngagementPhase as apiUpdateEngagementPhase,
@@ -37,7 +43,10 @@ export async function getEngagementPhase(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchEngagementPhase(engagementId, session.apiToken)
+    const data = isOffline()
+      ? await getLocalEngagementPhase(engagementId)
+      : await fetchEngagementPhase(engagementId, session.apiToken)
+    if (!data) return { success: false, error: 'Engagement not found' }
     return { success: true, data }
   } catch (error) {
     return {
@@ -59,11 +68,10 @@ export async function updateEngagementPhase(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiUpdateEngagementPhase(
-      engagementId,
-      phase,
-      session.apiToken,
-    )
+    const data = isOffline()
+      ? await setLocalEngagementPhase(engagementId, phase)
+      : await apiUpdateEngagementPhase(engagementId, phase, session.apiToken)
+    if (!data) return { success: false, error: 'Engagement not found' }
     return { success: true, data }
   } catch (error) {
     return {
@@ -81,7 +89,9 @@ export async function getEngagementLifecycle(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchEngagementLifecycle(engagementId, session.apiToken)
+    const data = isOffline()
+      ? await getLocalEngagementLifecycle(engagementId)
+      : await fetchEngagementLifecycle(engagementId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {

@@ -8,7 +8,12 @@
  * `db-outside-*`. No network, no api-client.
  */
 import { query } from '@/lib/db'
-import type { EngagementSummary } from '@/lib/api-client'
+import type {
+  EngagementSummary,
+  EngagementPhase,
+  EngagementPhaseName,
+  LifecycleEvent,
+} from '@/lib/api-client'
 
 /** One engagement row joined to its package + organization display names. */
 interface EngagementJoinRow {
@@ -79,4 +84,79 @@ export async function getLocalEngagementDetail(id: string): Promise<Record<strin
     packageName: row.package_name ?? '',
     organizationName: row.organization_name ?? '',
   }
+}
+
+/** Merge a JSONB patch into an imported engagement's raw row (the assessor's local edits). */
+async function patchEngagement(id: string, patch: Record<string, unknown>): Promise<void> {
+  await query(
+    `UPDATE imp_assessment_engagement
+        SET data = data || $2::jsonb, imported_at = imported_at
+      WHERE id = $1`,
+    [id, JSON.stringify({ ...patch, updatedAt: new Date().toISOString() })]
+  )
+}
+
+/** Record the assessment outcome locally (offline `updateEngagementStatus`). */
+export async function setLocalEngagementStatus(
+  id: string,
+  body: { status: string; assessmentResult?: string; resultNotes?: string }
+): Promise<void> {
+  const patch: Record<string, unknown> = { status: body.status }
+  if (body.assessmentResult !== undefined) patch.assessmentResult = body.assessmentResult
+  if (body.resultNotes !== undefined) patch.resultNotes = body.resultNotes
+  await patchEngagement(id, patch)
+}
+
+/** Toggle assessment mode locally (offline `toggleAssessmentMode`). */
+export async function setLocalAssessmentMode(id: string, active: boolean): Promise<void> {
+  await patchEngagement(id, {
+    assessmentModeActive: active,
+    assessmentModeStartedAt: active ? new Date().toISOString() : null,
+  })
+}
+
+const PHASE_FIELDS: Array<keyof EngagementPhase> = [
+  'currentPhase', 'phaseEnteredAt', 'contractExecutedAt', 'preAssessFormQaStatus',
+  'preAssessFormUploadedAt', 'inBriefDate', 'outBriefDate', 'reportQaStatus',
+  'appealsWindowOpenUntil', 'reevalWindowOpenUntil', 'certUid', 'certStatus',
+  'certStatusDate', 'certIssuedAt', 'certExpiresAt', 'poamCloseoutDue',
+  'certSignedById', 'certSignedByName',
+]
+
+/** Phase/lifecycle metadata read from the imported engagement row (offline `fetchEngagementPhase`). */
+export async function getLocalEngagementPhase(id: string): Promise<EngagementPhase | null> {
+  const result = await query(`SELECT data FROM imp_assessment_engagement WHERE id = $1`, [id])
+  if (result.rows.length === 0) return null
+  const d = (result.rows[0] as { data: Record<string, unknown> }).data
+  const phase: EngagementPhase = {}
+  for (const field of PHASE_FIELDS) {
+    ;(phase as Record<string, unknown>)[field] = d[field] ?? null
+  }
+  return phase
+}
+
+/** Transition the engagement to a CAP phase locally (offline `updateEngagementPhase`). */
+export async function setLocalEngagementPhase(
+  id: string,
+  phase: EngagementPhaseName
+): Promise<EngagementPhase | null> {
+  await patchEngagement(id, { currentPhase: phase, phaseEnteredAt: new Date().toISOString() })
+  return getLocalEngagementPhase(id)
+}
+
+/** Derive the lifecycle timeline from the engagement's date fields (offline `fetchEngagementLifecycle`). */
+export async function getLocalEngagementLifecycle(id: string): Promise<LifecycleEvent[]> {
+  const detail = await getLocalEngagementDetail(id)
+  if (!detail) return []
+  const milestones: Array<{ key: string; type: string; label: string }> = [
+    { key: 'requestedDate', type: 'REQUESTED', label: 'Assessment requested' },
+    { key: 'acceptedDate', type: 'ACCEPTED', label: 'Engagement accepted' },
+    { key: 'scheduledStartDate', type: 'SCHEDULED', label: 'Assessment scheduled' },
+    { key: 'actualStartDate', type: 'STARTED', label: 'Assessment started' },
+    { key: 'actualCompletionDate', type: 'COMPLETED', label: 'Assessment completed' },
+  ]
+  return milestones
+    .filter((m) => detail[m.key])
+    .map((m) => ({ type: m.type, date: String(detail[m.key]), label: m.label }))
+    .sort((a, b) => a.date.localeCompare(b.date))
 }

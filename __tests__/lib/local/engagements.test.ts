@@ -85,4 +85,63 @@ describe('lib/local/engagements', () => {
 
     expect(await getLocalEngagementDetail('missing')).toBeNull()
   })
+
+  it('setLocalEngagementStatus merges a JSONB patch into the engagement row', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] })
+    const { setLocalEngagementStatus } = await import('@/lib/local/engagements')
+
+    await setLocalEngagementStatus('eng-1', { status: 'COMPLETED', resultNotes: 'done' })
+
+    const [sql, params] = mockQuery.mock.calls[0]
+    expect(sql).toMatch(/UPDATE imp_assessment_engagement/)
+    expect(sql).toMatch(/data \|\| \$2::jsonb/)
+    expect(params[0]).toBe('eng-1')
+    const patch = JSON.parse(params[1] as string)
+    expect(patch).toMatchObject({ status: 'COMPLETED', resultNotes: 'done' })
+    expect(patch.updatedAt).toBeDefined()
+  })
+
+  it('setLocalAssessmentMode records the mode + start timestamp', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [] })
+    const { setLocalAssessmentMode } = await import('@/lib/local/engagements')
+
+    await setLocalAssessmentMode('eng-1', true)
+
+    const patch = JSON.parse(mockQuery.mock.calls[0][1][1] as string)
+    expect(patch.assessmentModeActive).toBe(true)
+    expect(patch.assessmentModeStartedAt).toBeTruthy()
+  })
+
+  it('getLocalEngagementPhase projects the phase fields from the engagement row', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{ data: { currentPhase: 'ASSESS', certStatus: 'PENDING' } }],
+    })
+    const { getLocalEngagementPhase } = await import('@/lib/local/engagements')
+
+    const phase = await getLocalEngagementPhase('eng-1')
+
+    expect(phase).toMatchObject({ currentPhase: 'ASSESS', certStatus: 'PENDING' })
+    expect(phase).toHaveProperty('outBriefDate', null)
+  })
+
+  it('getLocalEngagementLifecycle derives an ordered timeline from date fields', async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [{
+        edata: {
+          id: 'eng-1',
+          requestedDate: '2026-05-01T00:00:00.000Z',
+          acceptedDate: '2026-05-03T00:00:00.000Z',
+          actualStartDate: null,
+        },
+        package_name: 'P',
+        organization_name: 'O',
+      }],
+    })
+    const { getLocalEngagementLifecycle } = await import('@/lib/local/engagements')
+
+    const events = await getLocalEngagementLifecycle('eng-1')
+
+    expect(events.map((e) => e.type)).toEqual(['REQUESTED', 'ACCEPTED'])
+    expect(events[0].date < events[1].date).toBe(true)
+  })
 })
