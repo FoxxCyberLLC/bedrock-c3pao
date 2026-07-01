@@ -3,6 +3,8 @@
 import { setSession, deleteSession, type SessionC3PAOUser } from '@/lib/auth'
 import { apiLogin } from '@/lib/api-client'
 import { authenticateLocalUser } from '@/lib/local-auth'
+import { getInstanceConfig } from '@/lib/instance-config'
+import { isOffline } from '@/lib/mode'
 import { isLockedOut, recordFailedLogin, clearLoginAttempts } from '@/lib/login-attempts'
 import { redirect } from 'next/navigation'
 
@@ -27,12 +29,33 @@ export async function login(formData: FormData) {
     }
   }
 
-  // Try local admin auth first
+  // Try local account auth first. Local accounts are the ONLY auth path offline;
+  // assessor-role accounts get an assessment session, operator roles get /admin.
   try {
     const localUser = await authenticateLocalUser(email, password)
     if (localUser) {
       await clearLoginAttempts(email)
-      const user: SessionC3PAOUser = {
+
+      // Assessor accounts (air-gapped): identity from local instance config, never
+      // the Go API. Lead status is a LOCAL property of the account — imported OSC
+      // data can never confer or elevate it.
+      if (localUser.role === 'assessor' || localUser.role === 'lead_assessor') {
+        const config = await getInstanceConfig()
+        const assessor: SessionC3PAOUser = {
+          id: localUser.id,
+          email: localUser.email,
+          name: localUser.name,
+          c3paoId: config?.c3paoId ?? '',
+          c3paoName: config?.c3paoName ?? '',
+          isLeadAssessor: localUser.role === 'lead_assessor',
+          status: 'ACTIVE',
+        }
+        await setSession(assessor, '', false)
+        return { success: true }
+      }
+
+      // Operator (admin / user) → instance management only.
+      const operator: SessionC3PAOUser = {
         id: localUser.id,
         email: localUser.email,
         name: localUser.name,
@@ -41,11 +64,17 @@ export async function login(formData: FormData) {
         isLeadAssessor: false,
         status: 'ACTIVE',
       }
-      await setSession(user, '', true)
+      await setSession(operator, '', true)
       return { success: true, isLocalAdmin: true }
     }
   } catch {
-    // Local auth failed, continue to Go API
+    // Local auth failed, continue to Go API (online only).
+  }
+
+  // Air-gapped build: there is no remote login. Fail closed.
+  if (isOffline()) {
+    await recordFailedLogin(email)
+    return { success: false, error: 'Invalid email or password' }
   }
 
   // Fall back to Go API auth

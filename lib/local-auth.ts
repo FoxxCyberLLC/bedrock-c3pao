@@ -76,7 +76,7 @@ export async function createLocalUser(
   email: string,
   name: string,
   password: string,
-  role: 'admin' | 'user' = 'user'
+  role: 'admin' | 'user' | 'assessor' | 'lead_assessor' = 'user'
 ): Promise<LocalUser> {
   const id = `local-${crypto.randomUUID()}`
   const passwordHash = hashPassword(password)

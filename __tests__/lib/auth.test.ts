@@ -15,6 +15,11 @@ vi.mock('@/lib/api-client', () => ({
   fetchTeam: mockFetchTeam,
 }))
 
+const mockIsOffline = vi.fn(() => false)
+vi.mock('@/lib/mode', () => ({
+  isOffline: () => mockIsOffline(),
+}))
+
 process.env.AUTH_SECRET = 'test-secret-for-auth-tests-0123456789'
 
 async function buildValidSessionCookie(payload: Partial<C3PAOSessionPayload>): Promise<string> {
@@ -67,6 +72,7 @@ describe('requireAssessor', () => {
 describe('requireLeadAssessor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockIsOffline.mockReturnValue(false)
   })
 
   it('returns Unauthorized when there is no session', async () => {
@@ -147,6 +153,20 @@ describe('requireLeadAssessor', () => {
 
     expect(result.isLead).toBe(false)
     expect(result.error).toBe('Failed to verify lead assessor status')
+    expect(result.session).not.toBeNull()
+  })
+
+  it('offline: never calls the team API; lead comes only from the local session (Task 9)', async () => {
+    mockIsOffline.mockReturnValue(true)
+    const cookie = await buildValidSessionCookie({}) // isLeadAssessor false
+    mockCookiesGet.mockReturnValue({ value: cookie })
+
+    const { requireLeadAssessor } = await import('@/lib/auth')
+    const result = await requireLeadAssessor('eng-1')
+
+    expect(mockFetchTeam).not.toHaveBeenCalled()
+    expect(result.isLead).toBe(false)
+    expect(result.error).toBeUndefined()
     expect(result.session).not.toBeNull()
   })
 })

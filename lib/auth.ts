@@ -173,6 +173,11 @@ export async function requireLeadAssessor(
 
   if (session.c3paoUser.isLeadAssessor) return { session, isLead: true }
 
+  // Air-gapped: never phone home. Lead status derives only from the local session
+  // (provisioned locally at login); imported OSC rows never confer lead access.
+  const { isOffline } = await import('./mode')
+  if (isOffline()) return { session, isLead: false }
+
   try {
     const { fetchTeam } = await import('./api-client')
     const team = await fetchTeam(engagementId, session.apiToken)
