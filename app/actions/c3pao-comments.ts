@@ -5,6 +5,8 @@
  */
 
 import { requireAssessor } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import { getLocalComments, createLocalComment } from '@/lib/local/collab'
 import {
   fetchEngagementComments,
   createEngagementComment as apiCreateComment,
@@ -31,7 +33,9 @@ export async function getEngagementComments(
   try {
     const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await fetchEngagementComments(engagementId, session.apiToken)
+    const data = isOffline()
+      ? await getLocalComments(engagementId)
+      : await fetchEngagementComments(engagementId, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {
@@ -50,7 +54,13 @@ export async function createEngagementCommentAction(
   try {
     const session = await requireAssessor()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const data = await apiCreateComment(engagementId, input, session.apiToken)
+    const data = isOffline()
+      ? await createLocalComment(engagementId, input, {
+          c3paoId: session.c3paoUser.c3paoId,
+          id: session.c3paoUser.id,
+          name: session.c3paoUser.name,
+        })
+      : await apiCreateComment(engagementId, input, session.apiToken)
     return { success: true, data }
   } catch (error) {
     return {

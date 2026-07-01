@@ -6,6 +6,10 @@ import { setLocalEngagementStatus } from '@/lib/local/engagements'
 import { getLocalStats } from '@/lib/local/controls'
 import { updateLocalObjective } from '@/lib/local/objectives'
 import { getLocalSSP, getLocalAssets, getLocalPoams } from '@/lib/local/ssp-assets-poam'
+import {
+  getLocalNotes, createLocalNote,
+  getLocalCheckins, createLocalCheckin,
+} from '@/lib/local/collab'
 import type { CMMCStatus } from '@/lib/cmmc/status-determination'
 import {
   fetchProfile,
@@ -153,8 +157,13 @@ export async function updateEngagementStatus(engagementId: string, status: strin
 
 export async function addAssessorNotes(engagementId: string, content: string): Promise<{ success: boolean; error?: string }> {
   try {
-    const token = await getToken()
-    await createNote(engagementId, content, token)
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    if (isOffline()) {
+      await createLocalNote(engagementId, content, { id: session.c3paoUser.id, name: session.c3paoUser.name })
+    } else {
+      await createNote(engagementId, content, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to add assessor notes' }
@@ -534,8 +543,11 @@ export async function getEvidenceDownloadUrlForC3PAO(evidenceId: string, engagem
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function addAssessorNote(engagementId: string, content: string): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
-    const token = await getToken()
-    const note = await createNote(engagementId, content, token)
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    const note = isOffline()
+      ? await createLocalNote(engagementId, content, { id: session.c3paoUser.id, name: session.c3paoUser.name })
+      : await createNote(engagementId, content, session.apiToken)
     return { success: true, data: note }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to add assessor note' }
@@ -546,7 +558,7 @@ export async function addAssessorNote(engagementId: string, content: string): Pr
 export async function getAssessorNotes(engagementId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
   try {
     const token = await getToken()
-    const notes = await fetchNotes(engagementId, token)
+    const notes = isOffline() ? await getLocalNotes(engagementId) : await fetchNotes(engagementId, token)
     return { success: true, data: notes }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load assessor notes' }
@@ -561,8 +573,13 @@ export async function createAssessmentCheckin(
   description?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const token = await getToken()
-    await apiCreateCheckin(engagementId, { title, description }, token)
+    const session = await requireAuth()
+    if (!session) return { success: false, error: 'Unauthorized' }
+    if (isOffline()) {
+      await createLocalCheckin(engagementId, { title, description }, session.c3paoUser.name)
+    } else {
+      await apiCreateCheckin(engagementId, { title, description }, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to create check-in' }
@@ -573,7 +590,7 @@ export async function createAssessmentCheckin(
 export async function getAssessmentCheckins(engagementId: string): Promise<{ success: boolean; data?: any[]; error?: string }> {
   try {
     const token = await getToken()
-    const checkins = await apiFetchCheckins(engagementId, token)
+    const checkins = isOffline() ? await getLocalCheckins(engagementId) : await apiFetchCheckins(engagementId, token)
     return { success: true, data: checkins }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load check-ins' }

@@ -4,6 +4,7 @@ import { requireAuth } from '@/lib/auth'
 import { isOffline } from '@/lib/mode'
 import { updateLocalControlNotes } from '@/lib/local/controls'
 import { getLocalFindings, createLocalFinding, updateLocalFinding } from '@/lib/local/findings'
+import { getLocalNotes } from '@/lib/local/collab'
 import {
   fetchFindings,
   createFinding,
@@ -108,7 +109,7 @@ export async function updateAssessorNotes(input: {
 export async function getAssessmentNotes(engagementId: string): Promise<{ success: boolean; data?: NoteView[]; error?: string }> {
   try {
     const token = await getToken()
-    const notes = await fetchNotes(engagementId, token)
+    const notes = isOffline() ? await getLocalNotes(engagementId) : await fetchNotes(engagementId, token)
     return { success: true, data: notes }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load notes' }

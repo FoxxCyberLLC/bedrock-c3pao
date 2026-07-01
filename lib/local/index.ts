@@ -24,3 +24,8 @@ export {
 export { getLocalEvidence, getLocalEvidenceObject, getLocalEvidenceBytes } from './evidence'
 export { getLocalSSP, getLocalAssets, getLocalPoams } from './ssp-assets-poam'
 export { getLocalFindings, createLocalFinding, updateLocalFinding, reviewLocalFinding } from './findings'
+export {
+  getLocalNotes, createLocalNote,
+  getLocalCheckins, createLocalCheckin,
+  getLocalComments, createLocalComment,
+} from './collab'
