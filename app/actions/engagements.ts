@@ -7,6 +7,7 @@ import { getLocalControls } from '@/lib/local/controls'
 import { getLocalObjectives } from '@/lib/local/objectives'
 import { getLocalEvidence } from '@/lib/local/evidence'
 import { getLocalSSP, getLocalPoams } from '@/lib/local/ssp-assets-poam'
+import { getLocalTeam } from '@/lib/local/team'
 import { getLocalSnapshots, startLocalCorrectionOpportunity, resumeLocalReEvaluation } from '@/lib/local/snapshots'
 import { groupObjectivesByRequirement, shapeControl } from '@/lib/engagement/shape-control'
 import {
@@ -245,7 +246,7 @@ export async function getCurrentC3PAOUser(): Promise<{ success: boolean; data?: 
 export async function getEngagementTeam(engagementId: string): Promise<{ success: boolean; data?: unknown[]; error?: string }> {
   try {
     const token = await getToken()
-    const team = await fetchTeam(engagementId, token)
+    const team = isOffline() ? await getLocalTeam(engagementId) : await fetchTeam(engagementId, token)
     return { success: true, data: team }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load team' }

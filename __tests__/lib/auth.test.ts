@@ -20,6 +20,11 @@ vi.mock('@/lib/mode', () => ({
   isOffline: () => mockIsOffline(),
 }))
 
+const mockIsLocalEngagementLead = vi.fn(async () => false)
+vi.mock('@/lib/local/team', () => ({
+  isLocalEngagementLead: () => mockIsLocalEngagementLead(),
+}))
+
 process.env.AUTH_SECRET = 'test-secret-for-auth-tests-0123456789'
 
 async function buildValidSessionCookie(payload: Partial<C3PAOSessionPayload>): Promise<string> {
@@ -73,6 +78,7 @@ describe('requireLeadAssessor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockIsOffline.mockReturnValue(false)
+    mockIsLocalEngagementLead.mockResolvedValue(false)
   })
 
   it('returns Unauthorized when there is no session', async () => {
@@ -156,7 +162,7 @@ describe('requireLeadAssessor', () => {
     expect(result.session).not.toBeNull()
   })
 
-  it('offline: never calls the team API; lead comes only from the local session (Task 9)', async () => {
+  it('offline: never calls the team API; lead comes only from the local team (Task 9/18)', async () => {
     mockIsOffline.mockReturnValue(true)
     const cookie = await buildValidSessionCookie({}) // isLeadAssessor false
     mockCookiesGet.mockReturnValue({ value: cookie })
@@ -168,5 +174,18 @@ describe('requireLeadAssessor', () => {
     expect(result.isLead).toBe(false)
     expect(result.error).toBeUndefined()
     expect(result.session).not.toBeNull()
+  })
+
+  it('offline: isLead=true when the local team assignment makes the caller lead', async () => {
+    mockIsOffline.mockReturnValue(true)
+    mockIsLocalEngagementLead.mockResolvedValue(true)
+    const cookie = await buildValidSessionCookie({}) // session flag false
+    mockCookiesGet.mockReturnValue({ value: cookie })
+
+    const { requireLeadAssessor } = await import('@/lib/auth')
+    const result = await requireLeadAssessor('eng-1')
+
+    expect(mockFetchTeam).not.toHaveBeenCalled()
+    expect(result.isLead).toBe(true)
   })
 })

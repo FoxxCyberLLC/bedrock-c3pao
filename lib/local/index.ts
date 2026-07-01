@@ -29,3 +29,8 @@ export {
   getLocalCheckins, createLocalCheckin,
   getLocalComments, createLocalComment,
 } from './collab'
+export {
+  getLocalTeam, getLocalAvailableAssessors, addLocalTeamMember,
+  updateLocalTeamMemberRole, removeLocalTeamMember, setLocalAssessorDomains,
+  isLocalEngagementLead,
+} from './team'

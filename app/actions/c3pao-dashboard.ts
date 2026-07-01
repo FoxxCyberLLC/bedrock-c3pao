@@ -10,6 +10,9 @@ import {
   getLocalNotes, createLocalNote,
   getLocalCheckins, createLocalCheckin,
 } from '@/lib/local/collab'
+import {
+  addLocalTeamMember, updateLocalTeamMemberRole, removeLocalTeamMember,
+} from '@/lib/local/team'
 import type { CMMCStatus } from '@/lib/cmmc/status-determination'
 import {
   fetchProfile,
@@ -368,7 +371,11 @@ export async function addTeamMember(dataOrEngagementId: string | Record<string, 
     const token = await getToken()
     if (typeof dataOrEngagementId === 'string') {
       // Called as (engagementId, userId, role) — engagement-level team assignment
-      await apiAddTeamMember(dataOrEngagementId, { assessorId: userId!, role: role || 'ASSESSOR' }, token)
+      if (isOffline()) {
+        await addLocalTeamMember(dataOrEngagementId, userId!, role || 'ASSESSOR')
+      } else {
+        await apiAddTeamMember(dataOrEngagementId, { assessorId: userId!, role: role || 'ASSESSOR' }, token)
+      }
     } else {
       // Called as (data) — org-level user creation
       await createC3PAOUser(dataOrEngagementId as {
@@ -390,7 +397,11 @@ export async function updateTeamMember(memberIdOrEngagementId: string, dataOrAss
     const token = await getToken()
     if (typeof dataOrAssessorId === 'string') {
       // Called as (engagementId, assessorId, role) — engagement-level role update
-      await updateTeamMemberRole(memberIdOrEngagementId, dataOrAssessorId, role!, token)
+      if (isOffline()) {
+        await updateLocalTeamMemberRole(memberIdOrEngagementId, dataOrAssessorId, role!)
+      } else {
+        await updateTeamMemberRole(memberIdOrEngagementId, dataOrAssessorId, role!, token)
+      }
     } else {
       // Called as (memberId, data) — org-level user update
       await updateC3PAOUser(memberIdOrEngagementId, dataOrAssessorId as {
@@ -410,7 +421,11 @@ export async function deleteTeamMember(memberIdOrEngagementId: string, assessorI
     const token = await getToken()
     if (assessorId) {
       // Called as (engagementId, assessorId) — engagement-level team removal
-      await removeTeamMember(memberIdOrEngagementId, assessorId, token)
+      if (isOffline()) {
+        await removeLocalTeamMember(memberIdOrEngagementId, assessorId)
+      } else {
+        await removeTeamMember(memberIdOrEngagementId, assessorId, token)
+      }
     } else {
       // Called as (memberId) — org-level user deactivation
       await deleteC3PAOUser(memberIdOrEngagementId, token)

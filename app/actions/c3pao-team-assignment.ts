@@ -1,13 +1,18 @@
 'use server'
 
 import { requireAuth } from '@/lib/auth'
+import { isOffline } from '@/lib/mode'
+import {
+  getLocalTeam, getLocalAvailableAssessors, addLocalTeamMember, setLocalAssessorDomains,
+  removeLocalTeamMember, updateLocalTeamMemberRole,
+} from '@/lib/local/team'
 import { fetchTeam, fetchAvailableAssessors, addTeamMember as apiAddTeam, updateTeamMemberRole, removeTeamMember, checkCOIAssignment, setAssessorDomains } from '@/lib/api-client'
 
 export async function getEngagementTeam(engagementId: string) {
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const team = await fetchTeam(engagementId, session.apiToken)
+    const team = isOffline() ? await getLocalTeam(engagementId) : await fetchTeam(engagementId, session.apiToken)
     return { success: true, data: team }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load team' }
@@ -18,7 +23,9 @@ export async function getAvailableAssessors(engagementId: string): Promise<{ suc
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    const assessors = await fetchAvailableAssessors(engagementId, session.apiToken)
+    const assessors = isOffline()
+      ? await getLocalAvailableAssessors(engagementId)
+      : await fetchAvailableAssessors(engagementId, session.apiToken)
     return { success: true, data: assessors }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to load assessors' }
@@ -72,7 +79,11 @@ export async function assignAssessorToEngagement(dataOrEngagementId: string | Re
       console.warn('COI check failed, proceeding with assignment:', coiErr)
     }
 
-    await apiAddTeam(engId, { assessorId: uId, role: r }, session.apiToken)
+    if (isOffline()) {
+      await addLocalTeamMember(engId, uId, r)
+    } else {
+      await apiAddTeam(engId, { assessorId: uId, role: r }, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to assign assessor' }
@@ -93,7 +104,11 @@ export async function removeAssessorFromEngagement(dataOrEngagementId: string | 
       engId = dataOrEngagementId.engagementId as string
       aId = dataOrEngagementId.assessorId as string
     }
-    await removeTeamMember(engId, aId, session.apiToken)
+    if (isOffline()) {
+      await removeLocalTeamMember(engId, aId)
+    } else {
+      await removeTeamMember(engId, aId, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to remove assessor' }
@@ -117,7 +132,11 @@ export async function updateAssessorRole(dataOrEngagementId: string | Record<str
       aId = dataOrEngagementId.assessorId as string
       r = dataOrEngagementId.role as string
     }
-    await updateTeamMemberRole(engId, aId, r, session.apiToken)
+    if (isOffline()) {
+      await updateLocalTeamMemberRole(engId, aId, r)
+    } else {
+      await updateTeamMemberRole(engId, aId, r, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update role' }
@@ -128,7 +147,11 @@ export async function assignControlsToAssessor(engagementId: string, assessorId:
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    await setAssessorDomains(engagementId, assessorId, familyCodes, session.apiToken)
+    if (isOffline()) {
+      await setLocalAssessorDomains(engagementId, assessorId, familyCodes)
+    } else {
+      await setAssessorDomains(engagementId, assessorId, familyCodes, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to assign domains' }
@@ -148,7 +171,11 @@ export async function setMemberDomains(
   try {
     const session = await requireAuth()
     if (!session) return { success: false, error: 'Unauthorized' }
-    await setAssessorDomains(engagementId, assessorId, familyCodes, session.apiToken)
+    if (isOffline()) {
+      await setLocalAssessorDomains(engagementId, assessorId, familyCodes)
+    } else {
+      await setAssessorDomains(engagementId, assessorId, familyCodes, session.apiToken)
+    }
     return { success: true }
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : 'Failed to update domains' }

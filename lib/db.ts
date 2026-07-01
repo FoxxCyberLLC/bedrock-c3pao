@@ -2,6 +2,7 @@ import { Pool, type QueryResult } from 'pg'
 import { seedReferenceCatalog } from './reference/seed-reference'
 import { ensureImportedSchema } from './local/schema'
 import { ensureCollabSchema } from './local/collab'
+import { ensureTeamSchema } from './local/team'
 
 let _pool: Pool | null = null
 let _schemaPromise: Promise<void> | null = null
@@ -342,6 +343,9 @@ export async function ensureSchema(): Promise<void> {
 
     // C3PAO-local collaboration tables (notes / check-ins / comments).
     await ensureCollabSchema(pool)
+
+    // C3PAO-local engagement team assignment.
+    await ensureTeamSchema(pool)
 
     // Seed the CMMC L2 reference catalog (110 reqs / 14 families / 321 objectives /
     // CCI crosswalk). Idempotent + count-guarded, so this is cheap after first boot.
